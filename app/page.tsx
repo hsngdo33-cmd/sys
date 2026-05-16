@@ -32,7 +32,7 @@ export default function Dashboard() {
       <header className="bg-[#0f172a] text-white p-6 shadow-xl mb-8">
         <div className="max-w-6xl mx-auto flex justify-between items-center">
           <div>
-            <h1 className="text-2xl font-black italic text-white">منظومة العمدة الذكية 🌾</h1>
+            <h1 className="text-2xl font-black italic text-white">منظومة العمدة  🌾</h1>
             <p className="text-[10px] text-slate-400 mt-1 font-black uppercase tracking-widest">إدارة التجارة والمخازن</p>
           </div>
           <div className="flex gap-3">
