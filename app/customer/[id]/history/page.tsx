@@ -129,6 +129,19 @@ export default function CustomerHistory() {
   const printNetTotal = Number(printTransaction?.amount || 0);
   const printDiscountAmount = Math.max(printSubtotal - printNetTotal, 0);
   const printDiscountRate = printSubtotal > 0 ? Number(((printDiscountAmount / printSubtotal) * 100).toFixed(2)) : 0;
+  const printPaid = printTransaction ? transactions
+    .filter(t => PAYMENT_TYPES.includes(t.type))
+    .filter(t => {
+      const description = String(t.description || "");
+      const invoiceId = String(printTransaction.id || "");
+      if (invoiceId && description.includes(invoiceId)) return true;
+
+      const invoiceTime = new Date(printTransaction.created_at).getTime();
+      const paymentTime = new Date(t.created_at).getTime();
+      return paymentTime >= invoiceTime && paymentTime - invoiceTime <= 120000 && description.includes("فاتورة");
+    })
+    .reduce((sum, t) => sum + Number(t.amount || 0), 0) : 0;
+  const printRemaining = Math.max(printNetTotal - printPaid, 0);
 
   const filterTabs: { key: TxType; label: string }[] = [
     { key: "all",          label: `الكل (${transactions.length})` },
@@ -424,8 +437,9 @@ export default function CustomerHistory() {
             <div className="print-summary">
               <p><span>الإجمالي قبل الخصم</span><b>{printSubtotal.toLocaleString("ar-EG")} ج</b></p>
               <p><span>الخصم ({printDiscountRate}%)</span><b>{printDiscountAmount.toLocaleString("ar-EG")} ج</b></p>
-              <p className="print-total"><span>صافي الفاتورة</span><b>{printNetTotal.toLocaleString("ar-EG")} ج</b></p>
-              {printTransaction.profit != null && <p><span>الربح</span><b>{Number(printTransaction.profit || 0).toLocaleString("ar-EG")} ج</b></p>}
+              <p><span>صافي الفاتورة</span><b>{printNetTotal.toLocaleString("ar-EG")} ج</b></p>
+              <p><span>المدفوع</span><b>{printPaid.toLocaleString("ar-EG")} ج</b></p>
+              <p className="print-total"><span>المتبقي</span><b>{printRemaining.toLocaleString("ar-EG")} ج</b></p>
             </div>
             {printTransaction.description && <p className="print-note">ملاحظة: {printTransaction.description}</p>}
           </div>

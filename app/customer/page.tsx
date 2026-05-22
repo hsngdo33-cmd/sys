@@ -119,10 +119,10 @@ export default function CustomersListPage() {
   const clearCount  = customers.filter(c => c.balance <= 0).length;
 
   return (
-    <div className="min-h-screen bg-[#f1f5f9] text-right font-sans text-slate-900 pb-10" dir="rtl">
+    <div className="min-h-screen bg-[#f1f5f9] text-right font-sans text-slate-900 pb-4" dir="rtl">
 
       {/* ══ Header ══ */}
-      <header className="bg-[#0f172a] text-white p-6 shadow-xl mb-8 sticky top-0 z-40">
+      <header className="bg-[#0f172a] text-white px-6 py-4 shadow-xl mb-4 sticky top-0 z-40">
         <div className="max-w-6xl mx-auto flex justify-between items-center flex-wrap gap-4">
           <div className="flex items-center gap-4">
             <Link href="/" className="bg-white/10 hover:bg-white/20 px-4 py-2 rounded-xl text-xs font-black transition-all">⬅️ الرئيسية</Link>
@@ -133,52 +133,53 @@ export default function CustomersListPage() {
           </div>
           <button
             onClick={() => setShowAddModal(true)}
-            className="bg-emerald-500 hover:bg-emerald-400 px-6 py-3 rounded-xl font-black text-sm transition-all active:scale-95 shadow-lg"
+            className="app-btn app-btn-success"
           >
             ➕ إضافة عميل
           </button>
         </div>
       </header>
 
-      <main className="max-w-6xl mx-auto px-4 space-y-5">
+      <main className="app-directory-layout max-w-[1500px] mx-auto px-4">
+        <aside className="app-directory-side">
         
         {/* ══ Summary Cards ══ */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="bg-[#0f172a] text-white p-5 rounded-[2rem] shadow-lg">
+        <div className="grid gap-3">
+          <div className="app-mini-stat bg-[#0f172a] text-white shadow-lg">
             <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">إجمالي الديون</p>
-            <p className="text-3xl font-black">{totalDebt.toLocaleString("ar-EG")}</p>
+            <p className="text-2xl font-black">{totalDebt.toLocaleString("ar-EG")}</p>
             <p className="text-xs text-slate-500 font-bold mt-1">جنيه مصري</p>
           </div>
           <div
             onClick={() => setFilter(filter === "debtors" ? "all" : "debtors")}
-            className={`p-5 rounded-[2rem] shadow-sm cursor-pointer transition-all border-2 ${filter === "debtors" ? "bg-rose-500 text-white border-rose-500" : "bg-white border-slate-200 hover:border-rose-300"}`}
+            className={`app-mini-stat shadow-sm cursor-pointer transition-all border-2 ${filter === "debtors" ? "bg-rose-500 text-white border-rose-500" : "bg-white border-slate-200 hover:border-rose-300"}`}
           >
             <p className="text-[10px] font-black mb-2 uppercase">عملاء مدينون</p>
-            <p className="text-3xl font-black">{debtorCount}</p>
+            <p className="text-2xl font-black">{debtorCount}</p>
           </div>
           <div
             onClick={() => setFilter(filter === "clear" ? "all" : "clear")}
-            className={`p-5 rounded-[2rem] shadow-sm cursor-pointer transition-all border-2 ${filter === "clear" ? "bg-emerald-500 text-white border-emerald-500" : "bg-white border-slate-200 hover:border-emerald-300"}`}
+            className={`app-mini-stat shadow-sm cursor-pointer transition-all border-2 ${filter === "clear" ? "bg-emerald-500 text-white border-emerald-500" : "bg-white border-slate-200 hover:border-emerald-300"}`}
           >
             <p className="text-[10px] font-black mb-2 uppercase">حساب سليم</p>
-            <p className="text-3xl font-black">{clearCount}</p>
+            <p className="text-2xl font-black">{clearCount}</p>
           </div>
         </div>
 
         {/* ══ Search & Sort ══ */}
-        <div className="bg-white p-4 rounded-[2rem] border border-slate-200 shadow-sm flex gap-3 flex-wrap items-center">
+        <div className="bg-white p-3 rounded-[1.25rem] border border-slate-200 shadow-sm grid gap-3">
           <input
             placeholder="🔍 ابحث بالاسم أو الموبايل..."
-            className="flex-1 min-w-[200px] p-3 bg-slate-50 rounded-xl font-bold text-slate-900 outline-none text-sm"
+            className="w-full p-3 bg-slate-50 rounded-xl font-bold text-slate-900 outline-none text-sm"
             value={searchTerm}
             onChange={e => setSearchTerm(e.target.value)}
           />
-          <div className="flex gap-2">
+          <div className="grid grid-cols-3 gap-2">
             {(["name","balance","created_at"] as SortKey[]).map(k => (
               <button
                 key={k}
                 onClick={() => setSortBy(k)}
-                className={`px-4 py-2 rounded-xl text-xs font-black transition-all ${sortBy === k ? "bg-[#0f172a] text-white" : "bg-slate-100 text-slate-500"}`}
+                className={`app-btn app-btn-sm ${sortBy === k ? "app-btn-primary" : "app-btn-soft"}`}
               >
                 {k === "name" ? "الاسم" : k === "balance" ? "الدين" : "الأحدث"}
               </button>
@@ -187,39 +188,41 @@ export default function CustomersListPage() {
         </div>
 
         {/* ══ Table ══ */}
-        <div className="bg-white rounded-[2.5rem] border border-slate-200 shadow-sm overflow-hidden">
+        </aside>
+
+        <section className="app-directory-table bg-white border border-slate-200 shadow-sm">
           {loading ? (
-            <div className="p-20 text-center text-slate-400 font-black animate-pulse">⏳ جاري التحميل...</div>
+            <div className="p-10 text-center text-slate-400 font-black animate-pulse">⏳ جاري التحميل...</div>
           ) : displayed.length === 0 ? (
-            <div className="p-20 text-center text-slate-300 font-black">لا توجد نتائج</div>
+            <div className="p-10 text-center text-slate-300 font-black">لا توجد نتائج</div>
           ) : (
             <table className="w-full text-right">
               <thead className="bg-slate-50 text-[10px] font-black text-slate-400 border-b">
                 <tr>
-                  <th className="p-5">العميل</th>
-                  <th className="p-5">الموبايل</th>
-                  <th className="p-5">المديونية</th>
-                  <th className="p-5 text-center">الإجراءات</th>
+                  <th className="px-4 py-3">العميل</th>
+                  <th className="px-4 py-3">الموبايل</th>
+                  <th className="px-4 py-3">المديونية</th>
+                  <th className="px-4 py-3 text-center">الإجراءات</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-50">
                 {displayed.map(c => (
                   <tr key={c.id} className="hover:bg-slate-50/70 transition-colors">
-                    <td className="p-5 font-black text-slate-900">{c.name}</td>
-                    <td className="p-5 text-slate-400 font-bold">{c.phone || "—"}</td>
-                    <td className="p-5">
+                    <td className="px-4 py-3 font-black text-slate-900">{c.name}</td>
+                    <td className="px-4 py-3 text-slate-400 font-bold">{c.phone || "—"}</td>
+                    <td className="px-4 py-3">
                       {c.balance > 0 ? (
                         <span className="text-xl font-black text-rose-600">{c.balance.toLocaleString("ar-EG")}</span>
                       ) : (
                         <span className="bg-emerald-100 text-emerald-700 px-3 py-1 rounded-full text-[10px] font-black">سدّد ✅</span>
                       )}
                     </td>
-                    <td className="p-5">
+                    <td className="px-4 py-3">
                       <div className="flex justify-center gap-2 flex-wrap">
   {/* زر التعديل */}
   <button
     onClick={() => { setSelectedCustomer(c); setShowEditModal(true); }}
-    className="bg-blue-500 hover:bg-blue-400 text-white px-3 py-2 rounded-xl font-black text-[10px] transition-all"
+    className="app-btn app-btn-sm app-btn-primary"
   >
     ✏️ تعديل
   </button>
@@ -227,7 +230,7 @@ export default function CustomersListPage() {
   {/* زر الحذف */}
   <button
     onClick={() => { setSelectedCustomer(c); setShowDeleteModal(true); }}
-    className="bg-rose-100 hover:bg-rose-500 hover:text-white text-rose-600 px-3 py-2 rounded-xl font-black text-[10px] transition-all"
+    className="app-btn app-btn-sm app-btn-danger"
   >
     🗑️ حذف
   </button>
@@ -236,7 +239,7 @@ export default function CustomersListPage() {
   {c.balance > 0 && (
     <button
       onClick={() => { setSelectedCustomer(c); setPayAmount(0); setPayNote(""); setShowPayModal(true); }}
-      className="bg-emerald-500 text-white px-3 py-2 rounded-xl font-black text-[10px] shadow-md shadow-emerald-500/20"
+      className="app-btn app-btn-sm app-btn-success"
     >
       💰 تحصيل
     </button>
@@ -245,7 +248,7 @@ export default function CustomersListPage() {
   {/* زر البيع */}
   <Link 
     href={`/customer/${c.id}`} 
-    className="bg-[#0f172a] text-white px-3 py-2 rounded-xl font-black text-[10px] hover:bg-slate-800 transition-all"
+    className="app-btn app-btn-sm app-btn-primary"
   >
     🧾 بيع
   </Link>
@@ -253,7 +256,7 @@ export default function CustomersListPage() {
   {/* زر السجل (اللي كان ناقص) */}
   <Link 
     href={`/customer/${c.id}/history`} 
-    className="bg-slate-100 hover:bg-slate-200 text-slate-600 px-3 py-2 rounded-xl font-black text-[10px] transition-all"
+    className="app-btn app-btn-sm app-btn-soft"
   >
     📂 سجل
   </Link>
@@ -264,7 +267,7 @@ export default function CustomersListPage() {
               </tbody>
             </table>
           )}
-        </div>
+        </section>
       </main>
 
       {/* ══ Modal: إضافة عميل ══ */}
@@ -334,7 +337,7 @@ export default function CustomersListPage() {
 function Modal({ children, onClose }: { children: React.ReactNode; onClose: () => void }) {
   return (
     <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4" onClick={onClose}>
-      <div className="bg-white rounded-[2.5rem] p-8 w-full max-w-md shadow-2xl relative" onClick={e => e.stopPropagation()}>
+      <div className="bg-white rounded-[1.25rem] p-6 w-full max-w-md shadow-2xl relative" onClick={e => e.stopPropagation()}>
         {children}
       </div>
     </div>

@@ -148,12 +148,7 @@ export default function CustomerInvoicePage() {
   const remaining  = total - cash;
   const margin     = total > 0 ? Math.round((profit / total) * 100) : 0;
 
-  const printInvoice = () => {
-    if (cart.length === 0) return alert("الفاتورة فاضية!");
-    window.print();
-  };
-
-  const saveInvoice = async () => {
+  const saveInvoice = async (printAfterSave = false) => {
     if (!customer) return alert("بيانات العميل لم تحمل بعد");
     if (cart.length === 0) return alert("الفاتورة فاضية!");
     setIsSaving(true);
@@ -163,15 +158,16 @@ export default function CustomerInvoicePage() {
         qty: Number(i.qty), price: Number(i.price), cost: Number(i.cost),
       }));
 
-      await supabase.from("customer_transactions").insert([{
+      const { data: invoice, error: invoiceError } = await supabase.from("customer_transactions").insert([{
         customer_id: id, amount: total, type: "sale",
         items: itemsToSave, profit,
         description: note || `بيع بضاعة لـ ${customer.name}${discountRate > 0 ? ` - خصم ${discountRate}%` : ""}`,
-      }]);
+      }]).select("id").single();
+      if (invoiceError) throw invoiceError;
 
       if (cash > 0) {
         await supabase.from("customer_transactions").insert([{
-          customer_id: id, amount: cash, type: "payment", description: "سداد من فاتورة",
+          customer_id: id, amount: cash, type: "payment", description: `سداد من فاتورة #${invoice?.id}`,
         }]);
       }
 
@@ -182,6 +178,9 @@ export default function CustomerInvoicePage() {
       for (const item of cart)
         await supabase.rpc("decrement_stock", { row_id: item.id, amount: Number(item.qty) });
 
+      if (printAfterSave) {
+        window.print();
+      }
       router.push(`/customer/${id}/history`);
     } catch { alert("خطأ في الحفظ"); }
     finally { setIsSaving(false); }
@@ -191,7 +190,7 @@ export default function CustomerInvoicePage() {
     <div className="min-h-screen bg-[#f1f5f9] text-right font-sans text-slate-900 pb-10" dir="rtl">
 
       {/* ══ Header ══ */}
-      <header className="bg-[#0f172a] text-white p-5 flex justify-between items-center shadow-xl sticky top-0 z-50">
+      <header className="bg-[#0f172a] text-white px-5 py-4 flex justify-between items-center shadow-xl sticky top-0 z-50">
         <div className="flex items-center gap-4">
           <Link href="/customer" className="bg-white/10 hover:bg-white/20 px-4 py-2 rounded-xl text-xs font-black transition-all">⬅️ رجوع</Link>
           <div>
@@ -209,11 +208,11 @@ export default function CustomerInvoicePage() {
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto p-4 grid grid-cols-12 gap-5 mt-4">
+      <main className="app-invoice-layout max-w-[1500px] mx-auto p-4 mt-3">
 
         {/* ══ قائمة المنتجات ══ */}
-        <aside className="col-span-12 lg:col-span-4 bg-white rounded-[2.5rem] border border-slate-200 shadow-sm flex flex-col" style={{ height: "82vh" }}>
-          <div className="p-5 border-b border-slate-100 space-y-3">
+        <aside className="app-invoice-sidebar bg-white border border-slate-200 shadow-sm flex flex-col">
+          <div className="p-4 border-b border-slate-100 space-y-3">
             <h3 className="font-black text-slate-400 text-[10px] uppercase tracking-widest">📦 اختيار الأصناف</h3>
             <input
               type="text"
@@ -247,7 +246,7 @@ export default function CustomerInvoicePage() {
                 <div
                   key={p.id}
                   onClick={() => !inCart && addToCart(p)}
-                  className={`p-4 rounded-2xl border flex justify-between items-center transition-all
+                  className={`p-3 rounded-xl border flex justify-between items-center transition-all
                     ${p.stock_quantity <= 0 ? "opacity-40 grayscale cursor-not-allowed border-slate-100" :
                       inCart ? "border-indigo-300 bg-indigo-50 cursor-default" :
                                "border-slate-100 hover:border-indigo-400 hover:bg-slate-50 cursor-pointer"}`}
@@ -269,10 +268,10 @@ export default function CustomerInvoicePage() {
         </aside>
 
         {/* ══ الفاتورة ══ */}
-        <div className="col-span-12 lg:col-span-8 space-y-4">
+        <section className="min-w-0">
 
           {/* جدول الأصناف */}
-          <div className="bg-white rounded-[2.5rem] border border-slate-200 shadow-sm overflow-hidden" style={{ minHeight: 380 }}>
+          <div className="app-invoice-table bg-white border border-slate-200 shadow-sm overflow-auto">
             {cart.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-64 text-slate-300 space-y-3">
                 <span className="text-5xl">🧾</span>
@@ -337,7 +336,10 @@ export default function CustomerInvoicePage() {
           </div>
 
           {/* ملاحظة */}
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm px-5 py-3">
+        </section>
+
+        <aside className="space-y-4">
+          <div className="bg-white rounded-xl border border-slate-200 shadow-sm px-4 py-2.5">
             <label className="block text-[10px] font-black text-slate-400 mb-1">نسبة خصم على الفاتورة كلها</label>
             <div className="flex items-center gap-3">
               <input
@@ -354,7 +356,7 @@ export default function CustomerInvoicePage() {
             </div>
           </div>
 
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm px-5 py-3">
+          <div className="bg-white rounded-xl border border-slate-200 shadow-sm px-4 py-2.5">
             <input
               placeholder="📝 ملاحظة على الفاتورة (اختياري)..."
               className="w-full bg-transparent font-bold text-slate-700 outline-none text-sm placeholder:text-slate-300"
@@ -364,15 +366,15 @@ export default function CustomerInvoicePage() {
           </div>
 
           {/* ══ فوتر الفاتورة ══ */}
-          <div className="bg-[#0f172a] p-7 rounded-[2.5rem] border-2 border-slate-700 shadow-2xl">
-            <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6 text-white">
+          <div className="app-invoice-footer bg-[#0f172a] border border-slate-700 shadow-xl">
+            <div className="grid grid-cols-2 gap-3 mb-4 text-white">
               <div>
                 <p className="text-[9px] text-slate-500 font-black uppercase tracking-widest mb-1">الإجمالي</p>
-                <p className="text-2xl font-black">{total.toLocaleString("ar-EG", { maximumFractionDigits: 2 })} <small className="text-xs opacity-50">ج</small></p>
+                <p className="text-xl font-black">{total.toLocaleString("ar-EG", { maximumFractionDigits: 2 })} <small className="text-xs opacity-50">ج</small></p>
               </div>
               <div>
                 <p className="text-[9px] text-slate-500 font-black uppercase tracking-widest mb-1">الربح المتوقع</p>
-                <p className={`text-2xl font-black ${profit >= 0 ? "text-emerald-400" : "text-rose-400"}`}>
+                <p className={`text-xl font-black ${profit >= 0 ? "text-emerald-400" : "text-rose-400"}`}>
                   {profit.toFixed(1)} <small className="text-xs opacity-70">ج ({margin}%)</small>
                 </p>
               </div>
@@ -382,33 +384,35 @@ export default function CustomerInvoicePage() {
                   type="number" step="any"
                   value={cashPaid}
                   onChange={e => setCashPaid(e.target.value)}
-                  className="bg-white/10 border border-white/20 text-white text-2xl font-black w-full rounded-2xl px-3 py-1.5 outline-none focus:border-emerald-400 transition-all text-center"
+                  className="bg-white/10 border border-white/20 text-white text-xl font-black w-full rounded-xl px-3 py-1.5 outline-none focus:border-emerald-400 transition-all text-center"
                   placeholder="0"
                 />
               </div>
               <div>
                 <p className="text-[9px] text-slate-500 font-black uppercase tracking-widest mb-1">المتبقي (دين)</p>
-                <p className={`text-2xl font-black ${remaining > 0 ? "text-rose-400" : "text-emerald-400"}`}>
+                <p className={`text-xl font-black ${remaining > 0 ? "text-rose-400" : "text-emerald-400"}`}>
                   {remaining.toLocaleString("ar-EG", { maximumFractionDigits: 2 })} <small className="text-xs opacity-70">ج</small>
                 </p>
               </div>
             </div>
-            <button
-              onClick={printInvoice}
-              disabled={cart.length === 0}
-              className="mb-3 w-full bg-white/10 hover:bg-white/20 disabled:opacity-50 text-white py-4 rounded-2xl font-black text-sm transition-all"
-            >
-              طباعة الفاتورة
-            </button>
-            <button
-              onClick={saveInvoice}
-              disabled={isSaving || cart.length === 0}
-              className="w-full bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-white py-5 rounded-2xl font-black text-xl transition-all active:scale-[0.99] shadow-xl shadow-emerald-900/30"
-            >
-              {isSaving ? "⏳ جاري الحفظ..." : "حفظ الفاتورة ✅"}
-            </button>
+            <div className="grid grid-cols-1 gap-3">
+              <button
+                onClick={() => saveInvoice(true)}
+                disabled={isSaving || cart.length === 0}
+                className="app-btn app-btn-ghost app-btn-lg w-full"
+              >
+                {isSaving ? "جاري الحفظ..." : "حفظ وطباعة"}
+              </button>
+              <button
+                onClick={() => saveInvoice(false)}
+                disabled={isSaving || cart.length === 0}
+                className="app-btn app-btn-success app-btn-lg w-full"
+              >
+                {isSaving ? "جاري الحفظ..." : "حفظ واعتماد الفاتورة"}
+              </button>
+            </div>
           </div>
-        </div>
+        </aside>
       </main>
 
       <section className="print-invoice hidden" dir="rtl">

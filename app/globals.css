@@ -38,6 +38,240 @@ button {
   font: inherit;
 }
 
+@layer components {
+  .app-btn {
+    display: inline-flex;
+    min-height: 2.5rem;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    border-radius: 0.875rem;
+    padding: 0.625rem 1rem;
+    font-size: 0.8125rem;
+    font-weight: 900;
+    line-height: 1;
+    transition: background-color 180ms ease, color 180ms ease, border-color 180ms ease, box-shadow 180ms ease, transform 180ms ease;
+  }
+
+  .app-btn:active {
+    transform: scale(0.98);
+  }
+
+  .app-btn:disabled {
+    cursor: not-allowed;
+    opacity: 0.55;
+    transform: none;
+  }
+
+  .app-btn-primary {
+    background: #0f172a;
+    color: #fff;
+    box-shadow: 0 10px 22px rgba(15, 23, 42, 0.16);
+  }
+
+  .app-btn-primary:hover {
+    background: #1e293b;
+  }
+
+  .app-btn-success {
+    background: #10b981;
+    color: #fff;
+    box-shadow: 0 10px 22px rgba(16, 185, 129, 0.18);
+  }
+
+  .app-btn-success:hover {
+    background: #059669;
+  }
+
+  .app-btn-warning {
+    background: #f59e0b;
+    color: #fff;
+    box-shadow: 0 10px 22px rgba(245, 158, 11, 0.18);
+  }
+
+  .app-btn-warning:hover {
+    background: #d97706;
+  }
+
+  .app-btn-danger {
+    background: #e11d48;
+    color: #fff;
+    box-shadow: 0 10px 22px rgba(225, 29, 72, 0.18);
+  }
+
+  .app-btn-danger:hover {
+    background: #be123c;
+  }
+
+  .app-btn-soft {
+    border: 1px solid #e2e8f0;
+    background: #f1f5f9;
+    color: #334155;
+  }
+
+  .app-btn-soft:hover {
+    background: #e2e8f0;
+    color: #0f172a;
+  }
+
+  .app-btn-ghost {
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    background: rgba(255, 255, 255, 0.1);
+    color: #fff;
+  }
+
+  .app-btn-ghost:hover {
+    background: rgba(255, 255, 255, 0.18);
+  }
+
+  .app-btn-sm {
+    min-height: 2.125rem;
+    border-radius: 0.75rem;
+    padding: 0.5rem 0.75rem;
+    font-size: 0.72rem;
+  }
+
+  .app-btn-lg {
+    min-height: 3rem;
+    border-radius: 1rem;
+    padding: 0.75rem 1.25rem;
+    font-size: 0.95rem;
+  }
+
+  .app-input {
+    border: 1px solid #e2e8f0;
+    border-radius: 1rem;
+    background: #f8fafc;
+    padding: 0.75rem 1rem;
+    color: #0f172a;
+    font-weight: 800;
+    outline: none;
+    transition: border-color 180ms ease, box-shadow 180ms ease;
+  }
+
+  .app-input:focus {
+    border-color: #10b981;
+    box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.13);
+  }
+
+  .app-panel {
+    border: 1px solid #e2e8f0;
+    border-radius: 1.5rem;
+    background: #fff;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+  }
+
+  .app-home-layout {
+    display: grid;
+    grid-template-columns: minmax(260px, 1fr) minmax(260px, 1fr) minmax(260px, 1fr);
+    gap: 1rem;
+    align-items: start;
+  }
+
+  .app-home-column {
+    display: grid;
+    gap: 0.875rem;
+  }
+
+  .app-home-performance {
+    grid-column: 1;
+    grid-row: 1 / span 2;
+  }
+
+  .app-home-summary {
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  .app-home-alerts {
+    grid-column: 2;
+    grid-row: 2;
+  }
+
+  .app-home-low-stock {
+    grid-column: 2;
+    grid-row: 3;
+  }
+
+  .app-home-sections {
+    grid-column: 3;
+    grid-row: 1 / span 3;
+  }
+
+  .app-home-card {
+    border-radius: 1.25rem;
+    padding: 1rem;
+  }
+
+  .app-directory-layout {
+    display: grid;
+    grid-template-columns: minmax(240px, 300px) minmax(0, 1fr);
+    gap: 1rem;
+    align-items: start;
+  }
+
+  .app-directory-side {
+    position: sticky;
+    top: 88px;
+    display: grid;
+    gap: 0.5rem;
+  }
+
+  .app-mini-stat {
+    border-radius: 1.25rem;
+    padding: 0.75rem;
+  }
+
+  .app-directory-table {
+    height: calc(100dvh - 220px);
+    max-height: calc(100dvh - 220px);
+    overflow: auto;
+    border-radius: 1.5rem;
+  }
+
+  .app-invoice-sidebar {
+    height: calc(100dvh - 116px);
+    border-radius: 1.5rem;
+  }
+
+  .app-invoice-layout {
+    display: grid;
+    grid-template-columns: minmax(220px, 0.8fr) minmax(360px, 1.5fr) minmax(240px, 0.9fr);
+    gap: 1rem;
+  }
+
+  .app-invoice-table {
+    min-height: calc(100dvh - 116px);
+    border-radius: 1.5rem;
+  }
+
+  .app-invoice-footer {
+    border-radius: 1.5rem;
+    padding: 1.25rem;
+  }
+}
+
+main :where(.fixed.inset-0) {
+  align-items: center;
+  overflow: hidden;
+}
+
+main :where(.fixed.inset-0) > :where(div.bg-white) {
+  max-height: min(86dvh, 720px);
+  overflow-y: auto;
+  border-radius: 1.25rem !important;
+}
+
+main :where(.fixed.inset-0) :where(input, select, textarea) {
+  border-radius: 0.875rem;
+  padding-block: 0.75rem;
+}
+
+main :where(.fixed.inset-0) :where(button) {
+  border-radius: 0.875rem;
+  padding-block: 0.75rem;
+}
+
 * {
   scrollbar-width: thin;
   scrollbar-color: #cbd5e1 transparent;
@@ -58,6 +292,37 @@ button {
 }
 
 @media (max-width: 768px) {
+  .app-home-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .app-home-layout > :nth-child(n),
+  .app-home-performance,
+  .app-home-summary,
+  .app-home-alerts,
+  .app-home-low-stock,
+  .app-home-sections {
+    grid-column: auto;
+    grid-row: auto;
+  }
+
+  .app-directory-layout {
+    grid-template-columns: minmax(0, 1fr);
+    height: auto;
+    overflow: visible;
+  }
+
+  .app-directory-side {
+    position: static;
+    max-height: none;
+    overflow: visible;
+  }
+
+  .app-directory-table {
+    height: auto;
+    max-height: none;
+  }
+
   main table {
     min-width: 720px;
   }
@@ -101,7 +366,33 @@ button {
   }
 }
 
+@media (max-width: 1024px) {
+  .app-invoice-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .app-invoice-sidebar {
+    height: 420px;
+  }
+
+  .app-invoice-table {
+    min-height: 320px;
+  }
+}
+
 @media (max-width: 480px) {
+  .app-invoice-sidebar {
+    height: 360px;
+  }
+
+  .app-invoice-table {
+    min-height: 240px;
+  }
+
+  .app-invoice-footer {
+    padding: 1rem;
+  }
+
   main :where(.p-8, .p-7, .p-6, .p-5) {
     padding: 1rem;
   }

@@ -117,15 +117,15 @@ export default function Dashboard() {
   const monthName = now.toLocaleDateString("ar-EG", { month: "long", year: "numeric" });
 
   return (
-    <div className="min-h-screen bg-[#f1f5f9] text-right font-sans pb-16 text-slate-900" dir="rtl">
+    <div className="min-h-screen bg-[#f1f5f9] text-right font-sans pb-6 text-slate-900" dir="rtl">
 
       {/* ══ Header ══ */}
-      <header className="bg-[#0f172a] text-white shadow-2xl mb-8">
-        <div className="max-w-6xl mx-auto p-6">
+      <header className="hidden">
+        <div className="max-w-[1500px] mx-auto px-6 py-4">
           <div className="flex justify-between items-start flex-wrap gap-4">
             <div>
               <p className="text-slate-400 text-xs font-black uppercase tracking-widest mb-1">{getGreeting()}</p>
-              <h1 className="text-3xl font-black text-white">منظومة المحاسبة الذكية </h1>
+              <h1 className="text-2xl font-black text-white">منظومة المحاسبة الذكية </h1>
               <p className="text-slate-500 text-[10px] font-black uppercase tracking-widest mt-1">إدارة التجارة والمخازن</p>
             </div>
             <div className="flex items-center gap-3 flex-wrap">
@@ -150,7 +150,7 @@ export default function Dashboard() {
 
           {/* شريط التنبيهات المتحرك */}
           {alerts.length > 0 && (
-            <div className="mt-5 bg-white/5 border border-white/10 rounded-2xl px-5 py-3 flex items-center gap-3 overflow-hidden">
+            <div className="mt-4 bg-white/5 border border-white/10 rounded-2xl px-4 py-2.5 flex items-center gap-3 overflow-hidden">
               <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest shrink-0">تنبيه</span>
               <div className="h-4 w-px bg-white/10 shrink-0" />
               <p
@@ -176,33 +176,33 @@ export default function Dashboard() {
         </div>
       </header>
 
-      <main className="max-w-6xl mx-auto px-4 space-y-8">
+      <main className="app-home-layout max-w-[1500px] mx-auto px-4 pt-2">
 
         {loading ? (
-          <div className="bg-white rounded-[2.5rem] p-20 text-center border border-slate-200 shadow-sm">
+          <div className="bg-white rounded-[1.5rem] p-12 text-center border border-slate-200 shadow-sm">
             <p className="text-slate-400 font-black text-xl animate-pulse">⏳ جاري تحميل البيانات...</p>
           </div>
         ) : (
           <>
             {/* ══ كروت الشهر الحالي ══ */}
-            <section>
-              <div className="flex items-center gap-3 mb-4">
+            <section className="app-home-performance">
+              <div className="flex items-center gap-3 mb-3">
                 <h2 className="font-black text-slate-500 text-[10px] uppercase tracking-widest">أداء {monthName}</h2>
                 <div className="flex-1 h-px bg-slate-200" />
               </div>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="grid grid-cols-2 gap-3">
 
                 {/* إيرادات الشهر */}
-                <div className="bg-[#0f172a] text-white p-6 rounded-[2rem] shadow-lg col-span-2 md:col-span-1">
+                <div className="bg-[#0f172a] text-white app-home-card shadow-lg col-span-2">
                   <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-3">إيرادات الشهر</p>
-                  <p className="text-4xl font-black">{fmt(stats.monthRevenue)}</p>
+                  <p className="text-3xl font-black">{fmt(stats.monthRevenue)}</p>
                   <p className="text-xs text-slate-500 font-bold mt-1">جنيه مصري</p>
                 </div>
 
                 {/* الربح */}
-                <div className="bg-emerald-500 text-white p-6 rounded-[2rem] shadow-lg shadow-emerald-500/20">
+                <div className="bg-emerald-500 text-white app-home-card shadow-lg shadow-emerald-500/20">
                   <p className="text-[10px] font-black uppercase tracking-widest text-emerald-100 mb-3">صافي الربح</p>
-                  <p className="text-4xl font-black">{fmt(stats.monthProfit)}</p>
+                  <p className="text-3xl font-black">{fmt(stats.monthProfit)}</p>
                   <div className="flex items-center gap-2 mt-2">
                     <div className="flex-1 bg-emerald-400/30 rounded-full h-1.5">
                       <div className="bg-white h-1.5 rounded-full" style={{ width: `${Math.min(profitMargin * 2, 100)}%` }} />
@@ -212,16 +212,16 @@ export default function Dashboard() {
                 </div>
 
                 {/* التحصيل */}
-                <div className="bg-indigo-600 text-white p-6 rounded-[2rem] shadow-lg shadow-indigo-500/20">
+                <div className="bg-indigo-600 text-white app-home-card shadow-lg shadow-indigo-500/20">
                   <p className="text-[10px] font-black uppercase tracking-widest text-indigo-200 mb-3">تم تحصيله</p>
-                  <p className="text-4xl font-black">{fmt(stats.monthCollected)}</p>
+                  <p className="text-3xl font-black">{fmt(stats.monthCollected)}</p>
                   <p className="text-xs text-indigo-300 font-bold mt-1">هذا الشهر</p>
                 </div>
 
                 {/* معاملات اليوم */}
-                <div className="bg-amber-500 text-white p-6 rounded-[2rem] shadow-lg shadow-amber-500/20">
+                <div className="bg-amber-500 text-white app-home-card shadow-lg shadow-amber-500/20 col-span-2">
                   <p className="text-[10px] font-black uppercase tracking-widest text-amber-100 mb-3">معاملات اليوم</p>
-                  <p className="text-4xl font-black">{stats.todayTransactions}</p>
+                  <p className="text-3xl font-black">{stats.todayTransactions}</p>
                   <p className="text-xs text-amber-200 font-bold mt-1">عملية مسجلة</p>
                 </div>
 
@@ -229,12 +229,12 @@ export default function Dashboard() {
             </section>
 
             {/* ══ كروت الإجماليات ══ */}
-            <section>
-              <div className="flex items-center gap-3 mb-4">
+            <section className="app-home-summary">
+              <div className="flex items-center gap-3 mb-3">
                 <h2 className="font-black text-slate-500 text-[10px] uppercase tracking-widest">الإجماليات</h2>
                 <div className="flex-1 h-px bg-slate-200" />
               </div>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="grid grid-cols-2 gap-3">
                 <StatCard label="ديون العملاء" value={fmt(stats.totalCustomerDebts)} sub="ج.م" accent="rose" emoji="🔴" />
                 <StatCard label="ديون الموردين" value={fmt(stats.totalSupplierDebts)} sub="ج.م" accent="indigo" emoji="📦" />
                 <StatCard label="عدد العملاء" value={String(stats.customersCount)} sub="عميل" accent="slate" emoji="👥" />
@@ -242,9 +242,37 @@ export default function Dashboard() {
               </div>
             </section>
 
+            {alerts.length > 0 && (
+              <section className="app-home-alerts app-home-card bg-white border border-slate-200 shadow-sm">
+                <div className="flex items-center gap-3 mb-2">
+                  <h2 className="font-black text-slate-500 text-[10px] uppercase tracking-widest">تنبيه</h2>
+                  <div className="flex-1 h-px bg-slate-200" />
+                  <button onClick={fetchStats} className="app-btn app-btn-soft app-btn-sm">تحديث</button>
+                </div>
+                <p
+                  key={alertIdx}
+                  className="text-sm font-bold text-slate-700 leading-6"
+                  style={{ animation: "fadeSlide 0.4s ease" }}
+                >
+                  {alerts[alertIdx]}
+                </p>
+                {alerts.length > 1 && (
+                  <div className="flex gap-1 mt-3">
+                    {alerts.map((_, i) => (
+                      <button
+                        key={i}
+                        onClick={() => setAlertIdx(i)}
+                        className={`h-1.5 rounded-full transition-all ${i === alertIdx ? "bg-indigo-500 w-5" : "bg-slate-200 w-1.5"}`}
+                      />
+                    ))}
+                  </div>
+                )}
+              </section>
+            )}
+
             {/* ══ تحذير المخزن ══ */}
             {stats.lowStockCount > 0 && (
-              <div className="bg-amber-50 border-2 border-amber-200 rounded-[2rem] p-5 flex items-center gap-4">
+              <div className="app-home-low-stock bg-amber-50 border-2 border-amber-200 rounded-[1.25rem] p-4 flex items-center gap-3">
                 <span className="text-3xl shrink-0">⚠️</span>
                 <div className="flex-1">
                   <p className="font-black text-amber-800">تحذير: {stats.lowStockCount} أصناف كميتها منخفضة جداً</p>
@@ -260,12 +288,12 @@ export default function Dashboard() {
             )}
 
             {/* ══ أزرار التنقل ══ */}
-            <section>
-              <div className="flex items-center gap-3 mb-4">
+            <section className="app-home-sections">
+              <div className="flex items-center gap-3 mb-3">
                 <h2 className="font-black text-slate-500 text-[10px] uppercase tracking-widest">الأقسام الرئيسية</h2>
                 <div className="flex-1 h-px bg-slate-200" />
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div className="grid grid-cols-1 gap-3">
                 <NavCard
                   href="/customer"
                   emoji="👥"
@@ -294,19 +322,6 @@ export default function Dashboard() {
               </div>
             </section>
 
-            {/* ══ روابط سريعة ══ */}
-            <section>
-              <div className="flex items-center gap-3 mb-4">
-                <h2 className="font-black text-slate-500 text-[10px] uppercase tracking-widest">وصول سريع</h2>
-                <div className="flex-1 h-px bg-slate-200" />
-              </div>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                <QuickLink href="/reports" emoji="📊" label="تقارير الأرباح" />
-                <QuickLink href="/reports" emoji="💰" label="متابعة الديون" />
-                <QuickLink href="/inventory" emoji="📋" label="جرد المخزن" />
-                <QuickLink href="/customer" emoji="🧾" label="فاتورة جديدة" />
-              </div>
-            </section>
           </>
         )}
       </main>
@@ -331,10 +346,10 @@ function StatCard({ label, value, sub, accent, emoji }: {
 }) {
   const bar = { rose: "bg-rose-500", indigo: "bg-indigo-500", slate: "bg-slate-400" };
   return (
-    <div className="bg-white p-6 rounded-[2rem] border border-slate-200 shadow-sm relative overflow-hidden">
+    <div className="bg-white app-home-card border border-slate-200 shadow-sm relative overflow-hidden">
       <div className={`w-1 h-10 ${bar[accent]} absolute left-0 top-1/2 -translate-y-1/2 rounded-r-full`} />
       <p className="text-slate-400 text-[10px] font-black uppercase tracking-widest mb-2">{emoji} {label}</p>
-      <p className="text-3xl font-black text-slate-900">{value}</p>
+      <p className="text-2xl font-black text-slate-900">{value}</p>
       <p className="text-[10px] text-slate-400 font-bold mt-1">{sub}</p>
     </div>
   );
@@ -363,33 +378,21 @@ function NavCard({ href, emoji, title, desc, color, badge, badgeAlert }: {
   return (
     <Link
       href={href}
-      className={`group bg-white p-8 rounded-[2.5rem] border border-slate-200 shadow-sm ${hover[color]} transition-all hover:shadow-xl flex flex-col`}
+      className={`group bg-white app-home-card border border-slate-200 shadow-sm ${hover[color]} transition-all hover:shadow-xl flex flex-col`}
     >
-      <div className="flex justify-between items-start mb-5">
-        <span className="text-5xl group-hover:scale-110 transition-transform duration-300">{emoji}</span>
+      <div className="flex items-center justify-between gap-3">
+        <span className="text-3xl group-hover:scale-110 transition-transform duration-300">{emoji}</span>
         {badge && (
           <span className={`text-[10px] font-black px-3 py-1 rounded-full ${badgeAlert ? "bg-rose-100 text-rose-600" : badgeColor[color]}`}>
             {badge}
           </span>
         )}
       </div>
-      <h4 className="text-xl font-black text-slate-900 mb-2">{title}</h4>
-      <p className="text-slate-500 text-sm font-bold leading-relaxed flex-1">{desc}</p>
-      <div className={`mt-5 flex items-center gap-1 ${txt[color]} font-black text-xs`}>
+      <h4 className="mt-3 text-base font-black text-slate-900 mb-1">{title}</h4>
+      <p className="text-slate-500 text-xs font-bold leading-6 flex-1">{desc}</p>
+      <div className={`mt-3 flex items-center gap-1 ${txt[color]} font-black text-xs`}>
         افتح الآن ⬅️
       </div>
-    </Link>
-  );
-}
-
-function QuickLink({ href, emoji, label }: { href: string; emoji: string; label: string }) {
-  return (
-    <Link
-      href={href}
-      className="bg-white border border-slate-200 rounded-2xl p-4 flex items-center gap-3 hover:border-indigo-300 hover:bg-indigo-50/50 transition-all group shadow-sm"
-    >
-      <span className="text-2xl group-hover:scale-110 transition-transform">{emoji}</span>
-      <span className="font-black text-slate-700 text-sm">{label}</span>
     </Link>
   );
 }
