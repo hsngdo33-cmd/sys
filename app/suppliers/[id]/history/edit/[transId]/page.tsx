@@ -12,6 +12,9 @@ export default function EditSupplierInvoicePage({ params }: { params: Promise<an
 
   const [transaction, setTransaction] = useState<any>(null);
   const [items, setItems]             = useState<any[]>([]);
+  const [products, setProducts]       = useState<any[]>([]);
+  const [productSearch, setProductSearch] = useState("");
+  const [discountPercent, setDiscountPercent] = useState<number | string>(0);
   const [isSaving, setIsSaving]       = useState(false);
   const [loading, setLoading]         = useState(true);
   const [note, setNote]               = useState("");
@@ -21,8 +24,10 @@ export default function EditSupplierInvoicePage({ params }: { params: Promise<an
 
   async function loadTransaction() {
     setLoading(true);
-    const { data, error } = await supabase
-      .from("transactions").select("*").eq("id", transId).single();
+    const [{ data, error }, { data: prods }] = await Promise.all([
+      supabase.from("transactions").select("*").eq("id", transId).single(),
+      supabase.from("products").select("id,name,unit,purchase_price,sale_price,stock_quantity,barcode").order("name"),
+    ]);
     if (error) { alert("مشكلة في تحميل الفاتورة"); }
     else {
       setTransaction(JSON.parse(JSON.stringify(data)));
@@ -33,18 +38,38 @@ export default function EditSupplierInvoicePage({ params }: { params: Promise<an
           return { ...item, unit: p?.unit || item.unit || "وحدة" };
         })
       );
+      const gross = itemsWithUnits.reduce((s: number, i: any) => s + Number(i.qty || 0) * Number(i.price || 0), 0);
       setItems(itemsWithUnits);
       setNote(data.description || "");
+      setDiscountPercent(gross > 0 && Number(data.amount) < gross ? Number((((gross - Number(data.amount)) / gross) * 100).toFixed(2)) : 0);
     }
+    setProducts(prods || []);
     setLoading(false);
   }
+
+  const addProductToInvoice = (product: any) => {
+    if (items.some(item => item.id === product.id)) return;
+    setItems(prev => [...prev, {
+      id: product.id,
+      name: product.name,
+      unit: product.unit,
+      qty: 1,
+      price: product.purchase_price,
+    }]);
+  };
+
+  const removeItem = (index: number) => {
+    setItems(prev => prev.filter((_, itemIndex) => itemIndex !== index));
+  };
 
   async function handleUpdate() {
     if (isSaving) return;
     setIsSaving(true);
     setShowConfirm(false);
     try {
-      const newTotal = items.reduce((s, i) => s + Number(i.qty) * Number(i.price), 0);
+      const grossTotal = items.reduce((s, i) => s + Number(i.qty) * Number(i.price), 0);
+      const discountRate = Math.min(Math.max(Number(discountPercent) || 0, 0), 100);
+      const newTotal = Math.max(grossTotal - (grossTotal * discountRate / 100), 0);
       const diff     = newTotal - transaction.amount;
 
       // إرجاع الكميات القديمة (decrement = إزالة من المخزن ما أضفناه قبل)
@@ -77,8 +102,12 @@ export default function EditSupplierInvoicePage({ params }: { params: Promise<an
   }
 
   // ── Totals ──
-  const newTotal = items.reduce((s, i) => s + Number(i.qty) * Number(i.price), 0);
+  const grossTotal = items.reduce((s, i) => s + Number(i.qty) * Number(i.price), 0);
+  const discountRate = Math.min(Math.max(Number(discountPercent) || 0, 0), 100);
+  const discountAmount = grossTotal * (discountRate / 100);
+  const newTotal = Math.max(grossTotal - discountAmount, 0);
   const diff     = transaction ? newTotal - transaction.amount : 0;
+  const filteredProducts = products.filter(product => product.name?.toLowerCase().includes(productSearch.toLowerCase()));
 
   if (loading) return (
     <div className="min-h-screen flex items-center justify-center bg-[#f1f5f9] font-black text-slate-400 text-xl" dir="rtl">
@@ -115,6 +144,51 @@ export default function EditSupplierInvoicePage({ params }: { params: Promise<an
       </header>
 
       <div className="max-w-3xl mx-auto px-4 space-y-5">
+
+        <div className="bg-white rounded-[2rem] border border-slate-200 shadow-sm p-5">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-[10px] font-black text-slate-400 mb-1">إضافة صنف للفاتورة</label>
+              <input
+                value={productSearch}
+                onChange={e => setProductSearch(e.target.value)}
+                placeholder="ابحث عن صنف واضغط عليه..."
+                className="w-full p-3 bg-slate-50 border border-slate-200 rounded-2xl font-bold outline-none focus:border-amber-400"
+              />
+              {productSearch && (
+                <div className="mt-2 max-h-40 overflow-y-auto rounded-2xl border border-slate-100 bg-slate-50 p-2 space-y-1">
+                  {filteredProducts.slice(0, 8).map(product => (
+                    <button
+                      key={product.id}
+                      type="button"
+                      onClick={() => { addProductToInvoice(product); setProductSearch(""); }}
+                      className="w-full flex justify-between items-center rounded-xl bg-white px-3 py-2 text-sm font-black text-slate-700 hover:bg-amber-50"
+                    >
+                      <span>{product.name}</span>
+                      <span className="text-[10px] text-slate-400">{product.purchase_price} ج</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div>
+              <label className="block text-[10px] font-black text-slate-400 mb-1">خصم إجمالي على الفاتورة</label>
+              <div className="flex items-center gap-3">
+                <input
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="any"
+                  value={discountPercent}
+                  onChange={e => setDiscountPercent(e.target.value)}
+                  className="w-full p-3 bg-slate-50 border border-slate-200 rounded-2xl font-black outline-none focus:border-amber-400"
+                />
+                <span className="rounded-xl bg-slate-100 px-3 py-3 text-sm font-black text-slate-500">%</span>
+              </div>
+              <p className="mt-2 text-xs font-bold text-slate-400">قيمة الخصم: {discountAmount.toLocaleString("ar-EG", { maximumFractionDigits: 2 })} ج</p>
+            </div>
+          </div>
+        </div>
 
         {/* ══ مقارنة قبل / بعد ══ */}
         {transaction && (
@@ -159,6 +233,13 @@ export default function EditSupplierInvoicePage({ params }: { params: Promise<an
                   <tr key={index} className="hover:bg-slate-50/60 transition-colors">
                     <td className="p-5">
                       <p className="font-black text-slate-900">{item.name}</p>
+                      <button
+                        type="button"
+                        onClick={() => removeItem(index)}
+                        className="mt-2 rounded-lg bg-rose-50 px-2 py-1 text-[10px] font-black text-rose-600 hover:bg-rose-100"
+                      >
+                        حذف السطر
+                      </button>
                       <p className="text-[10px] text-slate-400 font-bold mt-0.5">{item.unit}</p>
                     </td>
                     <td className="p-5 text-center">

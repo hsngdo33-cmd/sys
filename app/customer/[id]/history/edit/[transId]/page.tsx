@@ -11,6 +11,9 @@ export default function EditInvoicePage({ params }: { params: Promise<any> }) {
 
   const [transaction, setTransaction] = useState<any>(null);
   const [items, setItems]             = useState<any[]>([]);
+  const [products, setProducts]       = useState<any[]>([]);
+  const [productSearch, setProductSearch] = useState("");
+  const [discountPercent, setDiscountPercent] = useState<number | string>(0);
   const [isSaving, setIsSaving]       = useState(false);
   const [loading, setLoading]         = useState(true);
   const [note, setNote]               = useState("");
@@ -20,23 +23,47 @@ export default function EditInvoicePage({ params }: { params: Promise<any> }) {
 
   async function loadTransaction() {
     setLoading(true);
-    const { data, error } = await supabase
-      .from("customer_transactions").select("*").eq("id", transId).single();
+    const [{ data, error }, { data: prods }] = await Promise.all([
+      supabase.from("customer_transactions").select("*").eq("id", transId).single(),
+      supabase.from("products").select("id,name,unit,sale_price,purchase_price,stock_quantity,barcode").order("name"),
+    ]);
     if (error) { alert("مشكلة في تحميل بيانات الفاتورة"); }
     else {
+      const loadedItems = JSON.parse(JSON.stringify(data.items || []));
+      const gross = loadedItems.reduce((s: number, i: any) => s + Number(i.qty || 0) * Number(i.price || 0), 0);
       setTransaction(JSON.parse(JSON.stringify(data)));
-      setItems(JSON.parse(JSON.stringify(data.items || [])));
+      setItems(loadedItems);
       setNote(data.description || "");
+      setDiscountPercent(gross > 0 && Number(data.amount) < gross ? Number((((gross - Number(data.amount)) / gross) * 100).toFixed(2)) : 0);
     }
+    setProducts(prods || []);
     setLoading(false);
   }
+
+  const addProductToInvoice = (product: any) => {
+    if (items.some(item => item.id === product.id)) return;
+    setItems(prev => [...prev, {
+      id: product.id,
+      name: product.name,
+      unit: product.unit,
+      qty: 1,
+      price: product.sale_price,
+      cost: product.purchase_price,
+    }]);
+  };
+
+  const removeItem = (index: number) => {
+    setItems(prev => prev.filter((_, itemIndex) => itemIndex !== index));
+  };
 
   const handleUpdate = async () => {
     if (isSaving) return;
     setIsSaving(true);
     setShowConfirm(false);
     try {
-      const newTotal = items.reduce((acc, i) => acc + (Number(i.qty) * Number(i.price)), 0);
+      const grossTotal = items.reduce((acc, i) => acc + (Number(i.qty) * Number(i.price)), 0);
+      const discountRate = Math.min(Math.max(Number(discountPercent) || 0, 0), 100);
+      const newTotal = Math.max(grossTotal - (grossTotal * discountRate / 100), 0);
       const diff     = newTotal - transaction.amount;
 
       // ── حساب التكلفة والربح الجديد ──
@@ -89,10 +116,14 @@ export default function EditInvoicePage({ params }: { params: Promise<any> }) {
   };
 
   // ── Totals ──
-  const newTotal   = items.reduce((s, i) => s + Number(i.qty) * Number(i.price), 0);
-  const liveProfit = items.reduce((s, i) => s + (Number(i.qty) * Number(i.price)) - (Number(i.qty) * Number(i.cost ?? 0)), 0);
+  const grossTotal = items.reduce((s, i) => s + Number(i.qty) * Number(i.price), 0);
+  const discountRate = Math.min(Math.max(Number(discountPercent) || 0, 0), 100);
+  const discountAmount = grossTotal * (discountRate / 100);
+  const newTotal   = Math.max(grossTotal - discountAmount, 0);
+  const liveProfit = newTotal - items.reduce((s, i) => s + (Number(i.qty) * Number(i.cost ?? 0)), 0);
   const diff       = transaction ? newTotal - transaction.amount : 0;
   const margin     = newTotal > 0 ? Math.round((liveProfit / newTotal) * 100) : 0;
+  const filteredProducts = products.filter(product => product.name?.toLowerCase().includes(productSearch.toLowerCase()));
 
   if (loading) return (
     <div className="min-h-screen flex items-center justify-center bg-[#f1f5f9] font-black text-slate-400 text-xl" dir="rtl">
@@ -130,6 +161,51 @@ export default function EditInvoicePage({ params }: { params: Promise<any> }) {
       </header>
 
       <div className="max-w-3xl mx-auto px-4 space-y-5">
+
+        <div className="bg-white rounded-[2rem] border border-slate-200 shadow-sm p-5">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-[10px] font-black text-slate-400 mb-1">إضافة صنف للفاتورة</label>
+              <input
+                value={productSearch}
+                onChange={e => setProductSearch(e.target.value)}
+                placeholder="ابحث عن صنف واضغط عليه..."
+                className="w-full p-3 bg-slate-50 border border-slate-200 rounded-2xl font-bold outline-none focus:border-indigo-400"
+              />
+              {productSearch && (
+                <div className="mt-2 max-h-40 overflow-y-auto rounded-2xl border border-slate-100 bg-slate-50 p-2 space-y-1">
+                  {filteredProducts.slice(0, 8).map(product => (
+                    <button
+                      key={product.id}
+                      type="button"
+                      onClick={() => { addProductToInvoice(product); setProductSearch(""); }}
+                      className="w-full flex justify-between items-center rounded-xl bg-white px-3 py-2 text-sm font-black text-slate-700 hover:bg-indigo-50"
+                    >
+                      <span>{product.name}</span>
+                      <span className="text-[10px] text-slate-400">{product.sale_price} ج</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div>
+              <label className="block text-[10px] font-black text-slate-400 mb-1">خصم إجمالي على الفاتورة</label>
+              <div className="flex items-center gap-3">
+                <input
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="any"
+                  value={discountPercent}
+                  onChange={e => setDiscountPercent(e.target.value)}
+                  className="w-full p-3 bg-slate-50 border border-slate-200 rounded-2xl font-black outline-none focus:border-indigo-400"
+                />
+                <span className="rounded-xl bg-slate-100 px-3 py-3 text-sm font-black text-slate-500">%</span>
+              </div>
+              <p className="mt-2 text-xs font-bold text-slate-400">قيمة الخصم: {discountAmount.toLocaleString("ar-EG", { maximumFractionDigits: 2 })} ج</p>
+            </div>
+          </div>
+        </div>
 
         {/* ══ مقارنة الإجمالي (قبل / بعد) ══ */}
         {transaction && (
@@ -178,6 +254,13 @@ export default function EditInvoicePage({ params }: { params: Promise<any> }) {
                   <tr key={index} className="hover:bg-slate-50/60 transition-colors">
                     <td className="p-5">
                       <p className="font-black text-slate-900">{item.name}</p>
+                      <button
+                        type="button"
+                        onClick={() => removeItem(index)}
+                        className="mt-2 rounded-lg bg-rose-50 px-2 py-1 text-[10px] font-black text-rose-600 hover:bg-rose-100"
+                      >
+                        حذف السطر
+                      </button>
                       <p className="text-[10px] text-slate-400 font-bold mt-0.5">
                         {item.unit}
                         {item.cost != null && (

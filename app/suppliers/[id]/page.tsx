@@ -47,6 +47,7 @@ export default function SupplierInvoicePage() {
   const [products, setProducts]     = useState<Product[]>([]);
   const [cart, setCart]             = useState<CartItem[]>([]);
   const [cashPaid, setCashPaid]     = useState<number | string>(0);
+  const [discountPercent, setDiscountPercent] = useState<number | string>(0);
   const [searchTerm, setSearchTerm] = useState("");
   const [isSaving, setIsSaving]     = useState(false);
   const [note, setNote]             = useState("");
@@ -157,9 +158,17 @@ export default function SupplierInvoicePage() {
   const updateCart = (pid: string, field: "qty" | "p_price", val: string) =>
     setCart(prev => prev.map(i => i.id === pid ? { ...i, [field]: val } : i));
 
-  const totalInvoice = cart.reduce((s, i) => s + Number(i.qty || 0) * Number(i.p_price || 0), 0);
+  const subtotalInvoice = cart.reduce((s, i) => s + Number(i.qty || 0) * Number(i.p_price || 0), 0);
+  const discountRate = Math.min(Math.max(Number(discountPercent) || 0, 0), 100);
+  const discountAmount = subtotalInvoice * (discountRate / 100);
+  const totalInvoice = Math.max(subtotalInvoice - discountAmount, 0);
   const cash         = Number(cashPaid) || 0;
   const remaining    = totalInvoice - cash;
+
+  const printInvoice = () => {
+    if (cart.length === 0) return alert("الفاتورة فارغة!");
+    window.print();
+  };
 
   async function handleAddNewProduct() {
     if (!newProd.name.trim() || !newProd.purchase_price) return alert("اكمل البيانات!");
@@ -201,7 +210,7 @@ export default function SupplierInvoicePage() {
         amount: totalInvoice,
         type: "فاتورة توريد",
         items: cart.map(i => ({ id: i.id, name: i.name, unit: i.unit, qty: Number(i.qty), price: Number(i.p_price) })),
-        description: note || `توريد بضاعة من ${supplier?.name}`,
+        description: note || `توريد بضاعة من ${supplier?.name}${discountRate > 0 ? ` - خصم ${discountRate}%` : ""}`,
       }]);
 
       if (cash > 0) {
@@ -369,6 +378,23 @@ export default function SupplierInvoicePage() {
 
           {/* ملاحظة */}
           <div className="bg-white rounded-2xl border border-slate-200 shadow-sm px-5 py-3">
+            <label className="block text-[10px] font-black text-slate-400 mb-1">نسبة خصم على الفاتورة كلها</label>
+            <div className="flex items-center gap-3">
+              <input
+                type="number"
+                min="0"
+                max="100"
+                step="any"
+                value={discountPercent}
+                onChange={e => setDiscountPercent(e.target.value)}
+                className="w-full bg-transparent font-black text-slate-900 outline-none text-lg"
+                placeholder="0"
+              />
+              <span className="rounded-xl bg-slate-100 px-3 py-2 text-sm font-black text-slate-500">%</span>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm px-5 py-3">
             <input
               placeholder="📝 ملاحظة على الفاتورة (اختياري)..."
               className="w-full bg-transparent font-bold text-slate-700 outline-none text-sm placeholder:text-slate-300"
@@ -379,7 +405,7 @@ export default function SupplierInvoicePage() {
 
           {/* ══ فوتر الفاتورة ══ */}
           <div className="bg-[#0f172a] p-7 rounded-[2.5rem] shadow-2xl">
-            <div className="grid grid-cols-3 gap-4 mb-6 text-white">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6 text-white">
               <div>
                 <p className="text-[9px] text-slate-500 font-black uppercase tracking-widest mb-1">إجمالي الفاتورة</p>
                 <p className="text-2xl font-black">{totalInvoice.toLocaleString("ar-EG", { maximumFractionDigits: 2 })} <small className="text-xs opacity-50">ج</small></p>
@@ -402,6 +428,13 @@ export default function SupplierInvoicePage() {
               </div>
             </div>
             <button
+              onClick={printInvoice}
+              disabled={cart.length === 0}
+              className="mb-3 w-full bg-white/10 hover:bg-white/20 disabled:opacity-50 text-white py-4 rounded-2xl font-black text-sm transition-all"
+            >
+              طباعة الفاتورة
+            </button>
+            <button
               onClick={saveInvoice}
               disabled={isSaving || cart.length === 0}
               className="w-full bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-white py-5 rounded-2xl font-black text-xl transition-all active:scale-[0.99] shadow-xl shadow-amber-900/20"
@@ -411,6 +444,53 @@ export default function SupplierInvoicePage() {
           </div>
         </div>
       </main>
+
+      <section className="print-invoice hidden" dir="rtl">
+        <div className="print-card">
+          <div className="print-header">
+            <div>
+              <p className="print-eyebrow">فاتورة توريد</p>
+              <h1>منظومة المحاسبة</h1>
+              <p>إدارة الموردين والمخازن</p>
+            </div>
+            <div className="print-meta">
+              <p>التاريخ: {new Date().toLocaleDateString("ar-EG")}</p>
+              <p>المورد: {supplier?.name || "-"}</p>
+              <p>الرصيد السابق: {(supplier?.balance || 0).toLocaleString("ar-EG")} ج.م</p>
+            </div>
+          </div>
+          <table className="print-table">
+            <thead>
+              <tr>
+                <th>الصنف</th>
+                <th>الوحدة</th>
+                <th>الكمية</th>
+                <th>سعر الشراء</th>
+                <th>الإجمالي</th>
+              </tr>
+            </thead>
+            <tbody>
+              {cart.map(item => (
+                <tr key={item.id}>
+                  <td>{item.name}</td>
+                  <td>{item.unit}</td>
+                  <td>{Number(item.qty || 0).toLocaleString("ar-EG")}</td>
+                  <td>{Number(item.p_price || 0).toLocaleString("ar-EG")} ج</td>
+                  <td>{(Number(item.qty || 0) * Number(item.p_price || 0)).toLocaleString("ar-EG")} ج</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <div className="print-summary">
+            <p><span>الإجمالي قبل الخصم</span><b>{subtotalInvoice.toLocaleString("ar-EG", { maximumFractionDigits: 2 })} ج</b></p>
+            <p><span>الخصم ({discountRate}%)</span><b>{discountAmount.toLocaleString("ar-EG", { maximumFractionDigits: 2 })} ج</b></p>
+            <p><span>الصافي</span><b>{totalInvoice.toLocaleString("ar-EG", { maximumFractionDigits: 2 })} ج</b></p>
+            <p><span>المدفوع</span><b>{cash.toLocaleString("ar-EG", { maximumFractionDigits: 2 })} ج</b></p>
+            <p className="print-total"><span>المتبقي للمورد</span><b>{remaining.toLocaleString("ar-EG", { maximumFractionDigits: 2 })} ج</b></p>
+          </div>
+          {note && <p className="print-note">ملاحظة: {note}</p>}
+        </div>
+      </section>
 
       {/* ══ Modal: صنف جديد ══ */}
       {showAddModal && (
@@ -505,6 +585,25 @@ export default function SupplierInvoicePage() {
       <style jsx global>{`
         @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;700;900&display=swap');
         body { font-family: 'Cairo', sans-serif; background-color: #f1f5f9; }
+        @media print {
+          body * { visibility: hidden !important; }
+          .print-invoice, .print-invoice * { visibility: visible !important; }
+          .print-invoice { display: block !important; position: absolute; inset: 0; padding: 24px; background: white; color: #0f172a; }
+          .print-card { max-width: 900px; margin: 0 auto; border: 1px solid #dbe3ef; padding: 28px; border-radius: 16px; }
+          .print-header { display: flex; justify-content: space-between; gap: 24px; border-bottom: 2px solid #0f172a; padding-bottom: 18px; margin-bottom: 22px; }
+          .print-eyebrow { font-size: 12px; font-weight: 900; color: #d97706; margin: 0 0 6px; }
+          .print-header h1 { margin: 0; font-size: 28px; font-weight: 900; }
+          .print-header p { margin: 4px 0; font-weight: 700; }
+          .print-meta { text-align: left; font-size: 13px; }
+          .print-table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
+          .print-table th { background: #0f172a; color: white; padding: 10px; font-size: 12px; }
+          .print-table td { border-bottom: 1px solid #e2e8f0; padding: 10px; font-weight: 700; font-size: 12px; }
+          .print-summary { margin-right: auto; width: 320px; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden; }
+          .print-summary p { display: flex; justify-content: space-between; margin: 0; padding: 10px 14px; border-bottom: 1px solid #e2e8f0; font-weight: 800; }
+          .print-summary p:last-child { border-bottom: 0; }
+          .print-total { background: #fffbeb; color: #b45309; font-size: 16px; }
+          .print-note { margin-top: 18px; padding: 12px; background: #f8fafc; border-radius: 12px; font-weight: 700; }
+        }
       `}</style>
     </div>
   );
