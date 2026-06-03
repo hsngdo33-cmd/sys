@@ -239,7 +239,7 @@ export default function SupplierHistoryPage() {
             ))}
           </div>
           <input
-            placeholder="🔍 ابحث في المعاملات أو الأصناف..."
+            placeholder="🔍 ابحث في المعاملات أو الكتب..."
             className="w-full p-3 bg-slate-50 rounded-xl font-bold text-slate-900 outline-none text-sm"
             value={searchTerm}
             onChange={e => setSearchTerm(e.target.value)}
@@ -282,7 +282,7 @@ export default function SupplierHistoryPage() {
                           {isInvoice ? "+" : "−"} {t.amount?.toLocaleString("ar-EG")} ج.م
                         </p>
                         {t.items?.length > 0 && (
-                          <p className="text-[10px] text-slate-400 font-bold">{t.items.length} صنف</p>
+                          <p className="text-[10px] text-slate-400 font-bold">{t.items.length} كتاب</p>
                         )}
                       </div>
                       <span className="text-slate-300 text-lg">{isOpen ? "▲" : "▼"}</span>
@@ -297,7 +297,7 @@ export default function SupplierHistoryPage() {
                           <table className="w-full text-sm mb-4">
                             <thead>
                               <tr className="text-slate-400 font-black text-[10px] uppercase border-b border-slate-200">
-                                <th className="pb-3 text-right">الصنف</th>
+                                <th className="pb-3 text-right">الكتاب</th>
                                 <th className="pb-3 text-center">الكمية</th>
                                 <th className="pb-3 text-center">السعر</th>
                                 <th className="pb-3 text-left">الإجمالي</th>
@@ -445,7 +445,7 @@ export default function SupplierHistoryPage() {
               </div>
             </div>
 
-            {/* الأصناف */}
+            {/* الكتب */}
             <div className="p-5 max-h-[40vh] overflow-y-auto space-y-3">
               {editItems.map((item, idx) => (
                 <div key={idx} className="flex items-center gap-4 bg-slate-50 p-4 rounded-2xl border border-slate-100">
@@ -507,8 +507,8 @@ export default function SupplierHistoryPage() {
             <div className="print-header">
               <div>
                 <p className="print-eyebrow">فاتورة توريد</p>
-                <h1>منظومة المحاسبة</h1>
-                <p>إدارة الموردين والمخازن</p>
+                <h1>منظومة إدارة المكتبة</h1>
+                <p>إدارة موردي الكتب والفهرس</p>
               </div>
               <div className="print-meta">
                 <p>التاريخ: {new Date(printTransaction.created_at).toLocaleDateString("ar-EG")}</p>
@@ -519,7 +519,7 @@ export default function SupplierHistoryPage() {
             <table className="print-table">
               <thead>
                 <tr>
-                  <th>الصنف</th>
+                  <th>الكتاب</th>
                   <th>الوحدة</th>
                   <th>الكمية</th>
                   <th>سعر الشراء</th>

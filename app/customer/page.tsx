@@ -76,7 +76,7 @@ export default function CustomersListPage() {
       if (error) throw error;
       setShowDeleteModal(false);
       fetchCustomers();
-    } catch { alert("عفواً: لا يمكن حذف العميل لأنه مرتبط بعمليات مسجلة."); }
+    } catch { alert("عفواً: لا يمكن حذف القارئ لأنه مرتبط بعمليات مسجلة."); }
     finally { setSaving(false); }
   }
 
@@ -88,7 +88,7 @@ export default function CustomersListPage() {
         customer_id: selectedCustomer.id,
         amount: payAmount,
         type: "تحصيل نقدي",
-        description: payNote || "تحصيل نقدي من العميل",
+        description: payNote || "تحصيل نقدي من القارئ",
       }]);
       await supabase.from("customers")
         .update({ balance: (selectedCustomer.balance || 0) - payAmount })
@@ -127,15 +127,15 @@ export default function CustomersListPage() {
           <div className="flex items-center gap-4">
             <Link href="/" className="bg-white/10 hover:bg-white/20 px-4 py-2 rounded-xl text-xs font-black transition-all">⬅️ الرئيسية</Link>
             <div>
-              <h1 className="text-xl font-black">دليل العملاء 👥</h1>
-              <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-0.5">{customers.length} عميل مسجل</p>
+              <h1 className="text-xl font-black">دليل القراء 👥</h1>
+              <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-0.5">{customers.length} قارئ مسجل</p>
             </div>
           </div>
           <button
             onClick={() => setShowAddModal(true)}
             className="app-btn app-btn-success"
           >
-            ➕ إضافة عميل
+            ➕ إضافة قارئ
           </button>
         </div>
       </header>
@@ -154,7 +154,7 @@ export default function CustomersListPage() {
             onClick={() => setFilter(filter === "debtors" ? "all" : "debtors")}
             className={`app-mini-stat shadow-sm cursor-pointer transition-all border-2 ${filter === "debtors" ? "bg-rose-500 text-white border-rose-500" : "bg-white border-slate-200 hover:border-rose-300"}`}
           >
-            <p className="text-[10px] font-black mb-2 uppercase">عملاء مدينون</p>
+            <p className="text-[10px] font-black mb-2 uppercase">قراء مدينون</p>
             <p className="text-2xl font-black">{debtorCount}</p>
           </div>
           <div
@@ -199,7 +199,7 @@ export default function CustomersListPage() {
             <table className="w-full text-right">
               <thead className="bg-slate-50 text-[10px] font-black text-slate-400 border-b">
                 <tr>
-                  <th className="px-4 py-3">العميل</th>
+                  <th className="px-4 py-3">القارئ</th>
                   <th className="px-4 py-3">الموبايل</th>
                   <th className="px-4 py-3">المديونية</th>
                   <th className="px-4 py-3 text-center">الإجراءات</th>
@@ -270,10 +270,10 @@ export default function CustomersListPage() {
         </section>
       </main>
 
-      {/* ══ Modal: إضافة عميل ══ */}
+      {/* ══ Modal: إضافة قارئ ══ */}
       {showAddModal && (
         <Modal onClose={() => setShowAddModal(false)}>
-          <h3 className="text-xl font-black mb-6">تسجيل عميل جديد</h3>
+          <h3 className="text-xl font-black mb-6">تسجيل قارئ جديد</h3>
           <div className="space-y-4">
             <input className="w-full p-4 bg-slate-50 border rounded-2xl font-bold outline-none" placeholder="الاسم *" value={newCustomer.name} onChange={e => setNewCustomer({...newCustomer, name: e.target.value})} />
             <input className="w-full p-4 bg-slate-50 border rounded-2xl font-bold outline-none" placeholder="الموبايل" value={newCustomer.phone} onChange={e => setNewCustomer({...newCustomer, phone: e.target.value})} />
@@ -301,7 +301,7 @@ export default function CustomersListPage() {
       {/* ══ Modal: تعديل ══ */}
       {showEditModal && selectedCustomer && (
         <Modal onClose={() => setShowEditModal(false)}>
-          <h3 className="text-xl font-black mb-6">تعديل بيانات العميل</h3>
+          <h3 className="text-xl font-black mb-6">تعديل بيانات القارئ</h3>
           <div className="space-y-4">
             <input className="w-full p-4 bg-slate-50 border rounded-2xl font-bold" value={selectedCustomer.name} onChange={e => setSelectedCustomer({...selectedCustomer, name: e.target.value})} />
             <input className="w-full p-4 bg-slate-50 border rounded-2xl font-bold" value={selectedCustomer.phone || ""} onChange={e => setSelectedCustomer({...selectedCustomer, phone: e.target.value})} />
@@ -316,7 +316,7 @@ export default function CustomersListPage() {
           <div className="text-center space-y-4">
             <div className="text-4xl">⚠️</div>
             <h3 className="text-xl font-black">تأكيد الحذف</h3>
-            <p className="font-bold text-slate-500">هل أنت متأكد من حذف <span className="text-rose-600">"{selectedCustomer.name}"</span>؟</p>
+            <p className="font-bold text-slate-500">هل أنت متأكد من حذف <span className="text-rose-600">«{selectedCustomer.name}»</span>؟</p>
             <div className="flex gap-3">
               <button onClick={handleDeleteCustomer} disabled={saving} className="flex-1 bg-rose-600 text-white py-4 rounded-2xl font-black">حذف نهائي</button>
               <button onClick={() => setShowDeleteModal(false)} className="flex-1 bg-slate-100 py-4 rounded-2xl font-black">تراجع</button>

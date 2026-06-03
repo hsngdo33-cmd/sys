@@ -7,8 +7,8 @@ const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
 const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "نظام المحاسبة",
-  description: "إدارة احترافية متكاملة",
+  title: "نظام إدارة مكتبة",
+  description: "إدارة الكتب والقراء والموردين والتقارير",
 };
 
 const isAppLocked = process.env.NEXT_PUBLIC_APP_LOCKED === "true";
@@ -41,4 +41,3 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     </html>
   );
 }
-

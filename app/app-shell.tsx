@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   BarChart3,
-  Boxes,
+  BookOpen,
   ChevronLeft,
   Home,
   LayoutDashboard,
@@ -20,25 +20,25 @@ import {
 const navItems = [
   { href: "/", label: "الرئيسية", icon: Home },
   { href: "/suppliers", label: "الموردين", icon: Truck },
-  { href: "/customer", label: "العملاء", icon: UsersRound },
-  { href: "/inventory", label: "المخازن", icon: Boxes },
+  { href: "/customer", label: "القراء", icon: UsersRound },
+  { href: "/inventory", label: "الكتب", icon: BookOpen },
   { href: "/reports", label: "التقارير", icon: BarChart3 },
   { href: "/settings/reports", label: "الإعدادات", icon: Settings },
 ];
 
 const quickLinks = [
-  { href: "/inventory", label: "إضافة صنف", icon: PackagePlus },
-  { href: "/suppliers", label: "فاتورة مورد", icon: ReceiptText },
-  { href: "/customer", label: "فاتورة عميل", icon: WalletCards },
+  { href: "/inventory", label: "إضافة كتاب", icon: PackagePlus },
+  { href: "/suppliers", label: "فاتورة توريد", icon: ReceiptText },
+  { href: "/customer", label: "بيع/إعارة", icon: WalletCards },
 ];
 
 function getPageTitle(pathname: string) {
   if (pathname.startsWith("/suppliers")) return "إدارة الموردين";
-  if (pathname.startsWith("/customer")) return "إدارة العملاء";
-  if (pathname.startsWith("/inventory")) return "المخازن والباركود";
+  if (pathname.startsWith("/customer")) return "دليل القراء";
+  if (pathname.startsWith("/inventory")) return "فهرس الكتب والباركود";
   if (pathname.startsWith("/reports")) return "التقارير والتحليلات";
   if (pathname.startsWith("/settings")) return "إعدادات النظام";
-  return "لوحة التحكم";
+  return "لوحة المكتبة";
 }
 
 export function AppShell({ children }: { children: React.ReactNode }) {
@@ -55,8 +55,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 <LayoutDashboard className="h-6 w-6" />
               </div>
               <div>
-                <p className="text-lg font-black">نظام المحاسبة</p>
-                <p className="text-xs text-slate-400 font-bold">مخازن، عملاء، موردين</p>
+                <p className="text-lg font-black">نظام إدارة مكتبة</p>
+                <p className="text-xs text-slate-400 font-bold">كتب، قراء، موردين</p>
               </div>
             </Link>
           </div>
@@ -121,7 +121,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <div className="px-3 py-3 sm:px-6 sm:py-4 lg:px-8">
               <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
                 <div className="min-w-0">
-                  <p className="text-xs font-black text-emerald-600">المهندس</p>
+                  <p className="text-xs font-black text-emerald-600">المكتبة</p>
                   <h1 className="truncate text-xl font-black text-slate-950 sm:text-2xl">{pageTitle}</h1>
                 </div>
 
@@ -130,7 +130,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                     <Search className="absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                     <input
                       type="search"
-                      placeholder="بحث سريع في الصفحة الحالية..."
+                      placeholder="بحث سريع في الكتب أو القراء..."
                       className="h-11 w-full rounded-2xl border border-slate-200 bg-slate-50 pr-11 pl-4 text-sm font-bold outline-none transition focus:border-emerald-400 focus:bg-white sm:h-12"
                     />
                   </div>

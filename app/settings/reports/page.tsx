@@ -182,7 +182,7 @@ export default function ReportSettingsPage() {
               </div>
               <h1 className="text-2xl font-black text-slate-950">إعداد التقارير اليومية</h1>
               <p className="mt-2 max-w-2xl text-sm font-bold leading-7 text-slate-500">
-                افتح البوت وابعت كود الربط، وبعدها اضغط تأكيد الربط. الموقع هيحفظ حساب العميل ويرسل له تقريره اليومي تلقائيا.
+                افتح البوت وابعت كود الربط، وبعدها اضغط تأكيد الربط. الموقع هيحفظ حساب المكتبة ويرسل التقرير اليومي تلقائيا.
               </p>
             </div>
 

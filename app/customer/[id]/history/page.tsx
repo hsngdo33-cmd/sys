@@ -270,7 +270,7 @@ export default function CustomerHistory() {
                           <table className="w-full text-sm mb-4">
                             <thead>
                               <tr className="text-slate-400 font-black text-[10px] uppercase border-b border-slate-200">
-                                <th className="pb-3 text-right">الصنف</th>
+                                <th className="pb-3 text-right">الكتاب</th>
                                 <th className="pb-3 text-center">الكمية</th>
                                 <th className="pb-3 text-center">السعر</th>
                                 <th className="pb-3 text-left">الإجمالي</th>
@@ -344,7 +344,7 @@ export default function CustomerHistory() {
             <div className="bg-slate-50 p-6 border-b border-slate-100 flex justify-between items-center">
               <div>
                 <h2 className="text-xl font-black text-slate-900">تعديل السداد</h2>
-                <p className="text-[10px] text-slate-400 font-bold mt-1">سيتم تحديث رصيد العميل وحفظ تنبيه بتاريخ التعديل.</p>
+                <p className="text-[10px] text-slate-400 font-bold mt-1">سيتم تحديث رصيد القارئ وحفظ تنبيه بتاريخ التعديل.</p>
               </div>
               <button onClick={() => setPaymentEdit(null)} className="text-slate-400 hover:text-rose-500 transition-colors text-2xl font-black">×</button>
             </div>
@@ -403,19 +403,19 @@ export default function CustomerHistory() {
             <div className="print-header">
               <div>
                 <p className="print-eyebrow">فاتورة بيع</p>
-                <h1>منظومة المحاسبة</h1>
-                <p>إدارة العملاء والمخازن</p>
+                <h1>منظومة إدارة المكتبة</h1>
+                <p>إدارة القراء والكتب</p>
               </div>
               <div className="print-meta">
                 <p>التاريخ: {new Date(printTransaction.created_at).toLocaleDateString("ar-EG")}</p>
-                <p>العميل: {customer?.name || "-"}</p>
+                <p>القارئ: {customer?.name || "-"}</p>
                 <p>رقم الفاتورة: {printTransaction.id}</p>
               </div>
             </div>
             <table className="print-table">
               <thead>
                 <tr>
-                  <th>الصنف</th>
+                  <th>الكتاب</th>
                   <th>الوحدة</th>
                   <th>الكمية</th>
                   <th>السعر</th>

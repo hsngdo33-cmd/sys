@@ -7,7 +7,7 @@ import Link from "next/link";
 // ─── Types ────────────────────────────────────────────────────────────────────
 type ScanMode = "camera" | "manual" | null;
 
-const UNITS = ["كيلو", "جرام", "لتر", "ملي", "عبوة", "شكارة", "طن", "وحدة"];
+const UNITS = ["نسخة", "كتاب", "مجموعة", "مجلد", "سلسلة", "كرتونة"];
 
 function generateCode() {
   return "PRD-" + Math.random().toString(36).substring(2, 8).toUpperCase();
@@ -20,7 +20,7 @@ export default function AddProductPage() {
   const [form, setForm] = useState({
     barcode:        "",
     name:           "",
-    unit:           "كيلو",
+    unit:           "نسخة",
     stock_quantity: "",
     purchase_price: "",
     sale_price:     "",
@@ -93,7 +93,7 @@ export default function AddProductPage() {
     stopCamera();
     setForm(f => ({ ...f, barcode: code }));
 
-    // تحقق لو الكود موجود في المخزن
+    // تحقق لو الكود موجود في فهرس الكتب
     const { data } = await supabase.from("products").select("*").eq("barcode", code).maybeSingle();
     if (data) {
       setExistingProduct(data);
@@ -107,9 +107,9 @@ export default function AddProductPage() {
     setExistingProduct(null);
   }
 
-  // ── حفظ المنتج ──
+  // ── حفظ الكتاب ──
   async function handleSave() {
-    if (!form.name.trim())           return alert("اسم الصنف مطلوب!");
+    if (!form.name.trim())           return alert("اسم الكتاب مطلوب!");
     if (!form.purchase_price)        return alert("سعر الشراء مطلوب!");
     if (!form.sale_price)            return alert("سعر البيع مطلوب!");
 
@@ -175,7 +175,7 @@ export default function AddProductPage() {
           <div className="flex items-center gap-4">
             <Link href="/inventory" className="bg-white/10 hover:bg-white/20 px-4 py-2 rounded-xl text-xs font-black transition-all">⬅️ رجوع</Link>
             <div>
-              <h1 className="text-lg font-black">إضافة صنف جديد 📦</h1>
+              <h1 className="text-lg font-black">إضافة كتاب جديد 📚</h1>
               <p className="text-[10px] text-slate-400 font-bold mt-0.5">سكان الباركود أو إدخال يدوي</p>
             </div>
           </div>
@@ -187,7 +187,7 @@ export default function AddProductPage() {
         {/* ══ خانة الباركود ══ */}
         <div className="bg-white rounded-[2rem] border border-slate-200 shadow-sm overflow-hidden">
           <div className="p-5 border-b border-slate-100">
-            <p className="font-black text-slate-900">كود الصنف / الباركود</p>
+            <p className="font-black text-slate-900">كود الكتاب / الباركود</p>
             <p className="text-[10px] text-slate-400 font-bold mt-0.5">سكان بالكاميرا أو ادخله يدوياً — لو فاضي هيتولد تلقائي</p>
           </div>
 
@@ -235,13 +235,13 @@ export default function AddProductPage() {
             {/* لو الباركود موجود */}
             {existingProduct && (
               <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 space-y-2">
-                <p className="font-black text-amber-800 text-sm">⚠️ الكود ده موجود بالفعل في المخزن!</p>
-                <p className="text-xs text-amber-700 font-bold">الصنف: {existingProduct.name} — مخزن: {existingProduct.stock_quantity} {existingProduct.unit}</p>
+                <p className="font-black text-amber-800 text-sm">⚠️ الكود ده موجود بالفعل في فهرس الكتب!</p>
+                <p className="text-xs text-amber-700 font-bold">الكتاب: {existingProduct.name} — المتاح: {existingProduct.stock_quantity} {existingProduct.unit}</p>
                 <Link
                   href="/inventory"
                   className="inline-block bg-amber-500 text-white px-4 py-2 rounded-xl text-xs font-black hover:bg-amber-600 transition-all"
                 >
-                  عرض الصنف في المخزن
+                  عرض الكتاب في الفهرس
                 </Link>
               </div>
             )}
@@ -256,13 +256,13 @@ export default function AddProductPage() {
           </div>
         </div>
 
-        {/* ══ بيانات المنتج ══ */}
+        {/* ══ بيانات الكتاب ══ */}
         <div className="bg-white rounded-[2rem] border border-slate-200 shadow-sm p-6 space-y-5">
-          <p className="font-black text-slate-900 border-r-4 border-indigo-500 pr-3">بيانات الصنف</p>
+          <p className="font-black text-slate-900 border-r-4 border-indigo-500 pr-3">بيانات الكتاب</p>
 
-          {/* اسم الصنف */}
+          {/* اسم الكتاب */}
           <div>
-            <label className="text-xs font-black text-slate-400 mb-1.5 block">اسم الصنف *</label>
+            <label className="text-xs font-black text-slate-400 mb-1.5 block">اسم الكتاب *</label>
             <input
               className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-slate-900 outline-none focus:border-indigo-400 transition-all"
               placeholder="مثال: مبيد حشري شورا"
@@ -345,7 +345,7 @@ export default function AddProductPage() {
           disabled={saving || !!existingProduct}
           className="w-full bg-[#0f172a] hover:bg-indigo-700 disabled:opacity-50 text-white py-5 rounded-[2rem] font-black text-xl transition-all active:scale-[0.99] shadow-xl"
         >
-          {saving ? "⏳ جاري الحفظ..." : "حفظ الصنف ✅"}
+          {saving ? "⏳ جاري الحفظ..." : "حفظ الكتاب ✅"}
         </button>
 
       </main>
@@ -359,7 +359,7 @@ export default function AddProductPage() {
             <p className="text-sm text-slate-500 font-bold">
               الكود المولّد: <span className="font-black text-indigo-600 tracking-widest">{savedProduct.barcode}</span>
             </p>
-            <p className="text-xs text-slate-400 font-bold">الصقه على المنتج عشان تقدر تسكنه بالكاميرا بعدين</p>
+            <p className="text-xs text-slate-400 font-bold">الصقه على الكتاب عشان تقدر تسكنه بالكاميرا بعدين</p>
 
             {/* QR Code مولّد بـ CSS + API */}
             <div className="flex justify-center">

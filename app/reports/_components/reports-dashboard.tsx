@@ -80,8 +80,8 @@ const REPORT_NAV = [
   {
     key: "customers",
     href: "/reports/customers",
-    title: "تقارير العملاء",
-    description: "مبيعات وتحصيل وديون العملاء.",
+    title: "تقارير القراء",
+    description: "مبيعات وتحصيل ومديونيات القراء.",
     icon: UsersRound,
     tone: "bg-emerald-600",
   },
@@ -443,7 +443,7 @@ export function ReportsDashboard({ view }: { view: "overview" | "customers" | "s
                 التقارير والتحليلات
               </p>
               <h1 className="mt-2 text-2xl font-black text-slate-950">
-                متابعة العملاء والموردين حسب الفترة
+                متابعة القراء والموردين حسب الفترة
               </h1>
               <p className="mt-1 text-sm font-bold text-slate-500">
                 {PERIOD_LABELS[period]} عن {range.label}
@@ -510,7 +510,7 @@ export function ReportsDashboard({ view }: { view: "overview" | "customers" | "s
             </div>
             <div>
               <h2 className="font-black text-slate-950">التصفية</h2>
-              <p className="text-xs font-bold text-slate-400">اختار يوم أو شهر أو سنة، وابحث باسم العميل أو المورد.</p>
+              <p className="text-xs font-bold text-slate-400">اختار يوم أو شهر أو سنة، وابحث باسم القارئ أو المورد.</p>
             </div>
           </div>
 
@@ -568,7 +568,7 @@ export function ReportsDashboard({ view }: { view: "overview" | "customers" | "s
               <input
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
-                placeholder="بحث باسم العميل أو المورد أو رقم الهاتف"
+                placeholder="بحث باسم القارئ أو المورد أو رقم الهاتف"
                 className="w-full bg-transparent py-1 text-sm font-bold text-slate-900 outline-none placeholder:text-slate-400"
               />
             </label>
@@ -591,14 +591,14 @@ export function ReportsDashboard({ view }: { view: "overview" | "customers" | "s
             <>
             <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
               <MetricCard
-                title="مبيعات العملاء"
+                title="مبيعات القراء"
                 value={totalSales}
                 helper={`${customerSales.length} فاتورة في الفترة`}
                 tone="emerald"
                 icon={UsersRound}
               />
               <MetricCard
-                title="تحصيل العملاء"
+                title="تحصيل القراء"
                 value={totalCollected}
                 helper={`هامش الربح ${profitMargin}%`}
                 tone="sky"
@@ -623,16 +623,16 @@ export function ReportsDashboard({ view }: { view: "overview" | "customers" | "s
             <section className="grid gap-4 lg:grid-cols-3">
               <InsightStrip
                 icon={TrendingUp}
-                title="صافي ربح العملاء"
+                title="صافي ربح القراء"
                 value={`${money(totalProfit)} ج`}
                 helper={totalProfit >= 0 ? "أداء موجب في الفترة المحددة" : "راجع أسعار البيع والتكلفة"}
                 tone="emerald"
               />
               <InsightStrip
                 icon={ArrowUpRight}
-                title="ديون العملاء الحالية"
+                title="مديونيات القراء الحالية"
                 value={`${money(currentCustomerDebt)} ج`}
-                helper={`${customers.filter((row) => num(row.balance) > 0).length} عميل عليه رصيد`}
+                helper={`${customers.filter((row) => num(row.balance) > 0).length} قارئ عليه رصيد`}
                 tone="rose"
               />
               <InsightStrip
@@ -648,7 +648,7 @@ export function ReportsDashboard({ view }: { view: "overview" | "customers" | "s
               <div className="mb-5 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <h2 className="text-lg font-black text-slate-950">حركة الفترة</h2>
-                  <p className="text-xs font-bold text-slate-400">مقارنة بين مبيعات العملاء وفواتير الموردين والتحصيل والسداد.</p>
+                  <p className="text-xs font-bold text-slate-400">مقارنة بين مبيعات القراء وفواتير الموردين والتحصيل والسداد.</p>
                 </div>
                 <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-black text-slate-500">
                   {PERIOD_LABELS[period]}
@@ -680,8 +680,8 @@ export function ReportsDashboard({ view }: { view: "overview" | "customers" | "s
               totalCustomers={customers.length}
             />
             <ReportSection
-              title="تقارير العملاء"
-              subtitle={`مبيعات، تحصيل، أرباح وديون العملاء - ${PERIOD_LABELS[period]}`}
+              title="تقارير القراء"
+              subtitle={`مبيعات، تحصيل، أرباح ومديونيات القراء - ${PERIOD_LABELS[period]}`}
               icon={UsersRound}
               accent="emerald"
               totals={[
@@ -747,8 +747,8 @@ function CustomerInsights({
       <div className="rounded-[2rem] border border-slate-200 bg-white p-5 shadow-sm xl:col-span-2">
         <div className="mb-5 flex items-center justify-between gap-3">
           <div>
-            <h2 className="text-lg font-black text-slate-950">تحليلات العملاء</h2>
-            <p className="mt-1 text-xs font-bold text-slate-400">أكثر العملاء ربحية وأكثر العملاء عليهم ديون في الفترة المختارة.</p>
+            <h2 className="text-lg font-black text-slate-950">تحليلات القراء</h2>
+            <p className="mt-1 text-xs font-bold text-slate-400">أكثر القراء ربحية وأكثر القراء عليهم مديونيات في الفترة المختارة.</p>
           </div>
           <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-600 text-white">
             <Trophy className="h-5 w-5" />
@@ -764,7 +764,7 @@ function CustomerInsights({
           />
           <RankedCustomers
             title="أكتر 5 عملاء عليهم ديون"
-            emptyText="لا توجد ديون على العملاء"
+            emptyText="لا توجد مديونيات على القراء"
             rows={topDebtCustomers}
             valueKey="balance"
             tone="rose"
@@ -788,7 +788,7 @@ function CustomerInsights({
         <div className="rounded-[2rem] border border-slate-200 bg-slate-950 p-5 text-white shadow-sm">
           <p className="text-xs font-black text-slate-400">عملاء نشطين في الفترة</p>
           <p className="mt-2 text-3xl font-black">{activeCustomersCount}</p>
-          <p className="mt-1 text-xs font-bold text-slate-400">من إجمالي {totalCustomers} عميل</p>
+          <p className="mt-1 text-xs font-bold text-slate-400">من إجمالي {totalCustomers} قارئ</p>
         </div>
       </div>
     </section>
