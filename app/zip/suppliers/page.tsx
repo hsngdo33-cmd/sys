@@ -67,7 +67,7 @@ export default function SuppliersPage() {
                   className="w-full bg-slate-50 border-2 border-transparent rounded-2xl p-4 font-bold text-slate-800 outline-none focus:bg-white focus:border-indigo-500/20 transition-all shadow-inner" 
                   value={newSupp.name} 
                   onChange={(e)=>setNewSupp({...newSupp, name: e.target.value})} 
-                  placeholder="مثال: شركة النور للتجارة"
+                  placeholder="اسم المورد"
                 />
               </div>
               <div>

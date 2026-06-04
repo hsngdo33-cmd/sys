@@ -3,11 +3,13 @@ import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { supabase } from "@/lib/supabase";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
+import { PRODUCT_CATEGORIES, ProductCategory, normalizeProductCategory, productCategoryLabel } from "@/lib/product-category";
 
 interface Product {
   id: string; name: string; unit: string;
   purchase_price: number; sale_price: number; stock_quantity: number;
   barcode?: string | null;
+  product_category?: ProductCategory | string | null;
 }
 interface CartItem extends Product {
   qty: number | string;
@@ -45,6 +47,7 @@ export default function SupplierInvoicePage() {
 
   const [supplier, setSupplier]     = useState<Supplier | null>(null);
   const [products, setProducts]     = useState<Product[]>([]);
+  const [activeCategory, setActiveCategory] = useState<ProductCategory>("books");
   const [cart, setCart]             = useState<CartItem[]>([]);
   const [cashPaid, setCashPaid]     = useState<number | string>(0);
   const [discountPercent, setDiscountPercent] = useState<number | string>(0);
@@ -52,7 +55,7 @@ export default function SupplierInvoicePage() {
   const [isSaving, setIsSaving]     = useState(false);
   const [note, setNote]             = useState("");
   const [showAddModal, setShowAddModal] = useState(false);
-  const [newProd, setNewProd]       = useState({ name: "", unit: "قطعة", purchase_price: "", sale_price: "" });
+  const [newProd, setNewProd]       = useState({ name: "", unit: "قطعة", purchase_price: "", sale_price: "", product_category: "books" as ProductCategory });
   const [addingSaving, setAddingSaving] = useState(false);
   const [newProdBarcode, setNewProdBarcode] = useState("");
   const [scannerOpen, setScannerOpen] = useState(false);
@@ -78,10 +81,11 @@ export default function SupplierInvoicePage() {
 
   const filteredProducts = useMemo(() =>
     products.filter(p =>
-      p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      cleanBarcode(p.barcode).includes(searchTerm)
+      normalizeProductCategory(p.product_category) === activeCategory &&
+      (p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      cleanBarcode(p.barcode).includes(searchTerm))
     ),
-    [products, searchTerm]
+    [products, searchTerm, activeCategory]
   );
 
   const addToCart = (p: Product) => {
@@ -94,7 +98,10 @@ export default function SupplierInvoicePage() {
 
     if (!barcode) return;
 
-    const found = products.find(p => cleanBarcode(p.barcode) === barcode);
+    const found = products.find(p =>
+      normalizeProductCategory(p.product_category) === activeCategory &&
+      cleanBarcode(p.barcode) === barcode
+    );
 
     if (found) {
       addToCart(found);
@@ -162,6 +169,7 @@ export default function SupplierInvoicePage() {
   const discountRate = Math.min(Math.max(Number(discountPercent) || 0, 0), 100);
   const discountAmount = subtotalInvoice * (discountRate / 100);
   const totalInvoice = Math.max(subtotalInvoice - discountAmount, 0);
+  const purchasePriceFactor = subtotalInvoice > 0 ? totalInvoice / subtotalInvoice : 1;
   const cash         = Number(cashPaid) || 0;
   const remaining    = totalInvoice - cash;
 
@@ -185,13 +193,14 @@ export default function SupplierInvoicePage() {
       sale_price: Number(newProd.sale_price) || Number(newProd.purchase_price),
       stock_quantity: 0,
       barcode,
+      product_category: normalizeProductCategory(newProd.product_category),
     }]).select().single();
     if (data) {
       setProducts(prev => [...prev, data]);
       addToCart(data);
       setShowAddModal(false);
       setNewProdBarcode("");
-      setNewProd({ name: "", unit: "قطعة", purchase_price: "", sale_price: "" });
+      setNewProd({ name: "", unit: "قطعة", purchase_price: "", sale_price: "", product_category: activeCategory });
     }
     setAddingSaving(false);
   }
@@ -205,8 +214,16 @@ export default function SupplierInvoicePage() {
         supplier_id: id,
         amount: totalInvoice,
         type: "فاتورة توريد",
-        items: cart.map(i => ({ id: i.id, name: i.name, unit: i.unit, qty: Number(i.qty), price: Number(i.p_price) })),
-        description: note || `توريد أصناف من ${supplier?.name}${discountRate > 0 ? ` - خصم ${discountRate}%` : ""}`,
+        items: cart.map(i => ({
+          id: i.id,
+          name: i.name,
+          unit: i.unit,
+          qty: Number(i.qty),
+          price: Number(i.p_price),
+          net_price: Number((Number(i.p_price || 0) * purchasePriceFactor).toFixed(2)),
+          product_category: normalizeProductCategory(i.product_category),
+        })),
+        description: note || `توريد ${productCategoryLabel(activeCategory)} من ${supplier?.name}${discountRate > 0 ? ` - خصم ${discountRate}%` : ""}`,
       }]);
 
       if (cash > 0) {
@@ -219,13 +236,20 @@ export default function SupplierInvoicePage() {
         .update({ balance: (supplier.balance || 0) + remaining })
         .eq("id", id);
 
-      for (const item of cart)
+      for (const item of cart) {
         await supabase.rpc("increment_stock", { row_id: item.id, amount: Number(item.qty) });
+        await supabase
+          .from("products")
+          .update({ purchase_price: Number((Number(item.p_price || 0) * purchasePriceFactor).toFixed(2)) })
+          .eq("id", item.id);
+      }
 
       if (printAfterSave) {
         window.print();
+        window.setTimeout(() => router.push("/suppliers"), 300);
+      } else {
+        router.push("/suppliers");
       }
-      router.push("/suppliers");
     } catch { alert("خطأ في الحفظ"); }
     finally { setIsSaving(false); }
   }
@@ -238,7 +262,7 @@ export default function SupplierInvoicePage() {
         <div className="flex items-center gap-4">
           <Link href="/suppliers" className="bg-white/10 hover:bg-white/20 px-4 py-2 rounded-xl text-xs font-black transition-all">⬅️ رجوع</Link>
           <div>
-            <h1 className="text-lg font-black">📥 فاتورة توريد: {supplier?.name}</h1>
+            <h1 className="text-lg font-black">📥 فاتورة توريد {productCategoryLabel(activeCategory)}: {supplier?.name}</h1>
             <p className="text-[10px] text-slate-400 font-bold mt-0.5">
               {new Date().toLocaleDateString("ar-EG", { weekday:"long", day:"numeric", month:"long" })}
             </p>
@@ -260,6 +284,27 @@ export default function SupplierInvoicePage() {
         <aside className="app-invoice-sidebar bg-white border border-slate-200 shadow-sm flex flex-col">
           <div className="p-4 border-b border-slate-100 space-y-3">
             <h3 className="font-black text-slate-400 text-[10px] uppercase tracking-widest">📦 اختيار الأصناف</h3>
+            <div className="grid grid-cols-2 gap-2">
+              {PRODUCT_CATEGORIES.map((category) => (
+                <button
+                  key={category.key}
+                  type="button"
+                  onClick={() => {
+                    setActiveCategory(category.key);
+                    setCart([]);
+                    setSearchTerm("");
+                    setNewProd((prev) => ({ ...prev, product_category: category.key }));
+                  }}
+                  className={`rounded-xl px-3 py-2 text-xs font-black transition-all ${
+                    activeCategory === category.key
+                      ? "bg-slate-900 text-white"
+                      : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                  }`}
+                >
+                  شراء {category.label}
+                </button>
+              ))}
+            </div>
             <input
               type="text"
               placeholder="🔍 ابحث..."
@@ -285,7 +330,10 @@ export default function SupplierInvoicePage() {
               </button>
             </div>
             <button
-              onClick={() => setShowAddModal(true)}
+              onClick={() => {
+                setNewProd((prev) => ({ ...prev, product_category: activeCategory }));
+                setShowAddModal(true);
+              }}
               className="w-full bg-amber-50 hover:bg-amber-100 text-amber-700 border border-dashed border-amber-300 py-2.5 rounded-xl text-xs font-black transition-all"
             >
               ➕ صنف جديد مش متسجل
@@ -306,7 +354,7 @@ export default function SupplierInvoicePage() {
                   <div>
                     <p className="font-black text-slate-900 text-sm">{p.name}</p>
                     <p className="text-[10px] font-bold text-slate-400 mt-0.5">
-                      شراء: {p.purchase_price} ج — مخزن: {p.stock_quantity} {p.unit}
+                      شراء: {p.purchase_price} ج — مخزن: {p.stock_quantity} {p.unit} — {productCategoryLabel(p.product_category)}
                     </p>
                   </div>
                   <div className={`px-3 py-1.5 rounded-xl text-center ${p.stock_quantity <= 5 ? "bg-rose-100" : "bg-slate-100"}`}>
@@ -453,7 +501,7 @@ export default function SupplierInvoicePage() {
         <div className="print-card">
           <div className="print-header">
             <div>
-              <p className="print-eyebrow">فاتورة توريد</p>
+              <p className="print-eyebrow">فاتورة توريد {productCategoryLabel(activeCategory)}</p>
               <h1>منظومة إدارة المكتبة</h1>
               <p>إدارة الموردين والأصناف</p>
             </div>
@@ -509,11 +557,30 @@ export default function SupplierInvoicePage() {
                 <label className="text-xs font-black text-slate-400 mb-1 block">اسم الصنف *</label>
                 <input
                   className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-slate-900 outline-none focus:border-amber-400 transition-all"
-                  placeholder="مثال: أرز بسمتي"
+                  placeholder="اسم الصنف"
                   value={newProd.name}
                   onChange={e => setNewProd({...newProd, name: e.target.value})}
                   autoFocus
                 />
+              </div>
+              <div>
+                <label className="text-xs font-black text-slate-400 mb-1 block">القسم</label>
+                <div className="grid grid-cols-2 gap-2">
+                  {PRODUCT_CATEGORIES.map((category) => (
+                    <button
+                      key={category.key}
+                      type="button"
+                      onClick={() => setNewProd({...newProd, product_category: category.key})}
+                      className={`rounded-xl px-3 py-2 text-xs font-black transition-all ${
+                        normalizeProductCategory(newProd.product_category) === category.key
+                          ? "bg-slate-900 text-white"
+                          : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                      }`}
+                    >
+                      {category.label}
+                    </button>
+                  ))}
+                </div>
               </div>
               <div>
                 <label className="text-xs font-black text-slate-400 mb-1 block">الباركود</label>

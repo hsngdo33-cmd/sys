@@ -3,11 +3,13 @@ import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { supabase } from "@/lib/supabase";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
+import { PRODUCT_CATEGORIES, ProductCategory, normalizeProductCategory, productCategoryLabel } from "@/lib/product-category";
 
 interface Product {
   id: string; name: string; unit: string;
   sale_price: number; purchase_price: number; stock_quantity: number;
   barcode?: string | null;
+  product_category?: ProductCategory | string | null;
 }
 interface CartItem extends Product {
   qty: number | string;
@@ -29,6 +31,7 @@ export default function CustomerInvoicePage() {
 
   const [customer, setCustomer]       = useState<Customer | null>(null);
   const [products, setProducts]       = useState<Product[]>([]);
+  const [activeCategory, setActiveCategory] = useState<ProductCategory>("books");
   const [searchTerm, setSearchTerm]   = useState("");
   const [cart, setCart]               = useState<CartItem[]>([]);
   const [cashPaid, setCashPaid]       = useState<number | string>(0);
@@ -43,7 +46,7 @@ export default function CustomerInvoicePage() {
   const loadData = useCallback(async () => {
     const [{ data: cust }, { data: prods }] = await Promise.all([
       supabase.from("customers").select("*").eq("id", id).single(),
-      supabase.from("products").select("id,name,unit,sale_price,purchase_price,stock_quantity,barcode").order("name"),
+      supabase.from("products").select("id,name,unit,sale_price,purchase_price,stock_quantity,barcode,product_category").order("name"),
     ]);
     setCustomer(cust);
     setProducts(prods || []);
@@ -58,10 +61,11 @@ export default function CustomerInvoicePage() {
 
   const filteredProducts = useMemo(() =>
     products.filter(p =>
-      p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      cleanBarcode(p.barcode).includes(searchTerm)
+      normalizeProductCategory(p.product_category) === activeCategory &&
+      (p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      cleanBarcode(p.barcode).includes(searchTerm))
     ),
-    [products, searchTerm]
+    [products, searchTerm, activeCategory]
   );
 
   const addToCart = (p: Product) => {
@@ -75,7 +79,10 @@ export default function CustomerInvoicePage() {
 
     if (!barcode) return;
 
-    const found = products.find(p => cleanBarcode(p.barcode) === barcode);
+    const found = products.find(p =>
+      normalizeProductCategory(p.product_category) === activeCategory &&
+      cleanBarcode(p.barcode) === barcode
+    );
 
     if (!found) {
       return alert("الباركود غير مسجل في الأصناف");
@@ -156,12 +163,13 @@ export default function CustomerInvoicePage() {
       const itemsToSave = cart.map(i => ({
         id: i.id, name: i.name, unit: i.unit,
         qty: Number(i.qty), price: Number(i.price), cost: Number(i.cost),
+        product_category: normalizeProductCategory(i.product_category),
       }));
 
       const { data: invoice, error: invoiceError } = await supabase.from("customer_transactions").insert([{
         customer_id: id, amount: total, type: "sale",
         items: itemsToSave, profit,
-        description: note || `بيع أصناف لـ ${customer.name}${discountRate > 0 ? ` - خصم ${discountRate}%` : ""}`,
+        description: note || `بيع ${productCategoryLabel(activeCategory)} لـ ${customer.name}${discountRate > 0 ? ` - خصم ${discountRate}%` : ""}`,
       }]).select("id").single();
       if (invoiceError) throw invoiceError;
 
@@ -180,8 +188,10 @@ export default function CustomerInvoicePage() {
 
       if (printAfterSave) {
         window.print();
+        window.setTimeout(() => router.push(`/customer/${id}/history`), 300);
+      } else {
+        router.push(`/customer/${id}/history`);
       }
-      router.push(`/customer/${id}/history`);
     } catch { alert("خطأ في الحفظ"); }
     finally { setIsSaving(false); }
   };
@@ -194,7 +204,7 @@ export default function CustomerInvoicePage() {
         <div className="flex items-center gap-4">
           <Link href="/customer" className="bg-white/10 hover:bg-white/20 px-4 py-2 rounded-xl text-xs font-black transition-all">⬅️ رجوع</Link>
           <div>
-            <h1 className="text-lg font-black">فاتورة عميل: {customer?.name}</h1>
+            <h1 className="text-lg font-black">فاتورة بيع {productCategoryLabel(activeCategory)}: {customer?.name}</h1>
             <p className="text-[10px] text-slate-400 font-bold">{new Date().toLocaleDateString("ar-EG", { weekday:"long", day:"numeric", month:"long" })}</p>
           </div>
         </div>
@@ -214,6 +224,26 @@ export default function CustomerInvoicePage() {
         <aside className="app-invoice-sidebar bg-white border border-slate-200 shadow-sm flex flex-col">
           <div className="p-4 border-b border-slate-100 space-y-3">
             <h3 className="font-black text-slate-400 text-[10px] uppercase tracking-widest">📦 اختيار الأصناف</h3>
+            <div className="grid grid-cols-2 gap-2">
+              {PRODUCT_CATEGORIES.map((category) => (
+                <button
+                  key={category.key}
+                  type="button"
+                  onClick={() => {
+                    setActiveCategory(category.key);
+                    setCart([]);
+                    setSearchTerm("");
+                  }}
+                  className={`rounded-xl px-3 py-2 text-xs font-black transition-all ${
+                    activeCategory === category.key
+                      ? "bg-slate-900 text-white"
+                      : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                  }`}
+                >
+                  بيع {category.label}
+                </button>
+              ))}
+            </div>
             <input
               type="text"
               placeholder="🔍 ابحث..."
@@ -252,8 +282,8 @@ export default function CustomerInvoicePage() {
                                "border-slate-100 hover:border-indigo-400 hover:bg-slate-50 cursor-pointer"}`}
                 >
                   <div>
-                    <p className="font-black text-slate-900 text-sm">{p.name}</p>
-                    <p className="text-[10px] font-bold text-emerald-600 mt-0.5">{p.sale_price} ج.م</p>
+                      <p className="font-black text-slate-900 text-sm">{p.name}</p>
+                    <p className="text-[10px] font-bold text-emerald-600 mt-0.5">{p.sale_price} ج.م - {productCategoryLabel(p.product_category)}</p>
                   </div>
                   <div className="text-left">
                     <div className={`px-3 py-1.5 rounded-xl text-center ${p.stock_quantity <= 5 ? "bg-rose-100" : "bg-slate-100"}`}>
@@ -419,7 +449,7 @@ export default function CustomerInvoicePage() {
         <div className="print-card">
           <div className="print-header">
             <div>
-              <p className="print-eyebrow">فاتورة بيع</p>
+              <p className="print-eyebrow">فاتورة بيع {productCategoryLabel(activeCategory)}</p>
               <h1>منظومة إدارة المكتبة</h1>
               <p>إدارة العملاء والمبيعات</p>
             </div>

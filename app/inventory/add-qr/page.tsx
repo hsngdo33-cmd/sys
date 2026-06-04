@@ -3,6 +3,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { supabase } from "@/lib/supabase";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { PRODUCT_CATEGORIES, ProductCategory, normalizeProductCategory, productCategoryLabel } from "@/lib/product-category";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type ScanMode = "camera" | "manual" | null;
@@ -24,6 +25,7 @@ export default function AddProductPage() {
     stock_quantity: "",
     purchase_price: "",
     sale_price:     "",
+    product_category: "books" as ProductCategory,
   });
 
   const [scanMode, setScanMode]         = useState<ScanMode>(null);
@@ -125,6 +127,7 @@ export default function AddProductPage() {
         purchase_price: Number(form.purchase_price),
         sale_price:     Number(form.sale_price),
         barcode:        barcode,
+        product_category: normalizeProductCategory(form.product_category),
       }]).select().single();
 
       if (error) throw error;
@@ -145,8 +148,9 @@ export default function AddProductPage() {
           unit:           form.unit,
           stock_quantity: Number(form.stock_quantity) || 0,
           purchase_price: Number(form.purchase_price),
-          sale_price:     Number(form.sale_price),
-        }]).select().single() as any;
+        sale_price:     Number(form.sale_price),
+        product_category: normalizeProductCategory(form.product_category),
+      }]).select().single() as any;
         if (!error2 && data) {
           setSavedProduct({ ...data, barcode: generateCode() });
           setShowQR(!form.barcode.trim());
@@ -258,14 +262,34 @@ export default function AddProductPage() {
 
         {/* ══ بيانات الصنف ══ */}
         <div className="bg-white rounded-[2rem] border border-slate-200 shadow-sm p-6 space-y-5">
-          <p className="font-black text-slate-900 border-r-4 border-indigo-500 pr-3">بيانات الصنف</p>
+            <p className="font-black text-slate-900 border-r-4 border-indigo-500 pr-3">بيانات الصنف</p>
+
+          <div>
+            <label className="text-xs font-black text-slate-400 mb-1.5 block">القسم</label>
+            <div className="grid grid-cols-2 gap-2">
+              {PRODUCT_CATEGORIES.map((category) => (
+                <button
+                  key={category.key}
+                  type="button"
+                  onClick={() => setForm(f => ({...f, product_category: category.key}))}
+                  className={`px-4 py-3 rounded-xl text-sm font-black transition-all ${
+                    normalizeProductCategory(form.product_category) === category.key
+                      ? "bg-[#0f172a] text-white"
+                      : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                  }`}
+                >
+                  {category.label}
+                </button>
+              ))}
+            </div>
+          </div>
 
           {/* اسم الصنف */}
           <div>
             <label className="text-xs font-black text-slate-400 mb-1.5 block">اسم الصنف *</label>
             <input
               className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-slate-900 outline-none focus:border-indigo-400 transition-all"
-              placeholder="مثال: مبيد حشري شورا"
+              placeholder="اسم الصنف"
               value={form.name}
               onChange={e => setForm(f => ({...f, name: e.target.value}))}
             />
@@ -378,8 +402,9 @@ export default function AddProductPage() {
             {/* بيانات الملصق */}
             <div className="bg-slate-50 rounded-2xl p-4 text-right space-y-1">
               <p className="font-black text-slate-900">{savedProduct.name}</p>
-              <p className="text-xs text-slate-500 font-bold">سعر البيع: {savedProduct.sale_price} ج.م / {savedProduct.unit}</p>
-              <p className="text-[10px] text-slate-400 font-bold tracking-widest">{savedProduct.barcode}</p>
+            <p className="text-xs text-slate-500 font-bold">سعر البيع: {savedProduct.sale_price} ج.م / {savedProduct.unit}</p>
+              <p className="text-xs text-slate-500 font-bold">القسم: {productCategoryLabel(savedProduct.product_category)}</p>
+            <p className="text-[10px] text-slate-400 font-bold tracking-widest">{savedProduct.barcode}</p>
             </div>
 
             <div className="flex gap-3">

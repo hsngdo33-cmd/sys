@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { supabase } from "@/lib/supabase";
 import Link from "next/link";
+import { PRODUCT_CATEGORIES, ProductCategory, normalizeProductCategory, productCategoryLabel } from "@/lib/product-category";
 
 type Product = {
   id: string;
@@ -12,6 +13,7 @@ type Product = {
   sale_price: number | string;
   stock_quantity: number | string;
   barcode?: string | null;
+  product_category?: ProductCategory | string | null;
 };
 
 type ScannerControls = {
@@ -50,6 +52,7 @@ export default function InventoryPage() {
 
   const [products, setProducts] = useState<Product[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
+  const [activeCategory, setActiveCategory] = useState<ProductCategory>("books");
   const [loading, setLoading] = useState(true);
 
   // مودالات
@@ -72,6 +75,7 @@ export default function InventoryPage() {
     sale_price: "",
     stock_quantity: "",
     barcode: "",
+    product_category: "books" as ProductCategory,
   });
 
   // سكانر USB
@@ -488,6 +492,7 @@ export default function InventoryPage() {
         sale_price: Number(editForm.sale_price),
         stock_quantity: Number(editForm.stock_quantity),
         barcode: barcodeValue,
+        product_category: normalizeProductCategory(editForm.product_category),
       })
       .eq("id", editingId);
 
@@ -546,6 +551,7 @@ export default function InventoryPage() {
           stock_quantity:
             Number(newProduct.stock_quantity) || 0,
           barcode: barcodeValue,
+          product_category: normalizeProductCategory(newProduct.product_category),
         },
       ]);
 
@@ -562,6 +568,7 @@ export default function InventoryPage() {
         sale_price: "",
         stock_quantity: "",
         barcode: "",
+        product_category: activeCategory,
       });
 
       fetchProducts();
@@ -576,16 +583,14 @@ export default function InventoryPage() {
   // FILTER
   // =========================
 
-  const filteredProducts = products.filter(
-    (p) =>
-      p.name
-        ?.toLowerCase()
-        .includes(searchTerm.toLowerCase()) ||
+  const filteredProducts = products.filter((p) => {
+    const matchesCategory = normalizeProductCategory(p.product_category) === activeCategory;
+    const matchesSearch =
+      p.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      p.barcode?.toString().includes(searchTerm);
 
-      p.barcode
-        ?.toString()
-        .includes(searchTerm)
-  );
+    return matchesCategory && matchesSearch;
+  });
 
   // =========================
   // UI
@@ -648,7 +653,10 @@ export default function InventoryPage() {
             </button>
 
             <button
-              onClick={() => setIsModalOpen(true)}
+              onClick={() => {
+                setNewProduct((prev) => ({ ...prev, product_category: activeCategory }));
+                setIsModalOpen(true);
+              }}
               className="bg-emerald-600 text-white px-5 py-3 rounded-2xl font-bold"
             >
               + إضافة صنف
@@ -660,7 +668,23 @@ export default function InventoryPage() {
 
         {/* SEARCH */}
 
-        <div className="bg-white p-4 rounded-3xl shadow mb-6">
+        <div className="bg-white p-4 rounded-3xl shadow mb-6 space-y-3">
+          <div className="grid grid-cols-2 gap-2">
+            {PRODUCT_CATEGORIES.map((category) => (
+              <button
+                key={category.key}
+                type="button"
+                onClick={() => setActiveCategory(category.key)}
+                className={`rounded-2xl px-4 py-3 text-sm font-black transition-all ${
+                  activeCategory === category.key
+                    ? "bg-slate-900 text-white"
+                    : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                }`}
+              >
+                {category.label} ({products.filter((p) => normalizeProductCategory(p.product_category) === category.key).length})
+              </button>
+            ))}
+          </div>
 
           <input
             type="text"
@@ -685,6 +709,7 @@ export default function InventoryPage() {
               <tr>
 
                 <th className="p-4">الصنف</th>
+                <th className="p-4">القسم</th>
                 <th className="p-4">الوحدة</th>
                 <th className="p-4">الكمية</th>
                 <th className="p-4">شراء</th>
@@ -702,7 +727,7 @@ export default function InventoryPage() {
 
                 <tr>
                   <td
-                    colSpan={7}
+                    colSpan={8}
                     className="p-10 text-center"
                   >
                     جاري التحميل...
@@ -731,6 +756,23 @@ export default function InventoryPage() {
                           }
                           className="w-full border p-2 rounded"
                         />
+                      </td>
+
+                      <td className="p-2">
+                        <select
+                          value={normalizeProductCategory(editForm.product_category)}
+                          onChange={(e) =>
+                            setEditForm({
+                              ...editForm,
+                              product_category: e.target.value as ProductCategory,
+                            })
+                          }
+                          className="w-full border p-2 rounded"
+                        >
+                          {PRODUCT_CATEGORIES.map((category) => (
+                            <option key={category.key} value={category.key}>{category.label}</option>
+                          ))}
+                        </select>
                       </td>
 
                       <td className="p-2">
@@ -848,6 +890,16 @@ export default function InventoryPage() {
                       </td>
 
                       <td className="p-4">
+                        <span className={`rounded-full px-3 py-1 text-xs font-black ${
+                          normalizeProductCategory(p.product_category) === "books"
+                            ? "bg-indigo-100 text-indigo-700"
+                            : "bg-emerald-100 text-emerald-700"
+                        }`}>
+                          {productCategoryLabel(p.product_category)}
+                        </span>
+                      </td>
+
+                      <td className="p-4">
                         {p.unit}
                       </td>
 
@@ -924,7 +976,7 @@ export default function InventoryPage() {
           <div className="bg-white rounded-3xl p-6 w-full max-w-md">
 
             <h2 className="text-2xl font-black mb-6 text-center">
-              إضافة صنف
+              إضافة صنف {productCategoryLabel(newProduct.product_category)}
             </h2>
 
             <div className="space-y-4">
@@ -940,6 +992,23 @@ export default function InventoryPage() {
                 }
                 className="w-full border p-4 rounded-2xl"
               />
+
+              <div className="grid grid-cols-2 gap-2">
+                {PRODUCT_CATEGORIES.map((category) => (
+                  <button
+                    key={category.key}
+                    type="button"
+                    onClick={() => setNewProduct({ ...newProduct, product_category: category.key })}
+                    className={`rounded-2xl px-4 py-3 text-sm font-black transition-all ${
+                      normalizeProductCategory(newProduct.product_category) === category.key
+                        ? "bg-slate-900 text-white"
+                        : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                    }`}
+                  >
+                    {category.label}
+                  </button>
+                ))}
+              </div>
 
               <select
                 value={newProduct.unit}

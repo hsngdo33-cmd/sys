@@ -253,6 +253,14 @@ export default function CustomersListPage() {
     🧾 بيع
   </Link>
 
+  {/* زر المرتجع */}
+  <Link
+    href={`/customer/${c.id}/return`}
+    className="app-btn app-btn-sm app-btn-warning"
+  >
+    ↩ مرتجع
+  </Link>
+
   {/* زر السجل (اللي كان ناقص) */}
   <Link 
     href={`/customer/${c.id}/history`} 

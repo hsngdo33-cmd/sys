@@ -2,6 +2,7 @@
 import { useState, useEffect, use } from "react";
 import { supabase } from "@/lib/supabase";
 import { useRouter } from "next/navigation";
+import { PRODUCT_CATEGORIES, ProductCategory, normalizeProductCategory, productCategoryLabel } from "@/lib/product-category";
 
 export default function EditInvoicePage({ params }: { params: Promise<any> }) {
   const router          = useRouter();
@@ -12,6 +13,7 @@ export default function EditInvoicePage({ params }: { params: Promise<any> }) {
   const [transaction, setTransaction] = useState<any>(null);
   const [items, setItems]             = useState<any[]>([]);
   const [products, setProducts]       = useState<any[]>([]);
+  const [activeCategory, setActiveCategory] = useState<ProductCategory>("books");
   const [productSearch, setProductSearch] = useState("");
   const [discountPercent, setDiscountPercent] = useState<number | string>(0);
   const [isSaving, setIsSaving]       = useState(false);
@@ -25,16 +27,18 @@ export default function EditInvoicePage({ params }: { params: Promise<any> }) {
     setLoading(true);
     const [{ data, error }, { data: prods }] = await Promise.all([
       supabase.from("customer_transactions").select("*").eq("id", transId).single(),
-      supabase.from("products").select("id,name,unit,sale_price,purchase_price,stock_quantity,barcode").order("name"),
+      supabase.from("products").select("id,name,unit,sale_price,purchase_price,stock_quantity,barcode,product_category").order("name"),
     ]);
     if (error) { alert("مشكلة في تحميل بيانات الفاتورة"); }
     else {
       const loadedItems = JSON.parse(JSON.stringify(data.items || []));
+      const firstCategory = normalizeProductCategory(loadedItems[0]?.product_category);
       const gross = loadedItems.reduce((s: number, i: any) => s + Number(i.qty || 0) * Number(i.price || 0), 0);
       setTransaction(JSON.parse(JSON.stringify(data)));
       setItems(loadedItems);
       setNote(data.description || "");
       setDiscountPercent(gross > 0 && Number(data.amount) < gross ? Number((((gross - Number(data.amount)) / gross) * 100).toFixed(2)) : 0);
+      setActiveCategory(firstCategory);
     }
     setProducts(prods || []);
     setLoading(false);
@@ -49,6 +53,7 @@ export default function EditInvoicePage({ params }: { params: Promise<any> }) {
       qty: 1,
       price: product.sale_price,
       cost: product.purchase_price,
+      product_category: normalizeProductCategory(product.product_category),
     }]);
   };
 
@@ -123,7 +128,10 @@ export default function EditInvoicePage({ params }: { params: Promise<any> }) {
   const liveProfit = newTotal - items.reduce((s, i) => s + (Number(i.qty) * Number(i.cost ?? 0)), 0);
   const diff       = transaction ? newTotal - transaction.amount : 0;
   const margin     = newTotal > 0 ? Math.round((liveProfit / newTotal) * 100) : 0;
-  const filteredProducts = products.filter(product => product.name?.toLowerCase().includes(productSearch.toLowerCase()));
+  const filteredProducts = products.filter(product =>
+    normalizeProductCategory(product.product_category) === activeCategory &&
+    product.name?.toLowerCase().includes(productSearch.toLowerCase())
+  );
 
   if (loading) return (
     <div className="min-h-screen flex items-center justify-center bg-[#f1f5f9] font-black text-slate-400 text-xl" dir="rtl">
@@ -166,6 +174,25 @@ export default function EditInvoicePage({ params }: { params: Promise<any> }) {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <div>
               <label className="block text-[10px] font-black text-slate-400 mb-1">إضافة صنف للفاتورة</label>
+              <div className="grid grid-cols-2 gap-2 mb-2">
+                {PRODUCT_CATEGORIES.map((category) => (
+                  <button
+                    key={category.key}
+                    type="button"
+                    onClick={() => {
+                      setActiveCategory(category.key);
+                      setProductSearch("");
+                    }}
+                    className={`rounded-xl px-3 py-2 text-xs font-black transition-all ${
+                      activeCategory === category.key
+                        ? "bg-slate-900 text-white"
+                        : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                    }`}
+                  >
+                    {category.label}
+                  </button>
+                ))}
+              </div>
               <input
                 value={productSearch}
                 onChange={e => setProductSearch(e.target.value)}
@@ -182,7 +209,7 @@ export default function EditInvoicePage({ params }: { params: Promise<any> }) {
                       className="w-full flex justify-between items-center rounded-xl bg-white px-3 py-2 text-sm font-black text-slate-700 hover:bg-indigo-50"
                     >
                       <span>{product.name}</span>
-                      <span className="text-[10px] text-slate-400">{product.sale_price} ج</span>
+                      <span className="text-[10px] text-slate-400">{product.sale_price} ج - {productCategoryLabel(product.product_category)}</span>
                     </button>
                   ))}
                 </div>

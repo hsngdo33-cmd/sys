@@ -8,8 +8,8 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-sans: Arial, Helvetica, sans-serif;
+  --font-mono: "Courier New", monospace;
 }
 
 body {
@@ -289,6 +289,292 @@ main :where(.fixed.inset-0) :where(button) {
 
 *::-webkit-scrollbar-track {
   background: transparent;
+}
+
+@media print {
+  @page {
+    size: auto;
+    margin: 5mm;
+  }
+
+  html,
+  body {
+    width: 100% !important;
+    min-width: 0 !important;
+    height: auto !important;
+    min-height: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: hidden !important;
+    background: #fff !important;
+  }
+
+  body:has(.print-invoice) {
+    color: #0f172a !important;
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+
+  body:has(.print-invoice) > div,
+  body:has(.print-invoice) > div > main,
+  body:has(.print-invoice) > div > main > div,
+  body:has(.print-invoice) > div > main > div > div,
+  body:has(.print-invoice) > div > main > div > div > div {
+    display: block !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: none !important;
+    height: auto !important;
+    min-height: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: visible !important;
+    background: #fff !important;
+  }
+
+  body:has(.print-invoice) > div > aside,
+  body:has(.print-invoice) > nav,
+  body:has(.print-invoice) main > header,
+  body:has(.print-invoice) .app-invoice-layout,
+  body:has(.print-invoice) .app-directory-layout,
+  body:has(.print-invoice) main > div > div > div > :not(.print-invoice):not(style) {
+    display: none !important;
+  }
+
+  body:has(.print-invoice) * {
+    box-shadow: none !important;
+  }
+
+  body:has(.print-invoice) *:not(.print-invoice):not(.print-invoice *) {
+    visibility: hidden !important;
+  }
+
+  html body .print-invoice,
+  html body .print-invoice * {
+    visibility: visible !important;
+  }
+
+  html body .print-invoice {
+    display: block !important;
+    position: fixed !important;
+    inset: 0 auto auto 0 !important;
+    z-index: 2147483647 !important;
+    width: 100% !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: visible !important;
+    background: #fff !important;
+    color: #0f172a !important;
+    font-family: Arial, Helvetica, sans-serif !important;
+    font-size: 10px !important;
+    line-height: 1.35 !important;
+    break-before: avoid !important;
+    break-after: avoid !important;
+    page-break-before: avoid !important;
+    page-break-after: avoid !important;
+  }
+
+  html body .print-card {
+    width: 100% !important;
+    max-width: 190mm !important;
+    margin: 0 auto !important;
+    padding: 10px !important;
+    border: 1px solid #d8e0ec !important;
+    border-radius: 8px !important;
+    background: #fff !important;
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+  }
+
+  html body .print-header {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) auto !important;
+    gap: 12px !important;
+    align-items: start !important;
+    margin: 0 0 8px !important;
+    padding: 0 0 8px !important;
+    border-bottom: 2px solid #0f172a !important;
+  }
+
+  html body .print-eyebrow {
+    display: inline-block !important;
+    margin: 0 0 4px !important;
+    padding: 3px 7px !important;
+    border-radius: 999px !important;
+    background: #ecfdf5 !important;
+    color: #047857 !important;
+    font-size: 8px !important;
+    font-weight: 900 !important;
+  }
+
+  html body .print-header h1 {
+    margin: 0 !important;
+    color: #0f172a !important;
+    font-size: 17px !important;
+    font-weight: 900 !important;
+  }
+
+  html body .print-header p,
+  html body .print-meta p {
+    margin: 2px 0 !important;
+    color: #334155 !important;
+    font-size: 9px !important;
+    font-weight: 700 !important;
+  }
+
+  html body .print-meta {
+    min-width: 52mm !important;
+    padding: 6px !important;
+    border: 1px solid #e2e8f0 !important;
+    border-radius: 7px !important;
+    background: #f8fafc !important;
+    text-align: right !important;
+  }
+
+  html body .print-table {
+    width: 100% !important;
+    margin: 0 0 8px !important;
+    border-collapse: collapse !important;
+    table-layout: fixed !important;
+  }
+
+  html body .print-table thead {
+    display: table-header-group !important;
+  }
+
+  html body .print-table tr {
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+  }
+
+  html body .print-table th {
+    padding: 5px !important;
+    background: #0f172a !important;
+    color: #fff !important;
+    font-size: 8px !important;
+    font-weight: 900 !important;
+    text-align: right !important;
+  }
+
+  html body .print-table td {
+    padding: 5px !important;
+    border-bottom: 1px solid #e2e8f0 !important;
+    color: #0f172a !important;
+    font-size: 8px !important;
+    font-weight: 700 !important;
+    vertical-align: top !important;
+    overflow-wrap: anywhere !important;
+  }
+
+  html body .print-summary {
+    display: grid !important;
+    grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
+    gap: 5px !important;
+    width: 100% !important;
+    margin: 0 !important;
+  }
+
+  html body .print-summary p {
+    display: grid !important;
+    gap: 2px !important;
+    min-height: 0 !important;
+    margin: 0 !important;
+    padding: 6px !important;
+    border: 1px solid #e2e8f0 !important;
+    border-radius: 7px !important;
+    background: #fff !important;
+    font-weight: 800 !important;
+    break-inside: avoid !important;
+  }
+
+  html body .print-summary span {
+    color: #64748b !important;
+    font-size: 7px !important;
+    font-weight: 800 !important;
+  }
+
+  html body .print-summary b {
+    color: #0f172a !important;
+    font-size: 9px !important;
+    font-weight: 900 !important;
+  }
+
+  html body .print-total {
+    background: #ecfdf5 !important;
+    border-color: #a7f3d0 !important;
+  }
+
+  html body .print-total b,
+  html body .print-total span {
+    color: #047857 !important;
+  }
+
+  html body .print-note {
+    margin: 7px 0 0 !important;
+    padding: 6px !important;
+    border-radius: 7px !important;
+    background: #f8fafc !important;
+    color: #334155 !important;
+    font-size: 8px !important;
+    font-weight: 700 !important;
+  }
+}
+
+@media print and (max-width: 90mm) {
+  @page {
+    margin: 3mm;
+  }
+
+  html body .print-invoice {
+    font-size: 8px !important;
+    line-height: 1.25 !important;
+  }
+
+  html body .print-card {
+    max-width: none !important;
+    padding: 4px !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+  }
+
+  html body .print-header {
+    display: block !important;
+    margin-bottom: 5px !important;
+    padding-bottom: 5px !important;
+    text-align: center !important;
+  }
+
+  html body .print-header h1 {
+    font-size: 13px !important;
+  }
+
+  html body .print-meta {
+    min-width: 0 !important;
+    margin-top: 5px !important;
+    padding: 4px !important;
+    text-align: center !important;
+  }
+
+  html body .print-table {
+    margin-bottom: 5px !important;
+  }
+
+  html body .print-table th,
+  html body .print-table td {
+    padding: 3px 2px !important;
+    font-size: 7px !important;
+  }
+
+  html body .print-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 3px !important;
+  }
+
+  html body .print-summary p {
+    padding: 4px !important;
+  }
 }
 
 @media (max-width: 768px) {

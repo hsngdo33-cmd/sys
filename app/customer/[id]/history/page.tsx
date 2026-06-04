@@ -27,6 +27,11 @@ function txLabel(type: string) {
   return type;
 }
 
+function shortInvoiceNumber(id: unknown) {
+  const cleanId = String(id || "").replace(/[^a-zA-Z0-9]/g, "").toUpperCase();
+  return cleanId ? `C-${cleanId.slice(0, 8)}` : "-";
+}
+
 export default function CustomerHistory() {
   const { id } = useParams();
   const [customer, setCustomer]         = useState<any>(null);
@@ -49,7 +54,8 @@ export default function CustomerHistory() {
 
   useEffect(() => {
     if (!printTransaction) return;
-    window.print();
+    const timer = window.setTimeout(() => window.print(), 50);
+    return () => window.clearTimeout(timer);
   }, [printTransaction]);
 
   async function loadData() {
@@ -250,9 +256,6 @@ export default function CustomerHistory() {
   const totalSales    = transactions.filter(t => SALE_TYPES.includes(t.type)).reduce((s, t) => s + (Number(t.amount) || 0), 0);
   const totalReturns  = transactions.filter(t => RETURN_TYPES.includes(t.type)).reduce((s, t) => s + (Number(t.amount) || 0), 0);
   const totalPaid     = transactions.filter(t => PAYMENT_TYPES.includes(t.type)).reduce((s, t) => s + (Number(t.amount) || 0), 0);
-  const totalProfit   = transactions
-    .filter(t => SALE_TYPES.includes(t.type) || RETURN_TYPES.includes(t.type))
-    .reduce((s, t) => s + (Number(t.profit) || 0), 0);
   const printSubtotal = (printTransaction?.items || []).reduce((sum: number, item: any) => sum + Number(item.qty || 0) * Number(item.price || 0), 0);
   const printNetTotal = Number(printTransaction?.amount || 0);
   const printDiscountAmount = Math.max(printSubtotal - printNetTotal, 0);
@@ -302,6 +305,12 @@ export default function CustomerHistory() {
             >
               ➕ فاتورة جديدة
             </Link>
+            <Link
+              href={`/customer/${id}/return`}
+              className="bg-amber-500 hover:bg-amber-400 text-white px-5 py-2.5 rounded-xl font-black text-sm transition-all active:scale-95"
+            >
+              ↩ فاتورة مرتجع
+            </Link>
           </div>
         </header>
 
@@ -323,8 +332,10 @@ export default function CustomerHistory() {
             <p className="text-[10px] text-slate-400 font-bold mt-1">ج.م</p>
           </div>
           <div className="bg-white p-5 rounded-[2rem] border border-slate-200 shadow-sm text-center">
-            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">الربح المحقق</p>
-            <p className="text-2xl font-black text-indigo-600">{totalProfit.toLocaleString("ar-EG")}</p>
+            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">دين العميل الحالي</p>
+            <p className={`text-2xl font-black ${(customer?.balance || 0) > 0 ? "text-rose-600" : "text-emerald-600"}`}>
+              {Number(customer?.balance || 0).toLocaleString("ar-EG")}
+            </p>
             <p className="text-[10px] text-slate-400 font-bold mt-1">ج.م</p>
           </div>
         </div>
@@ -393,6 +404,18 @@ export default function CustomerHistory() {
                           <p className="text-[10px] text-emerald-600 font-black text-left">ربح: {Number(t.profit).toFixed(1)} ج</p>
                         )}
                       </div>
+                      {isSale && t.items?.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            openReturnModal(t);
+                          }}
+                          className="bg-amber-100 hover:bg-amber-500 hover:text-white text-amber-700 px-4 py-2 rounded-xl text-[10px] font-black transition-all"
+                        >
+                          ↩ مرتجع
+                        </button>
+                      )}
                       <span className="text-slate-300 text-lg">{isOpen ? "▲" : "▼"}</span>
                     </div>
                   </div>
@@ -651,7 +674,7 @@ export default function CustomerHistory() {
               <div className="print-meta">
                 <p>التاريخ: {new Date(printTransaction.created_at).toLocaleDateString("ar-EG")}</p>
                 <p>العميل: {customer?.name || "-"}</p>
-                <p>رقم الفاتورة: {printTransaction.id}</p>
+                <p>رقم الفاتورة: {shortInvoiceNumber(printTransaction.id)}</p>
               </div>
             </div>
             <table className="print-table">

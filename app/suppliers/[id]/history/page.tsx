@@ -4,12 +4,47 @@ import { supabase } from "@/lib/supabase";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 
-type TxType = "all" | "فاتورة توريد" | "سداد نقدي";
+type TxType = "all" | "invoice" | "supplier_return" | "payment" | "collection";
 
-function txStyle(type: string) {
-  if (type?.includes("فاتورة") || type?.includes("توريد"))
+function isSupplierReturn(type: string) {
+  return type === "supplier_return" || type === "مرتجع مورد" || type?.includes("مرتجع مورد");
+}
+
+function isSupplierInvoice(type: string) {
+  return !isSupplierReturn(type) && (type?.includes("فاتورة") || type?.includes("توريد"));
+}
+
+function isSupplierPaymentType(type: string) {
+  return type?.includes("سداد") || type?.includes("دفع");
+}
+
+function isSupplierCollection(tx: any) {
+  const type = String(tx?.type || "");
+  const description = String(tx?.description || "");
+  return type.includes("تحصيل") || description.includes("بدون فاتورة") || description.includes("سداد سريع");
+}
+
+function isSupplierInvoicePayment(tx: any) {
+  return isSupplierPaymentType(String(tx?.type || "")) && !isSupplierCollection(tx);
+}
+
+function txLabel(tx: any) {
+  const type = String(tx?.type || "");
+  if (isSupplierReturn(type)) return "مرتجع مورد";
+  if (isSupplierCollection(tx)) return "تحصيل بدون فاتورة";
+  if (isSupplierInvoicePayment(tx)) return "سداد مع فاتورة";
+  return type;
+}
+
+function txStyle(tx: any) {
+  const type = String(tx?.type || "");
+  if (isSupplierReturn(type))
+    return { icon: "↩", bg: "bg-rose-100", color: "text-rose-700" };
+  if (isSupplierInvoice(type))
     return { icon: "📦", bg: "bg-amber-100",   color: "text-amber-700"  };
-  if (type?.includes("سداد") || type?.includes("دفع"))
+  if (isSupplierCollection(tx))
+    return { icon: "💵", bg: "bg-blue-100", color: "text-blue-700" };
+  if (isSupplierInvoicePayment(tx))
     return { icon: "💸", bg: "bg-emerald-100", color: "text-emerald-700" };
   return { icon: "📄", bg: "bg-slate-100", color: "text-slate-600" };
 }
@@ -33,12 +68,17 @@ export default function SupplierHistoryPage() {
   const [paymentAmount, setPaymentAmount] = useState("");
   const [paymentNote, setPaymentNote] = useState("");
   const [paymentSaving, setPaymentSaving] = useState(false);
+  const [showQuickPayment, setShowQuickPayment] = useState(false);
+  const [quickPaymentAmount, setQuickPaymentAmount] = useState("");
+  const [quickPaymentNote, setQuickPaymentNote] = useState("");
+  const [quickPaymentSaving, setQuickPaymentSaving] = useState(false);
 
   useEffect(() => { if (id) loadData(); }, [id]);
 
   useEffect(() => {
     if (!printTransaction) return;
-    window.print();
+    const timer = window.setTimeout(() => window.print(), 50);
+    return () => window.clearTimeout(timer);
   }, [printTransaction]);
 
   async function loadData() {
@@ -79,6 +119,12 @@ export default function SupplierHistoryPage() {
       // إضافة الكميات الجديدة
       for (const item of editItems) {
         if (item.id) await supabase.rpc("increment_stock", { row_id: String(item.id), amount: Number(item.qty) });
+        if (item.id) {
+          await supabase
+            .from("products")
+            .update({ purchase_price: Number(item.price || 0) })
+            .eq("id", String(item.id));
+        }
       }
 
       // تحديث رصيد المورد
@@ -104,6 +150,59 @@ export default function SupplierHistoryPage() {
     setPaymentEdit(t);
     setPaymentAmount(String(Number(t.amount || 0)));
     setPaymentNote(t.description || "");
+  }
+
+  function openQuickPayment() {
+    setQuickPaymentAmount("");
+    setQuickPaymentNote("");
+    setShowQuickPayment(true);
+  }
+
+  async function handleQuickPaymentSave() {
+    if (quickPaymentSaving) return;
+
+    const amount = Number(quickPaymentAmount);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      alert("اكتب مبلغ سداد صحيح");
+      return;
+    }
+
+    setQuickPaymentSaving(true);
+    try {
+      const { data: curr, error: balanceReadError } = await supabase
+        .from("suppliers")
+        .select("balance")
+        .eq("id", id)
+        .single();
+      if (balanceReadError) throw balanceReadError;
+
+      const note = quickPaymentNote.trim();
+      const description = note ? `${note} - تحصيل بدون فاتورة` : "تحصيل نقدي بدون فاتورة";
+
+      const { error: transError } = await supabase.from("transactions").insert([{
+        supplier_id: id,
+        amount,
+        type: "تحصيل نقدي",
+        description,
+      }]);
+      if (transError) throw transError;
+
+      const { error: balanceError } = await supabase
+        .from("suppliers")
+        .update({ balance: Number(curr?.balance || 0) - amount })
+        .eq("id", id);
+      if (balanceError) throw balanceError;
+
+      setShowQuickPayment(false);
+      setQuickPaymentAmount("");
+      setQuickPaymentNote("");
+      await loadData();
+    } catch (error) {
+      console.error(error);
+      alert("حدث خطأ أثناء حفظ التحصيل بدون فاتورة");
+    } finally {
+      setQuickPaymentSaving(false);
+    }
   }
 
   async function handlePaymentEditSave() {
@@ -133,7 +232,8 @@ export default function SupplierHistoryPage() {
         hour: "2-digit",
         minute: "2-digit",
       });
-      const auditNote = `تم تعديل مبلغ السداد من ${oldAmount.toLocaleString("ar-EG")} ج إلى ${newAmount.toLocaleString("ar-EG")} ج يوم ${editedAt}`;
+      const paymentWord = isSupplierCollection(paymentEdit) ? "التحصيل" : "السداد";
+      const auditNote = `تم تعديل مبلغ ${paymentWord} من ${oldAmount.toLocaleString("ar-EG")} ج إلى ${newAmount.toLocaleString("ar-EG")} ج يوم ${editedAt}`;
       const cleanNote = paymentNote.trim();
       const description = cleanNote ? `${cleanNote}\n${auditNote}` : auditNote;
 
@@ -161,7 +261,10 @@ export default function SupplierHistoryPage() {
 
   const filtered = useMemo(() => {
     let list = [...transactions];
-    if (filterType !== "all") list = list.filter(t => t.type === filterType || t.type?.includes(filterType));
+    if (filterType === "invoice") list = list.filter(t => isSupplierInvoice(t.type));
+    if (filterType === "supplier_return") list = list.filter(t => isSupplierReturn(t.type));
+    if (filterType === "payment") list = list.filter(t => isSupplierInvoicePayment(t));
+    if (filterType === "collection") list = list.filter(t => isSupplierCollection(t));
     if (searchTerm) list = list.filter(t =>
       t.description?.includes(searchTerm) ||
       t.amount?.toString().includes(searchTerm) ||
@@ -170,8 +273,11 @@ export default function SupplierHistoryPage() {
     return list;
   }, [transactions, filterType, searchTerm]);
 
-  const totalInvoices = transactions.filter(t => t.type?.includes("فاتورة") || t.type?.includes("توريد")).reduce((s, t) => s + (Number(t.amount) || 0), 0);
-  const totalPaid     = transactions.filter(t => t.type?.includes("سداد") || t.type?.includes("دفع")).reduce((s, t) => s + (Number(t.amount) || 0), 0);
+  const totalInvoices = transactions.filter(t => isSupplierInvoice(t.type)).reduce((s, t) => s + (Number(t.amount) || 0), 0);
+  const totalReturns  = transactions.filter(t => isSupplierReturn(t.type)).reduce((s, t) => s + (Number(t.amount) || 0), 0);
+  const totalPaid     = transactions.filter(t => isSupplierInvoicePayment(t)).reduce((s, t) => s + (Number(t.amount) || 0), 0);
+  const totalCollected = transactions.filter(t => isSupplierCollection(t)).reduce((s, t) => s + (Number(t.amount) || 0), 0);
+  const totalSupplierPayments = totalPaid + totalCollected;
   const printSubtotal = (printTransaction?.items || []).reduce((sum: number, item: any) => sum + Number(item.qty || 0) * Number(item.price || 0), 0);
   const printNetTotal = Number(printTransaction?.amount || 0);
   const printDiscountAmount = Math.max(printSubtotal - printNetTotal, 0);
@@ -203,11 +309,24 @@ export default function SupplierHistoryPage() {
             >
               📥 فاتورة جديدة
             </Link>
+            <Link
+              href={`/suppliers/${id}/return`}
+              className="bg-rose-500 hover:bg-rose-400 text-white px-5 py-2.5 rounded-xl font-black text-sm transition-all active:scale-95"
+            >
+              ↩ فاتورة مرتجع
+            </Link>
+            <button
+              type="button"
+              onClick={openQuickPayment}
+              className="bg-emerald-600 hover:bg-emerald-500 text-white px-5 py-2.5 rounded-xl font-black text-sm transition-all active:scale-95"
+            >
+              💸 تحصيل بدون فاتورة
+            </button>
           </div>
         </header>
 
         {/* ══ Summary Cards ══ */}
-        <div className="grid grid-cols-3 gap-4">
+        <div className="grid grid-cols-4 gap-4">
           <div className="bg-white p-5 rounded-[2rem] border border-slate-200 shadow-sm text-center">
             <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">إجمالي الفواتير</p>
             <p className="text-2xl font-black text-slate-900">{totalInvoices.toLocaleString("ar-EG")}</p>
@@ -215,26 +334,41 @@ export default function SupplierHistoryPage() {
           </div>
           <div className="bg-white p-5 rounded-[2rem] border border-slate-200 shadow-sm text-center">
             <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">إجمالي السداد</p>
-            <p className="text-2xl font-black text-emerald-600">{totalPaid.toLocaleString("ar-EG")}</p>
+            <p className="text-2xl font-black text-emerald-600">{totalSupplierPayments.toLocaleString("ar-EG")}</p>
             <p className="text-[10px] text-slate-400 font-bold mt-1">ج.م</p>
           </div>
           <div className="bg-white p-5 rounded-[2rem] border border-slate-200 shadow-sm text-center">
-            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">عدد المعاملات</p>
-            <p className="text-2xl font-black text-indigo-600">{transactions.length}</p>
-            <p className="text-[10px] text-slate-400 font-bold mt-1">معاملة</p>
+            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">إجمالي المرتجعات</p>
+            <p className="text-2xl font-black text-rose-600">{totalReturns.toLocaleString("ar-EG")}</p>
+            <p className="text-[10px] text-slate-400 font-bold mt-1">ج.م</p>
+          </div>
+          <div className="bg-white p-5 rounded-[2rem] border border-slate-200 shadow-sm text-center">
+            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">إجمالي الدين</p>
+            <p className={`text-2xl font-black ${Number(supplier?.balance || 0) > 0 ? "text-rose-600" : "text-emerald-600"}`}>
+              {Number(supplier?.balance || 0).toLocaleString("ar-EG")}
+            </p>
+            <p className="text-[10px] text-slate-400 font-bold mt-1">ج.م</p>
           </div>
         </div>
 
         {/* ══ Filters ══ */}
         <div className="bg-white p-3 rounded-[2rem] border border-slate-200 shadow-sm space-y-3">
           <div className="flex gap-2 flex-wrap">
-            {(["all","فاتورة توريد","سداد نقدي"] as TxType[]).map(k => (
+            {(["all","invoice","supplier_return","payment","collection"] as TxType[]).map(k => (
               <button
                 key={k}
                 onClick={() => setFilterType(k)}
                 className={`px-4 py-2 rounded-xl text-xs font-black transition-all ${filterType === k ? "bg-[#0f172a] text-white" : "bg-slate-100 text-slate-500 hover:bg-slate-200"}`}
               >
-                {k === "all" ? `الكل (${transactions.length})` : k === "فاتورة توريد" ? `فواتير (${transactions.filter(t=>t.type?.includes("فاتورة")||t.type?.includes("توريد")).length})` : `سداد (${transactions.filter(t=>t.type?.includes("سداد")).length})`}
+                {k === "all"
+                  ? `الكل (${transactions.length})`
+                  : k === "invoice"
+                    ? `فواتير (${transactions.filter(t=>isSupplierInvoice(t.type)).length})`
+                    : k === "supplier_return"
+                      ? `مرتجعات (${transactions.filter(t=>isSupplierReturn(t.type)).length})`
+                      : k === "payment"
+                        ? `سداد (${transactions.filter(t=>isSupplierInvoicePayment(t)).length})`
+                        : `تحصيل (${transactions.filter(t=>isSupplierCollection(t)).length})`}
               </button>
             ))}
           </div>
@@ -257,9 +391,11 @@ export default function SupplierHistoryPage() {
         ) : (
           <div className="space-y-3">
             {filtered.map(t => {
-              const { icon, bg, color } = txStyle(t.type);
-              const isInvoice = t.type?.includes("فاتورة") || t.type?.includes("توريد");
-              const isPayment = t.type?.includes("سداد") || t.type?.includes("دفع") || t.type?.includes("ط³ط¯ط§ط¯") || t.type?.includes("ط¯ظپط¹");
+              const { icon, bg, color } = txStyle(t);
+              const isInvoice = isSupplierInvoice(t.type);
+              const isReturn = isSupplierReturn(t.type);
+              const isCollection = isSupplierCollection(t);
+              const isPayment = isSupplierInvoicePayment(t) || isCollection || t.type?.includes("ط³ط¯ط§ط¯") || t.type?.includes("ط¯ظپط¹");
               const isOpen    = expandedId === t.id;
               return (
                 <div key={t.id} className="bg-white rounded-[2rem] border border-slate-200 shadow-sm overflow-hidden">
@@ -270,7 +406,7 @@ export default function SupplierHistoryPage() {
                     <div className="flex items-center gap-4">
                       <div className={`w-12 h-12 rounded-2xl flex items-center justify-center text-xl ${bg}`}>{icon}</div>
                       <div>
-                        <p className={`font-black text-sm ${color}`}>{t.type}</p>
+                        <p className={`font-black text-sm ${color}`}>{txLabel(t)}</p>
                         <p className="text-[10px] font-bold text-slate-400 mt-0.5">
                           {new Date(t.created_at).toLocaleString("ar-EG", { day:"numeric", month:"long", year:"numeric", hour:"2-digit", minute:"2-digit" })}
                         </p>
@@ -278,7 +414,7 @@ export default function SupplierHistoryPage() {
                     </div>
                     <div className="flex items-center gap-4">
                       <div className="text-left">
-                        <p className={`text-xl font-black ${isInvoice ? "text-slate-900" : "text-emerald-600"}`}>
+                        <p className={`text-xl font-black ${isInvoice ? "text-slate-900" : isReturn ? "text-rose-600" : isCollection ? "text-blue-600" : "text-emerald-600"}`}>
                           {isInvoice ? "+" : "−"} {t.amount?.toLocaleString("ar-EG")} ج.م
                         </p>
                         {t.items?.length > 0 && (
@@ -319,18 +455,28 @@ export default function SupplierHistoryPage() {
                           {/* تعديل الفاتورة */}
                           <div className="flex justify-between items-center border-t border-slate-200 pt-4">
                             <div className="flex gap-2">
-                              <Link
-                                href={`/suppliers/${id}/history/edit/${t.id}`}
-                                className="bg-slate-200 hover:bg-amber-500 hover:text-white text-slate-600 px-4 py-2 rounded-xl text-[10px] font-black transition-all"
-                              >
-                                ✏️ تعديل الفاتورة
-                              </Link>
+                              {isInvoice && (
+                                <>
+                                  <Link
+                                    href={`/suppliers/${id}/history/edit/${t.id}`}
+                                    className="bg-slate-200 hover:bg-amber-500 hover:text-white text-slate-600 px-4 py-2 rounded-xl text-[10px] font-black transition-all"
+                                  >
+                                    ✏️ تعديل الفاتورة
+                                  </Link>
+                                  <Link
+                                    href={`/suppliers/${id}/return`}
+                                    className="bg-rose-100 hover:bg-rose-500 hover:text-white text-rose-700 px-4 py-2 rounded-xl text-[10px] font-black transition-all"
+                                  >
+                                    ↩ مرتجع
+                                  </Link>
+                                </>
+                              )}
                               <button
                                 type="button"
                                 onClick={() => setPrintTransaction(t)}
                                 className="bg-white border border-slate-200 hover:bg-slate-900 hover:text-white text-slate-600 px-4 py-2 rounded-xl text-[10px] font-black transition-all"
                               >
-                                طباعة الفاتورة
+                                {isReturn ? "طباعة المرتجع" : "طباعة الفاتورة"}
                               </button>
                             </div>
                             {t.description && (
@@ -343,13 +489,15 @@ export default function SupplierHistoryPage() {
                         <p className="text-slate-400 font-bold text-sm text-center py-4">{t.description || "لا تفاصيل"}</p>
                           {isPayment && (
                             <div className="flex justify-between items-center border-t border-slate-200 pt-4 mt-4 gap-3">
-                              <p className="text-xs text-slate-400 font-bold">يمكن تعديل مبلغ السداد وسيتم تسجيل تاريخ التعديل تلقائيا.</p>
+                              <p className="text-xs text-slate-400 font-bold">
+                                يمكن تعديل مبلغ {isCollection ? "التحصيل" : "السداد"} وسيتم تسجيل تاريخ التعديل تلقائيا.
+                              </p>
                               <button
                                 type="button"
                                 onClick={() => openPaymentEdit(t)}
                                 className="bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 rounded-xl text-[10px] font-black transition-all"
                               >
-                                تعديل السداد
+                                {isCollection ? "تعديل التحصيل" : "تعديل السداد"}
                               </button>
                             </div>
                           )}
@@ -364,13 +512,83 @@ export default function SupplierHistoryPage() {
         )}
       </div>
 
+      {showQuickPayment && (
+        <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-sm z-[120] flex items-center justify-center p-4" onClick={() => setShowQuickPayment(false)}>
+          <div className="bg-white w-full max-w-lg rounded-[2rem] shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
+            <div className="bg-emerald-50 p-6 border-b border-emerald-100 flex justify-between items-center">
+              <div>
+                <h2 className="text-xl font-black text-slate-900">تحصيل بدون فاتورة</h2>
+                <p className="text-[10px] text-emerald-700 font-bold mt-1">سيتم تسجيل معاملة تحصيل مستقلة وتخفيض رصيد المورد مباشرة.</p>
+              </div>
+              <button onClick={() => setShowQuickPayment(false)} className="text-slate-400 hover:text-rose-500 transition-colors text-2xl font-black">×</button>
+            </div>
+            <div className="p-6 space-y-4">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="bg-slate-50 p-4 rounded-2xl text-center">
+                  <p className="text-[10px] font-black text-slate-400 mb-1">رصيد المورد الحالي</p>
+                  <p className="text-xl font-black text-rose-600">{Number(supplier?.balance || 0).toLocaleString("ar-EG")} ج</p>
+                </div>
+                <div className="bg-emerald-50 p-4 rounded-2xl text-center border border-emerald-100">
+                  <p className="text-[10px] font-black text-emerald-700 mb-1">المبلغ المدفوع</p>
+                  <input
+                    type="number"
+                    step="any"
+                    min="0"
+                    value={quickPaymentAmount}
+                    onChange={e => setQuickPaymentAmount(e.target.value)}
+                    className="w-full bg-white border-2 border-emerald-100 rounded-xl p-2 text-center text-xl font-black text-emerald-700 outline-none focus:border-emerald-400"
+                    autoFocus
+                  />
+                </div>
+              </div>
+              {Number(quickPaymentAmount || 0) > 0 && (
+                <div className="bg-slate-50 border border-slate-100 rounded-2xl p-4 text-center">
+                  <p className="text-[10px] font-black text-slate-400 mb-1">الرصيد بعد التحصيل</p>
+                  <p className={`text-2xl font-black ${Number(supplier?.balance || 0) - Number(quickPaymentAmount || 0) > 0 ? "text-rose-600" : "text-emerald-600"}`}>
+                    {(Number(supplier?.balance || 0) - Number(quickPaymentAmount || 0)).toLocaleString("ar-EG")} ج
+                  </p>
+                </div>
+              )}
+              <div>
+                <label className="block text-[10px] font-black text-slate-400 mb-2">ملاحظة</label>
+                <textarea
+                  value={quickPaymentNote}
+                  onChange={e => setQuickPaymentNote(e.target.value)}
+                  className="w-full min-h-24 bg-slate-50 border-2 border-slate-100 rounded-2xl p-4 text-sm font-bold text-slate-700 outline-none focus:border-emerald-300"
+                  placeholder="ملاحظة اختيارية..."
+                />
+              </div>
+            </div>
+            <div className="bg-[#0f172a] p-5 flex justify-between items-center gap-3">
+              <button
+                type="button"
+                onClick={() => setShowQuickPayment(false)}
+                className="bg-white/10 hover:bg-white/20 text-white px-5 py-3 rounded-xl text-sm font-black transition-all"
+              >
+                إلغاء
+              </button>
+              <button
+                type="button"
+                onClick={handleQuickPaymentSave}
+                disabled={quickPaymentSaving || Number(quickPaymentAmount || 0) <= 0}
+                className="bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white px-7 py-3 rounded-xl text-sm font-black transition-all"
+              >
+                {quickPaymentSaving ? "جاري الحفظ..." : "تأكيد التحصيل"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ══ Edit Modal ══ */}
       {paymentEdit && (
         <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-sm z-[120] flex items-center justify-center p-4" onClick={() => setPaymentEdit(null)}>
           <div className="bg-white w-full max-w-lg rounded-[2rem] shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
             <div className="bg-slate-50 p-6 border-b border-slate-100 flex justify-between items-center">
               <div>
-                <h2 className="text-xl font-black text-slate-900">تعديل السداد</h2>
+                <h2 className="text-xl font-black text-slate-900">
+                  {paymentEdit && isSupplierCollection(paymentEdit) ? "تعديل التحصيل" : "تعديل السداد"}
+                </h2>
                 <p className="text-[10px] text-slate-400 font-bold mt-1">سيتم تحديث رصيد المورد وحفظ تنبيه بتاريخ التعديل.</p>
               </div>
               <button onClick={() => setPaymentEdit(null)} className="text-slate-400 hover:text-rose-500 transition-colors text-2xl font-black">×</button>
@@ -506,7 +724,7 @@ export default function SupplierHistoryPage() {
           <div className="print-card">
             <div className="print-header">
               <div>
-                <p className="print-eyebrow">فاتورة توريد</p>
+                <p className="print-eyebrow">{isSupplierReturn(printTransaction.type) ? "فاتورة مرتجع مورد" : "فاتورة توريد"}</p>
                 <h1>منظومة إدارة المكتبة</h1>
                 <p>إدارة الموردين والأصناف</p>
               </div>
@@ -541,7 +759,7 @@ export default function SupplierHistoryPage() {
             <div className="print-summary">
               <p><span>الإجمالي قبل الخصم</span><b>{printSubtotal.toLocaleString("ar-EG")} ج</b></p>
               <p><span>الخصم ({printDiscountRate}%)</span><b>{printDiscountAmount.toLocaleString("ar-EG")} ج</b></p>
-              <p className="print-total"><span>صافي الفاتورة</span><b>{printNetTotal.toLocaleString("ar-EG")} ج</b></p>
+              <p className="print-total"><span>{isSupplierReturn(printTransaction.type) ? "صافي المرتجع" : "صافي الفاتورة"}</span><b>{printNetTotal.toLocaleString("ar-EG")} ج</b></p>
             </div>
             {printTransaction.description && <p className="print-note">ملاحظة: {printTransaction.description}</p>}
           </div>

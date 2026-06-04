@@ -57,8 +57,8 @@ export default function SuppliersPage() {
       await supabase.from("transactions").insert([{
         supplier_id: selectedSupp.id,
         amount: payAmount,
-        type: "سداد نقدي",
-        description: payNote || "سداد سريع",
+        type: "تحصيل نقدي",
+        description: payNote || "تحصيل بدون فاتورة",
       }]);
       await supabase.from("suppliers")
         .update({ balance: (selectedSupp.balance || 0) - payAmount })
@@ -211,12 +211,16 @@ export default function SuppliersPage() {
                             onClick={() => { setSelectedSupp(s); setPayAmount(0); setPayNote(""); setShowPayModal(true); }}
                             className="app-btn app-btn-sm app-btn-success"
                           >
-                            💸 سداد
+                            💸 تحصيل بدون فاتورة
                           </button>
                         )}
                         <Link href={`/suppliers/${s.id}`}
                           className="app-btn app-btn-sm app-btn-primary">
                           📥 فاتورة
+                        </Link>
+                        <Link href={`/suppliers/${s.id}/return`}
+                          className="app-btn app-btn-sm app-btn-warning">
+                          ↩ مرتجع
                         </Link>
                         <Link href={`/suppliers/${s.id}/history`}
                           className="app-btn app-btn-sm app-btn-soft">
@@ -233,11 +237,11 @@ export default function SuppliersPage() {
 
       </main>
 
-      {/* ══ Modal: سداد سريع ══ */}
+      {/* ══ Modal: تحصيل بدون فاتورة ══ */}
       {showPayModal && selectedSupp && (
         <Modal onClose={() => setShowPayModal(false)}>
           <div className="border-r-4 border-emerald-500 pr-3 mb-6">
-            <h3 className="text-xl font-black text-slate-900">سداد لـ: {selectedSupp.name}</h3>
+            <h3 className="text-xl font-black text-slate-900">تحصيل بدون فاتورة لـ: {selectedSupp.name}</h3>
             <p className="text-xs text-slate-400 font-bold mt-1">
               المديونية الحالية: <span className="text-rose-600 font-black">{selectedSupp.balance.toLocaleString("ar-EG")} ج.م</span>
             </p>
@@ -255,7 +259,7 @@ export default function SuppliersPage() {
               />
               {payAmount > 0 && (
                 <p className="text-xs text-slate-400 font-bold mt-2">
-                  المتبقي بعد السداد:{" "}
+                  المتبقي بعد التحصيل:{" "}
                   <span className={`font-black ${selectedSupp.balance - payAmount > 0 ? "text-rose-500" : "text-emerald-600"}`}>
                     {(selectedSupp.balance - payAmount).toLocaleString("ar-EG")} ج.م
                   </span>
@@ -266,7 +270,7 @@ export default function SuppliersPage() {
               <label className="text-xs font-black text-slate-400 mb-1 block">ملاحظة (اختياري)</label>
               <input
                 className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl font-bold text-slate-900 outline-none text-sm"
-                placeholder="مثال: دفعة تحت الحساب"
+                placeholder="ملاحظة اختيارية"
                 value={payNote}
                 onChange={e => setPayNote(e.target.value)}
               />
@@ -277,7 +281,7 @@ export default function SuppliersPage() {
                 disabled={saving || payAmount <= 0}
                 className="flex-1 bg-emerald-500 hover:bg-emerald-400 text-white py-4 rounded-2xl font-black text-lg transition-all active:scale-95 disabled:opacity-50"
               >
-                {saving ? "جاري السداد..." : "تأكيد السداد ✅"}
+                {saving ? "جاري التحصيل..." : "تأكيد التحصيل ✅"}
               </button>
               <button onClick={() => setShowPayModal(false)} className="px-6 py-4 bg-slate-100 text-slate-500 rounded-2xl font-black hover:bg-slate-200 transition-all">إلغاء</button>
             </div>
@@ -296,7 +300,7 @@ export default function SuppliersPage() {
               <label className="text-xs font-black text-slate-400 mb-1 block">اسم المورد / الجهة *</label>
               <input
                 className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-slate-900 outline-none focus:border-indigo-400 transition-all"
-                placeholder="مثال: شركة النور للتجارة"
+                placeholder="اسم المورد"
                 value={newSupp.name}
                 onChange={e => setNewSupp({...newSupp, name: e.target.value})}
                 autoFocus

@@ -29,6 +29,7 @@ create table if not exists public.products (
   created_at timestamptz default now(),
   supplier_id uuid,
   barcode text,
+  product_category text not null default 'stationery',
   constraint products_pkey primary key (id),
   constraint products_barcode_key unique (barcode),
   constraint products_supplier_id_fkey foreign key (supplier_id) references public.suppliers(id)
@@ -85,6 +86,18 @@ create index if not exists transactions_supplier_id_idx on public.transactions(s
 create index if not exists transactions_customer_id_idx on public.transactions(customer_id);
 create index if not exists transactions_created_at_idx on public.transactions(created_at);
 create index if not exists products_supplier_id_idx on public.products(supplier_id);
+
+alter table public.products
+  add column if not exists product_category text not null default 'stationery';
+
+alter table public.products
+  drop constraint if exists products_product_category_check;
+
+alter table public.products
+  add constraint products_product_category_check
+  check (product_category in ('books', 'stationery'));
+
+create index if not exists products_product_category_idx on public.products(product_category);
 
 create or replace function public.increment_stock(row_id uuid, amount numeric)
 returns void

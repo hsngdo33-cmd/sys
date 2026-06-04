@@ -2,6 +2,7 @@
 import { useState, useEffect, use } from "react";
 import { supabase } from "@/lib/supabase";
 import { useRouter } from "next/navigation";
+import { PRODUCT_CATEGORIES, ProductCategory, normalizeProductCategory, productCategoryLabel } from "@/lib/product-category";
 
 export default function EditSupplierInvoicePage({ params }: { params: Promise<any> }) {
   const router          = useRouter();
@@ -13,6 +14,7 @@ export default function EditSupplierInvoicePage({ params }: { params: Promise<an
   const [transaction, setTransaction] = useState<any>(null);
   const [items, setItems]             = useState<any[]>([]);
   const [products, setProducts]       = useState<any[]>([]);
+  const [activeCategory, setActiveCategory] = useState<ProductCategory>("books");
   const [productSearch, setProductSearch] = useState("");
   const [discountPercent, setDiscountPercent] = useState<number | string>(0);
   const [isSaving, setIsSaving]       = useState(false);
@@ -26,7 +28,7 @@ export default function EditSupplierInvoicePage({ params }: { params: Promise<an
     setLoading(true);
     const [{ data, error }, { data: prods }] = await Promise.all([
       supabase.from("transactions").select("*").eq("id", transId).single(),
-      supabase.from("products").select("id,name,unit,purchase_price,sale_price,stock_quantity,barcode").order("name"),
+      supabase.from("products").select("id,name,unit,purchase_price,sale_price,stock_quantity,barcode,product_category").order("name"),
     ]);
     if (error) { alert("مشكلة في تحميل الفاتورة"); }
     else {
@@ -34,14 +36,15 @@ export default function EditSupplierInvoicePage({ params }: { params: Promise<an
       // جلب الوحدات
       const itemsWithUnits = await Promise.all(
         (data.items || []).map(async (item: any) => {
-          const { data: p } = await supabase.from("products").select("unit").eq("id", item.id).maybeSingle();
-          return { ...item, unit: p?.unit || item.unit || "وحدة" };
+          const { data: p } = await supabase.from("products").select("unit,product_category").eq("id", item.id).maybeSingle();
+          return { ...item, unit: p?.unit || item.unit || "وحدة", product_category: item.product_category || p?.product_category };
         })
       );
       const gross = itemsWithUnits.reduce((s: number, i: any) => s + Number(i.qty || 0) * Number(i.price || 0), 0);
       setItems(itemsWithUnits);
       setNote(data.description || "");
       setDiscountPercent(gross > 0 && Number(data.amount) < gross ? Number((((gross - Number(data.amount)) / gross) * 100).toFixed(2)) : 0);
+      setActiveCategory(normalizeProductCategory(itemsWithUnits[0]?.product_category));
     }
     setProducts(prods || []);
     setLoading(false);
@@ -55,6 +58,7 @@ export default function EditSupplierInvoicePage({ params }: { params: Promise<an
       unit: product.unit,
       qty: 1,
       price: product.purchase_price,
+      product_category: normalizeProductCategory(product.product_category),
     }]);
   };
 
@@ -70,6 +74,7 @@ export default function EditSupplierInvoicePage({ params }: { params: Promise<an
       const grossTotal = items.reduce((s, i) => s + Number(i.qty) * Number(i.price), 0);
       const discountRate = Math.min(Math.max(Number(discountPercent) || 0, 0), 100);
       const newTotal = Math.max(grossTotal - (grossTotal * discountRate / 100), 0);
+      const purchasePriceFactor = grossTotal > 0 ? newTotal / grossTotal : 1;
       const diff     = newTotal - transaction.amount;
 
       // إرجاع الكميات القديمة (decrement = إزالة من الأصناف ما أضفناه قبل)
@@ -79,6 +84,12 @@ export default function EditSupplierInvoicePage({ params }: { params: Promise<an
       // إضافة الكميات الجديدة
       for (const item of items) {
         if (item.id) await supabase.rpc("increment_stock", { row_id: String(item.id), amount: Number(item.qty) });
+        if (item.id) {
+          await supabase
+            .from("products")
+            .update({ purchase_price: Number((Number(item.price || 0) * purchasePriceFactor).toFixed(2)) })
+            .eq("id", String(item.id));
+        }
       }
 
       // تحديث رصيد المورد
@@ -90,7 +101,11 @@ export default function EditSupplierInvoicePage({ params }: { params: Promise<an
       // تحديث الفاتورة (بدون الوحدة عشان تفضل الداتا نضيفة)
       await supabase.from("transactions").update({
         amount: newTotal,
-        items: items.map(({ unit, ...rest }) => rest),
+        items: items.map(({ unit, ...rest }) => ({
+          ...rest,
+          net_price: Number((Number(rest.price || 0) * purchasePriceFactor).toFixed(2)),
+          product_category: normalizeProductCategory(rest.product_category),
+        })),
         description: note || `تعديل فاتورة توريد — ${new Date().toLocaleString("ar-EG")}`,
       }).eq("id", transId);
 
@@ -107,7 +122,10 @@ export default function EditSupplierInvoicePage({ params }: { params: Promise<an
   const discountAmount = grossTotal * (discountRate / 100);
   const newTotal = Math.max(grossTotal - discountAmount, 0);
   const diff     = transaction ? newTotal - transaction.amount : 0;
-  const filteredProducts = products.filter(product => product.name?.toLowerCase().includes(productSearch.toLowerCase()));
+  const filteredProducts = products.filter(product =>
+    normalizeProductCategory(product.product_category) === activeCategory &&
+    product.name?.toLowerCase().includes(productSearch.toLowerCase())
+  );
 
   if (loading) return (
     <div className="min-h-screen flex items-center justify-center bg-[#f1f5f9] font-black text-slate-400 text-xl" dir="rtl">
@@ -149,6 +167,25 @@ export default function EditSupplierInvoicePage({ params }: { params: Promise<an
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <div>
               <label className="block text-[10px] font-black text-slate-400 mb-1">إضافة صنف للفاتورة</label>
+              <div className="grid grid-cols-2 gap-2 mb-2">
+                {PRODUCT_CATEGORIES.map((category) => (
+                  <button
+                    key={category.key}
+                    type="button"
+                    onClick={() => {
+                      setActiveCategory(category.key);
+                      setProductSearch("");
+                    }}
+                    className={`rounded-xl px-3 py-2 text-xs font-black transition-all ${
+                      activeCategory === category.key
+                        ? "bg-slate-900 text-white"
+                        : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                    }`}
+                  >
+                    {category.label}
+                  </button>
+                ))}
+              </div>
               <input
                 value={productSearch}
                 onChange={e => setProductSearch(e.target.value)}
@@ -165,7 +202,7 @@ export default function EditSupplierInvoicePage({ params }: { params: Promise<an
                       className="w-full flex justify-between items-center rounded-xl bg-white px-3 py-2 text-sm font-black text-slate-700 hover:bg-amber-50"
                     >
                       <span>{product.name}</span>
-                      <span className="text-[10px] text-slate-400">{product.purchase_price} ج</span>
+                      <span className="text-[10px] text-slate-400">{product.purchase_price} ج - {productCategoryLabel(product.product_category)}</span>
                     </button>
                   ))}
                 </div>
