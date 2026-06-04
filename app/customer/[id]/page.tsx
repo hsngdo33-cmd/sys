@@ -65,7 +65,7 @@ export default function CustomerInvoicePage() {
   );
 
   const addToCart = (p: Product) => {
-    if (p.stock_quantity <= 0) return alert("الكتاب ده نسخه خلصت!");
+    if (p.stock_quantity <= 0) return alert("الصنف ده خلص!");
     if (cart.find(i => i.id === p.id)) return;
     setCart(prev => [...prev, { ...p, qty: 1, price: p.sale_price, cost: p.purchase_price }]);
   };
@@ -78,7 +78,7 @@ export default function CustomerInvoicePage() {
     const found = products.find(p => cleanBarcode(p.barcode) === barcode);
 
     if (!found) {
-      return alert("الباركود غير مسجل في فهرس الكتب");
+      return alert("الباركود غير مسجل في الأصناف");
     }
 
     addToCart(found);
@@ -149,7 +149,7 @@ export default function CustomerInvoicePage() {
   const margin     = total > 0 ? Math.round((profit / total) * 100) : 0;
 
   const saveInvoice = async (printAfterSave = false) => {
-    if (!customer) return alert("بيانات القارئ لم تحمل بعد");
+    if (!customer) return alert("بيانات العميل لم تحمل بعد");
     if (cart.length === 0) return alert("الفاتورة فاضية!");
     setIsSaving(true);
     try {
@@ -161,7 +161,7 @@ export default function CustomerInvoicePage() {
       const { data: invoice, error: invoiceError } = await supabase.from("customer_transactions").insert([{
         customer_id: id, amount: total, type: "sale",
         items: itemsToSave, profit,
-        description: note || `بيع كتب لـ ${customer.name}${discountRate > 0 ? ` - خصم ${discountRate}%` : ""}`,
+        description: note || `بيع أصناف لـ ${customer.name}${discountRate > 0 ? ` - خصم ${discountRate}%` : ""}`,
       }]).select("id").single();
       if (invoiceError) throw invoiceError;
 
@@ -194,13 +194,13 @@ export default function CustomerInvoicePage() {
         <div className="flex items-center gap-4">
           <Link href="/customer" className="bg-white/10 hover:bg-white/20 px-4 py-2 rounded-xl text-xs font-black transition-all">⬅️ رجوع</Link>
           <div>
-            <h1 className="text-lg font-black">فاتورة قارئ: {customer?.name}</h1>
+            <h1 className="text-lg font-black">فاتورة عميل: {customer?.name}</h1>
             <p className="text-[10px] text-slate-400 font-bold">{new Date().toLocaleDateString("ar-EG", { weekday:"long", day:"numeric", month:"long" })}</p>
           </div>
         </div>
         <div className="flex items-center gap-3">
           {cart.length > 0 && (
-            <span className="bg-indigo-600 px-3 py-1 rounded-lg text-[10px] font-black">{cart.length} كتاب</span>
+            <span className="bg-indigo-600 px-3 py-1 rounded-lg text-[10px] font-black">{cart.length} صنف</span>
           )}
           <div className={`px-4 py-1.5 rounded-lg text-[10px] font-black ${(customer?.balance || 0) > 0 ? "bg-rose-600" : "bg-emerald-600"}`}>
             مديونية: {customer?.balance?.toLocaleString("ar-EG")} ج.م
@@ -210,10 +210,10 @@ export default function CustomerInvoicePage() {
 
       <main className="app-invoice-layout max-w-[1500px] mx-auto p-4 mt-3">
 
-        {/* ══ قائمة الكتب ══ */}
+        {/* ══ قائمة الأصناف ══ */}
         <aside className="app-invoice-sidebar bg-white border border-slate-200 shadow-sm flex flex-col">
           <div className="p-4 border-b border-slate-100 space-y-3">
-            <h3 className="font-black text-slate-400 text-[10px] uppercase tracking-widest">📚 اختيار الكتب</h3>
+            <h3 className="font-black text-slate-400 text-[10px] uppercase tracking-widest">📦 اختيار الأصناف</h3>
             <input
               type="text"
               placeholder="🔍 ابحث..."
@@ -270,18 +270,18 @@ export default function CustomerInvoicePage() {
         {/* ══ الفاتورة ══ */}
         <section className="min-w-0">
 
-          {/* جدول الكتب */}
+          {/* جدول الأصناف */}
           <div className="app-invoice-table bg-white border border-slate-200 shadow-sm overflow-auto">
             {cart.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-64 text-slate-300 space-y-3">
                 <span className="text-5xl">🧾</span>
-                <p className="font-black">اختار كتب من الجانب</p>
+                <p className="font-black">اختار أصناف من الجانب</p>
               </div>
             ) : (
               <table className="w-full text-right border-collapse">
                 <thead className="bg-slate-50 text-slate-400 font-black text-[10px] uppercase border-b border-slate-100">
                   <tr>
-                    <th className="p-4">الكتاب</th>
+                    <th className="p-4">الصنف</th>
                     <th className="p-4 text-center">الكمية</th>
                     <th className="p-4 text-center">السعر <span className="text-indigo-400 normal-case font-normal">(قابل للتعديل)</span></th>
                     <th className="p-4 text-center">الربح</th>
@@ -421,18 +421,18 @@ export default function CustomerInvoicePage() {
             <div>
               <p className="print-eyebrow">فاتورة بيع</p>
               <h1>منظومة إدارة المكتبة</h1>
-              <p>إدارة القراء والكتب</p>
+              <p>إدارة العملاء والمبيعات</p>
             </div>
             <div className="print-meta">
               <p>التاريخ: {new Date().toLocaleDateString("ar-EG")}</p>
-              <p>القارئ: {customer?.name || "-"}</p>
+              <p>العميل: {customer?.name || "-"}</p>
               <p>الرصيد السابق: {(customer?.balance || 0).toLocaleString("ar-EG")} ج.م</p>
             </div>
           </div>
           <table className="print-table">
             <thead>
               <tr>
-                <th>الكتاب</th>
+                <th>الصنف</th>
                 <th>الوحدة</th>
                 <th>الكمية</th>
                 <th>السعر</th>

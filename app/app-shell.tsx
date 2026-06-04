@@ -20,22 +20,22 @@ import {
 const navItems = [
   { href: "/", label: "الرئيسية", icon: Home },
   { href: "/suppliers", label: "الموردين", icon: Truck },
-  { href: "/customer", label: "القراء", icon: UsersRound },
-  { href: "/inventory", label: "الكتب", icon: BookOpen },
+  { href: "/customer", label: "العملاء", icon: UsersRound },
+  { href: "/inventory", label: "الأصناف", icon: BookOpen },
   { href: "/reports", label: "التقارير", icon: BarChart3 },
   { href: "/settings/reports", label: "الإعدادات", icon: Settings },
 ];
 
 const quickLinks = [
-  { href: "/inventory", label: "إضافة كتاب", icon: PackagePlus },
+  { href: "/inventory", label: "إضافة صنف", icon: PackagePlus },
   { href: "/suppliers", label: "فاتورة توريد", icon: ReceiptText },
-  { href: "/customer", label: "بيع/إعارة", icon: WalletCards },
+  { href: "/customer", label: "فاتورة بيع", icon: WalletCards },
 ];
 
 function getPageTitle(pathname: string) {
   if (pathname.startsWith("/suppliers")) return "إدارة الموردين";
-  if (pathname.startsWith("/customer")) return "دليل القراء";
-  if (pathname.startsWith("/inventory")) return "فهرس الكتب والباركود";
+  if (pathname.startsWith("/customer")) return "إدارة العملاء";
+  if (pathname.startsWith("/inventory")) return "الأصناف والباركود";
   if (pathname.startsWith("/reports")) return "التقارير والتحليلات";
   if (pathname.startsWith("/settings")) return "إعدادات النظام";
   return "لوحة المكتبة";
@@ -56,7 +56,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               </div>
               <div>
                 <p className="text-lg font-black">نظام إدارة مكتبة</p>
-                <p className="text-xs text-slate-400 font-bold">كتب، قراء، موردين</p>
+                <p className="text-xs text-slate-400 font-bold">كتب وأدوات، عملاء، موردين</p>
               </div>
             </Link>
           </div>
@@ -130,7 +130,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                     <Search className="absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                     <input
                       type="search"
-                      placeholder="بحث سريع في الكتب أو القراء..."
+                      placeholder="بحث سريع في الأصناف أو العملاء..."
                       className="h-11 w-full rounded-2xl border border-slate-200 bg-slate-50 pr-11 pl-4 text-sm font-bold outline-none transition focus:border-emerald-400 focus:bg-white sm:h-12"
                     />
                   </div>

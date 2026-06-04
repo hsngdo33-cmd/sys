@@ -86,14 +86,14 @@ export default function EditInvoicePage({ params }: { params: Promise<any> }) {
         }
       }
 
-      // ── خصم الكميات الجديدة من فهرس الكتب ──
+      // ── خصم الكميات الجديدة من الأصناف ──
       for (const newItem of items) {
         if (newItem.id) {
           await supabase.rpc("decrement_stock", { row_id: String(newItem.id), amount: Number(newItem.qty) });
         }
       }
 
-      // ── تحديث رصيد القارئ ──
+      // ── تحديث رصيد العميل ──
       const { data: currentCust } = await supabase
         .from("customers").select("balance").eq("id", customerId).single();
       await supabase.from("customers")
@@ -165,11 +165,11 @@ export default function EditInvoicePage({ params }: { params: Promise<any> }) {
         <div className="bg-white rounded-[2rem] border border-slate-200 shadow-sm p-5">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <div>
-              <label className="block text-[10px] font-black text-slate-400 mb-1">إضافة كتاب للفاتورة</label>
+              <label className="block text-[10px] font-black text-slate-400 mb-1">إضافة صنف للفاتورة</label>
               <input
                 value={productSearch}
                 onChange={e => setProductSearch(e.target.value)}
-                placeholder="ابحث عن كتاب واضغط عليه..."
+                placeholder="ابحث عن صنف واضغط عليه..."
                 className="w-full p-3 bg-slate-50 border border-slate-200 rounded-2xl font-bold outline-none focus:border-indigo-400"
               />
               {productSearch && (
@@ -225,16 +225,16 @@ export default function EditInvoicePage({ params }: { params: Promise<any> }) {
           </div>
         )}
 
-        {/* ══ جدول الكتب ══ */}
+        {/* ══ جدول الأصناف ══ */}
         <div className="bg-white rounded-[2rem] border border-slate-200 shadow-sm overflow-hidden">
           <div className="p-5 border-b border-slate-100">
-            <h2 className="font-black text-slate-900">الكتب</h2>
+            <h2 className="font-black text-slate-900">الأصناف</h2>
             <p className="text-[10px] text-slate-400 font-bold uppercase mt-0.5">عدّل الكميات والأسعار حسب الحاجة</p>
           </div>
           <table className="w-full border-collapse">
             <thead className="bg-slate-50 text-[10px] font-black text-slate-400 uppercase border-b border-slate-100">
               <tr>
-                <th className="p-5 text-right">الكتاب</th>
+                <th className="p-5 text-right">الصنف</th>
                 <th className="p-5 text-center">الكمية</th>
                 <th className="p-5 text-center">
                   السعر
@@ -364,13 +364,13 @@ export default function EditInvoicePage({ params }: { params: Promise<any> }) {
             <div className="text-5xl">⚠️</div>
             <h3 className="text-xl font-black text-slate-900">تأكيد التعديل</h3>
             <p className="text-sm text-slate-500 font-bold leading-relaxed">
-              هيتم تحديث فهرس الكتب ورصيد القارئ تلقائياً. مش هينفع ترجع للأرقام القديمة.
+              هيتم تحديث الأصناف ورصيد العميل تلقائياً. مش هينفع ترجع للأرقام القديمة.
             </p>
             {diff !== 0 && (
               <div className={`px-4 py-3 rounded-2xl text-sm font-black ${diff > 0 ? "bg-rose-50 text-rose-700" : "bg-emerald-50 text-emerald-700"}`}>
                 {diff > 0
-                  ? `⬆️ دين القارئ هيزيد ${Math.abs(diff).toLocaleString("ar-EG")} ج.م`
-                  : `⬇️ دين القارئ هينقص ${Math.abs(diff).toLocaleString("ar-EG")} ج.م`
+                  ? `⬆️ دين العميل هيزيد ${Math.abs(diff).toLocaleString("ar-EG")} ج.م`
+                  : `⬇️ دين العميل هينقص ${Math.abs(diff).toLocaleString("ar-EG")} ج.م`
                 }
               </div>
             )}

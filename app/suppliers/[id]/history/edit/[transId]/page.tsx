@@ -72,7 +72,7 @@ export default function EditSupplierInvoicePage({ params }: { params: Promise<an
       const newTotal = Math.max(grossTotal - (grossTotal * discountRate / 100), 0);
       const diff     = newTotal - transaction.amount;
 
-      // إرجاع الكميات القديمة (decrement = إزالة من فهرس الكتب ما أضفناه قبل)
+      // إرجاع الكميات القديمة (decrement = إزالة من الأصناف ما أضفناه قبل)
       for (const old of transaction.items || []) {
         if (old.id) await supabase.rpc("decrement_stock", { row_id: String(old.id), amount: Number(old.qty) });
       }
@@ -148,11 +148,11 @@ export default function EditSupplierInvoicePage({ params }: { params: Promise<an
         <div className="bg-white rounded-[2rem] border border-slate-200 shadow-sm p-5">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <div>
-              <label className="block text-[10px] font-black text-slate-400 mb-1">إضافة كتاب للفاتورة</label>
+              <label className="block text-[10px] font-black text-slate-400 mb-1">إضافة صنف للفاتورة</label>
               <input
                 value={productSearch}
                 onChange={e => setProductSearch(e.target.value)}
-                placeholder="ابحث عن كتاب واضغط عليه..."
+                placeholder="ابحث عن صنف واضغط عليه..."
                 className="w-full p-3 bg-slate-50 border border-slate-200 rounded-2xl font-bold outline-none focus:border-amber-400"
               />
               {productSearch && (
@@ -208,16 +208,16 @@ export default function EditSupplierInvoicePage({ params }: { params: Promise<an
           </div>
         )}
 
-        {/* ══ جدول الكتب ══ */}
+        {/* ══ جدول الأصناف ══ */}
         <div className="bg-white rounded-[2rem] border border-slate-200 shadow-sm overflow-hidden">
           <div className="p-5 border-b border-slate-100">
-            <h2 className="font-black text-slate-900">الكتب</h2>
-            <p className="text-[10px] text-slate-400 font-bold uppercase mt-0.5">عدّل الكميات والأسعار — فهرس الكتب هيتحدث تلقائياً</p>
+            <h2 className="font-black text-slate-900">الأصناف</h2>
+            <p className="text-[10px] text-slate-400 font-bold uppercase mt-0.5">عدّل الكميات والأسعار — الأصناف هتتحدث تلقائياً</p>
           </div>
           <table className="w-full border-collapse">
             <thead className="bg-slate-50 text-[10px] font-black text-slate-400 uppercase border-b border-slate-100">
               <tr>
-                <th className="p-5 text-right">الكتاب</th>
+                <th className="p-5 text-right">الصنف</th>
                 <th className="p-5 text-center">الكمية</th>
                 <th className="p-5 text-center">
                   السعر
@@ -309,7 +309,7 @@ export default function EditSupplierInvoicePage({ params }: { params: Promise<an
             <div className="text-5xl">⚠️</div>
             <h3 className="text-xl font-black text-slate-900">تأكيد التعديل</h3>
             <p className="text-sm text-slate-500 font-bold leading-relaxed">
-              هيتم تحديث فهرس الكتب ومديونية المورد تلقائياً.
+              هيتم تحديث الأصناف ومديونية المورد تلقائياً.
             </p>
             {diff !== 0 && (
               <div className={`px-4 py-3 rounded-2xl text-sm font-black ${diff > 0 ? "bg-rose-50 text-rose-700" : "bg-emerald-50 text-emerald-700"}`}>

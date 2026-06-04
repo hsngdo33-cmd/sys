@@ -40,7 +40,7 @@ const isPrintableBarcode = (value: string) => {
   return /^[A-Za-z0-9-]{4,24}$/.test(value);
 };
 
-const UNITS = ["نسخة", "كتاب", "مجموعة", "مجلد", "سلسلة", "كرتونة"];
+const UNITS = ["قطعة", "نسخة", "كتاب", "علبة", "دستة", "مجموعة", "مجلد", "سلسلة", "كرتونة"];
 
 export default function InventoryPage() {
 
@@ -57,7 +57,7 @@ export default function InventoryPage() {
   const [isScannerOpen, setIsScannerOpen] = useState(false);
   const [isBarcodeViewOpen, setIsBarcodeViewOpen] = useState(false);
 
-  // الكتاب الحالي للعرض
+  // الصنف الحالي للعرض
   const [barcodeProduct, setBarcodeProduct] = useState<Product | null>(null);
 
   // تعديل
@@ -67,7 +67,7 @@ export default function InventoryPage() {
   // منتج جديد
   const [newProduct, setNewProduct] = useState({
     name: "",
-    unit: "نسخة",
+    unit: "قطعة",
     purchase_price: "",
     sale_price: "",
     stock_quantity: "",
@@ -169,7 +169,7 @@ export default function InventoryPage() {
       .eq("id", product.id)
       .then(({ error }) => {
         if (error) {
-          alert("تم عرض الباركود، لكن تعذر حفظه على الكتاب: " + error.message);
+          alert("تم عرض الباركود، لكن تعذر حفظه على الصنف: " + error.message);
         }
       });
 
@@ -512,7 +512,7 @@ export default function InventoryPage() {
   const handleAddProduct = async () => {
 
     if (!newProduct.name) {
-      return alert("اكتب اسم الكتاب");
+      return alert("اكتب اسم الصنف");
     }
 
     const barcodeValue =
@@ -557,7 +557,7 @@ export default function InventoryPage() {
 
       setNewProduct({
         name: "",
-        unit: "نسخة",
+        unit: "قطعة",
         purchase_price: "",
         sale_price: "",
         stock_quantity: "",
@@ -623,11 +623,11 @@ export default function InventoryPage() {
 
           <div>
             <h1 className="text-3xl font-black">
-              فهرس الكتب
+              إدارة الأصناف
             </h1>
 
             <p className="text-slate-500 font-bold mt-1">
-              إدارة كتب المكتبة بالباركود
+              إدارة الكتب والأدوات المكتبية بالباركود
             </p>
           </div>
 
@@ -651,7 +651,7 @@ export default function InventoryPage() {
               onClick={() => setIsModalOpen(true)}
               className="bg-emerald-600 text-white px-5 py-3 rounded-2xl font-bold"
             >
-              + إضافة كتاب
+              + إضافة صنف
             </button>
 
           </div>
@@ -684,7 +684,7 @@ export default function InventoryPage() {
 
               <tr>
 
-                <th className="p-4">الكتاب</th>
+                <th className="p-4">الصنف</th>
                 <th className="p-4">الوحدة</th>
                 <th className="p-4">الكمية</th>
                 <th className="p-4">شراء</th>
@@ -924,13 +924,13 @@ export default function InventoryPage() {
           <div className="bg-white rounded-3xl p-6 w-full max-w-md">
 
             <h2 className="text-2xl font-black mb-6 text-center">
-              إضافة كتاب
+              إضافة صنف
             </h2>
 
             <div className="space-y-4">
 
               <input
-                placeholder="اسم الكتاب"
+                placeholder="اسم الصنف"
                 value={newProduct.name}
                 onChange={(e) =>
                   setNewProduct({
@@ -1014,7 +1014,7 @@ export default function InventoryPage() {
                 onClick={handleAddProduct}
                 className="w-full bg-emerald-600 text-white py-4 rounded-2xl font-bold"
               >
-                حفظ الكتاب ✅
+                حفظ الصنف ✅
               </button>
 
               <button

@@ -4,13 +4,15 @@ import { supabase } from "@/lib/supabase";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 
-type TxType = "all" | "sale" | "payment" | "تحصيل نقدي";
+type TxType = "all" | "sale" | "return" | "payment" | "تحصيل نقدي";
 
 const SALE_TYPES    = ["sale", "بيع"];
+const RETURN_TYPES  = ["return", "مرتجع"];
 const PAYMENT_TYPES = ["payment", "تحصيل نقدي"];
 
 function txIcon(type: string) {
   if (SALE_TYPES.includes(type))    return { icon: "📦", bg: "bg-indigo-100", color: "text-indigo-600" };
+  if (RETURN_TYPES.includes(type))  return { icon: "↩", bg: "bg-amber-100", color: "text-amber-700" };
   if (type === "تحصيل نقدي")        return { icon: "💵", bg: "bg-emerald-100", color: "text-emerald-600" };
   if (type === "payment")           return { icon: "💳", bg: "bg-blue-100",    color: "text-blue-600" };
   return { icon: "📄", bg: "bg-slate-100", color: "text-slate-600" };
@@ -18,6 +20,8 @@ function txIcon(type: string) {
 
 function txLabel(type: string) {
   if (type === "sale")          return "فاتورة بيع";
+  if (type === "return")        return "مرتجع";
+  if (type === "مرتجع")         return "مرتجع";
   if (type === "payment")       return "سداد مع فاتورة";
   if (type === "تحصيل نقدي")   return "تحصيل نقدي";
   return type;
@@ -36,6 +40,10 @@ export default function CustomerHistory() {
   const [paymentAmount, setPaymentAmount] = useState("");
   const [paymentNote, setPaymentNote] = useState("");
   const [paymentSaving, setPaymentSaving] = useState(false);
+  const [returnInvoice, setReturnInvoice] = useState<any | null>(null);
+  const [returnItems, setReturnItems] = useState<any[]>([]);
+  const [returnNote, setReturnNote] = useState("");
+  const [returnSaving, setReturnSaving] = useState(false);
 
   useEffect(() => { if (id) loadData(); }, [id]);
 
@@ -59,6 +67,123 @@ export default function CustomerHistory() {
     setPaymentEdit(t);
     setPaymentAmount(String(Number(t.amount || 0)));
     setPaymentNote(t.description || "");
+  }
+
+  function getReturnedQty(invoiceId: string, productId: string) {
+    return transactions
+      .filter(t => RETURN_TYPES.includes(t.type))
+      .flatMap(t => t.items || [])
+      .filter(item => String(item.source_invoice_id || "") === String(invoiceId))
+      .filter(item => String(item.id || "") === String(productId))
+      .reduce((sum, item) => sum + Number(item.qty || 0), 0);
+  }
+
+  function openReturnModal(invoice: any) {
+    const items = (invoice.items || [])
+      .map((item: any) => {
+        const soldQty = Number(item.qty || 0);
+        const returnedQty = getReturnedQty(invoice.id, item.id);
+        const availableQty = Math.max(soldQty - returnedQty, 0);
+        return {
+          ...item,
+          soldQty,
+          returnedQty,
+          availableQty,
+          returnQty: availableQty > 0 ? 1 : 0,
+          price: Number(item.price || 0),
+          cost: Number(item.cost || 0),
+        };
+      })
+      .filter((item: any) => item.availableQty > 0);
+
+    if (items.length === 0) {
+      alert("الفاتورة دي مفيش فيها كميات متاحة للمرتجع.");
+      return;
+    }
+
+    setReturnInvoice(invoice);
+    setReturnItems(items);
+    setReturnNote("");
+  }
+
+  const returnTotal = returnItems.reduce((sum, item) => {
+    const qty = Math.min(Math.max(Number(item.returnQty || 0), 0), Number(item.availableQty || 0));
+    return sum + qty * Number(item.price || 0);
+  }, 0);
+
+  const returnProfitImpact = returnItems.reduce((sum, item) => {
+    const qty = Math.min(Math.max(Number(item.returnQty || 0), 0), Number(item.availableQty || 0));
+    return sum + qty * (Number(item.price || 0) - Number(item.cost || 0));
+  }, 0);
+
+  async function handleReturnSave() {
+    if (returnSaving || !returnInvoice) return;
+
+    const selectedItems = returnItems
+      .map(item => {
+        const qty = Math.min(Math.max(Number(item.returnQty || 0), 0), Number(item.availableQty || 0));
+        return {
+          id: item.id,
+          name: item.name,
+          unit: item.unit,
+          qty,
+          price: Number(item.price || 0),
+          cost: Number(item.cost || 0),
+          source_invoice_id: returnInvoice.id,
+        };
+      })
+      .filter(item => item.qty > 0);
+
+    if (selectedItems.length === 0) {
+      alert("اختار كمية مرتجعة على الأقل.");
+      return;
+    }
+
+    setReturnSaving(true);
+    try {
+      const { data: curr, error: balanceReadError } = await supabase
+        .from("customers")
+        .select("balance")
+        .eq("id", id)
+        .single();
+      if (balanceReadError) throw balanceReadError;
+
+      const description = returnNote.trim()
+        ? `${returnNote.trim()} - مرتجع من فاتورة #${returnInvoice.id}`
+        : `مرتجع من فاتورة #${returnInvoice.id}`;
+
+      const { error: returnError } = await supabase
+        .from("customer_transactions")
+        .insert([{
+          customer_id: id,
+          amount: returnTotal,
+          type: "return",
+          description,
+          items: selectedItems,
+          profit: -returnProfitImpact,
+        }]);
+      if (returnError) throw returnError;
+
+      for (const item of selectedItems) {
+        await supabase.rpc("increment_stock", { row_id: String(item.id), amount: Number(item.qty) });
+      }
+
+      const { error: balanceError } = await supabase
+        .from("customers")
+        .update({ balance: Number(curr?.balance || 0) - returnTotal })
+        .eq("id", id);
+      if (balanceError) throw balanceError;
+
+      setReturnInvoice(null);
+      setReturnItems([]);
+      setReturnNote("");
+      await loadData();
+    } catch (error) {
+      console.error(error);
+      alert("حدث خطأ أثناء حفظ المرتجع");
+    } finally {
+      setReturnSaving(false);
+    }
   }
 
   async function handlePaymentEditSave() {
@@ -123,8 +248,11 @@ export default function CustomerHistory() {
 
   // ── إحصائيات سريعة ──
   const totalSales    = transactions.filter(t => SALE_TYPES.includes(t.type)).reduce((s, t) => s + (Number(t.amount) || 0), 0);
+  const totalReturns  = transactions.filter(t => RETURN_TYPES.includes(t.type)).reduce((s, t) => s + (Number(t.amount) || 0), 0);
   const totalPaid     = transactions.filter(t => PAYMENT_TYPES.includes(t.type)).reduce((s, t) => s + (Number(t.amount) || 0), 0);
-  const totalProfit   = transactions.filter(t => SALE_TYPES.includes(t.type)).reduce((s, t) => s + (Number(t.profit) || 0), 0);
+  const totalProfit   = transactions
+    .filter(t => SALE_TYPES.includes(t.type) || RETURN_TYPES.includes(t.type))
+    .reduce((s, t) => s + (Number(t.profit) || 0), 0);
   const printSubtotal = (printTransaction?.items || []).reduce((sum: number, item: any) => sum + Number(item.qty || 0) * Number(item.price || 0), 0);
   const printNetTotal = Number(printTransaction?.amount || 0);
   const printDiscountAmount = Math.max(printSubtotal - printNetTotal, 0);
@@ -146,6 +274,7 @@ export default function CustomerHistory() {
   const filterTabs: { key: TxType; label: string }[] = [
     { key: "all",          label: `الكل (${transactions.length})` },
     { key: "sale",         label: `فواتير (${transactions.filter(t=>t.type==="sale").length})` },
+    { key: "return",       label: `مرتجعات (${transactions.filter(t=>RETURN_TYPES.includes(t.type)).length})` },
     { key: "payment",      label: `سداد (${transactions.filter(t=>t.type==="payment").length})` },
     { key: "تحصيل نقدي",  label: `تحصيل (${transactions.filter(t=>t.type==="تحصيل نقدي").length})` },
   ];
@@ -177,10 +306,15 @@ export default function CustomerHistory() {
         </header>
 
         {/* ══ Summary Cards ══ */}
-        <div className="grid grid-cols-3 gap-4">
+        <div className="grid grid-cols-4 gap-4">
           <div className="bg-white p-5 rounded-[2rem] border border-slate-200 shadow-sm text-center">
-            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">إجمالي المشتريات</p>
+            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">إجمالي المبيعات</p>
             <p className="text-2xl font-black text-slate-900">{totalSales.toLocaleString("ar-EG")}</p>
+            <p className="text-[10px] text-slate-400 font-bold mt-1">ج.م</p>
+          </div>
+          <div className="bg-white p-5 rounded-[2rem] border border-slate-200 shadow-sm text-center">
+            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">إجمالي المرتجعات</p>
+            <p className="text-2xl font-black text-amber-600">{totalReturns.toLocaleString("ar-EG")}</p>
             <p className="text-[10px] text-slate-400 font-bold mt-1">ج.م</p>
           </div>
           <div className="bg-white p-5 rounded-[2rem] border border-slate-200 shadow-sm text-center">
@@ -229,6 +363,7 @@ export default function CustomerHistory() {
             {filtered.map(t => {
               const { icon, bg, color } = txIcon(t.type);
               const isSale = SALE_TYPES.includes(t.type);
+              const isReturn = RETURN_TYPES.includes(t.type);
               const isPayment = PAYMENT_TYPES.includes(t.type);
               const isOpen = expandedId === t.id;
               return (
@@ -251,7 +386,7 @@ export default function CustomerHistory() {
                     </div>
                     <div className="text-left flex items-center gap-4">
                       <div>
-                        <p className={`text-xl font-black ${isSale ? "text-slate-900" : "text-emerald-600"}`}>
+                        <p className={`text-xl font-black ${isSale ? "text-slate-900" : isReturn ? "text-amber-600" : "text-emerald-600"}`}>
                           {isSale ? "+" : "−"} {t.amount?.toLocaleString("ar-EG")} ج.م
                         </p>
                         {isSale && t.profit != null && (
@@ -270,7 +405,7 @@ export default function CustomerHistory() {
                           <table className="w-full text-sm mb-4">
                             <thead>
                               <tr className="text-slate-400 font-black text-[10px] uppercase border-b border-slate-200">
-                                <th className="pb-3 text-right">الكتاب</th>
+                                <th className="pb-3 text-right">الصنف</th>
                                 <th className="pb-3 text-center">الكمية</th>
                                 <th className="pb-3 text-center">السعر</th>
                                 <th className="pb-3 text-left">الإجمالي</th>
@@ -291,12 +426,23 @@ export default function CustomerHistory() {
                           </table>
                           <div className="flex justify-between items-center border-t border-slate-200 pt-4">
                             <div className="flex gap-2">
-                              <Link
-                                href={`/customer/${id}/history/edit/${t.id}`}
-                                className="bg-slate-200 hover:bg-indigo-600 hover:text-white text-slate-600 px-4 py-2 rounded-xl text-[10px] font-black transition-all"
-                              >
-                                ✏️ تعديل الفاتورة
-                              </Link>
+                              {isSale && (
+                                <Link
+                                  href={`/customer/${id}/history/edit/${t.id}`}
+                                  className="bg-slate-200 hover:bg-indigo-600 hover:text-white text-slate-600 px-4 py-2 rounded-xl text-[10px] font-black transition-all"
+                                >
+                                  ✏️ تعديل الفاتورة
+                                </Link>
+                              )}
+                              {isSale && (
+                                <button
+                                  type="button"
+                                  onClick={() => openReturnModal(t)}
+                                  className="bg-amber-100 hover:bg-amber-500 hover:text-white text-amber-700 px-4 py-2 rounded-xl text-[10px] font-black transition-all"
+                                >
+                                  ↩ عمل مرتجع
+                                </button>
+                              )}
                               <button
                                 type="button"
                                 onClick={() => setPrintTransaction(t)}
@@ -344,7 +490,7 @@ export default function CustomerHistory() {
             <div className="bg-slate-50 p-6 border-b border-slate-100 flex justify-between items-center">
               <div>
                 <h2 className="text-xl font-black text-slate-900">تعديل السداد</h2>
-                <p className="text-[10px] text-slate-400 font-bold mt-1">سيتم تحديث رصيد القارئ وحفظ تنبيه بتاريخ التعديل.</p>
+                <p className="text-[10px] text-slate-400 font-bold mt-1">سيتم تحديث رصيد العميل وحفظ تنبيه بتاريخ التعديل.</p>
               </div>
               <button onClick={() => setPaymentEdit(null)} className="text-slate-400 hover:text-rose-500 transition-colors text-2xl font-black">×</button>
             </div>
@@ -397,6 +543,102 @@ export default function CustomerHistory() {
         </div>
       )}
 
+      {returnInvoice && (
+        <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-sm z-[130] flex items-center justify-center p-4" onClick={() => setReturnInvoice(null)}>
+          <div className="bg-white w-full max-w-3xl rounded-[2rem] shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
+            <div className="bg-amber-50 p-6 border-b border-amber-100 flex justify-between items-center gap-4">
+              <div>
+                <h2 className="text-xl font-black text-slate-900">تسجيل مرتجع</h2>
+                <p className="text-[10px] text-amber-700 font-bold mt-1">فاتورة #{returnInvoice.id} - اختر الكميات المرتجعة فقط.</p>
+              </div>
+              <button onClick={() => setReturnInvoice(null)} className="text-slate-400 hover:text-rose-500 transition-colors text-2xl font-black">×</button>
+            </div>
+
+            <div className="p-6 space-y-4">
+              <div className="overflow-auto rounded-2xl border border-slate-100">
+                <table className="w-full text-sm">
+                  <thead className="bg-slate-50 text-[10px] font-black text-slate-400">
+                    <tr>
+                      <th className="p-3 text-right">الصنف</th>
+                      <th className="p-3 text-center">المباع</th>
+                      <th className="p-3 text-center">مرتجع سابق</th>
+                      <th className="p-3 text-center">المتاح</th>
+                      <th className="p-3 text-center">كمية المرتجع</th>
+                      <th className="p-3 text-left">القيمة</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-50">
+                    {returnItems.map((item, index) => {
+                      const qty = Math.min(Math.max(Number(item.returnQty || 0), 0), Number(item.availableQty || 0));
+                      return (
+                        <tr key={`${item.id}-${index}`}>
+                          <td className="p-3 font-black text-slate-900">{item.name}</td>
+                          <td className="p-3 text-center font-bold text-slate-500">{item.soldQty}</td>
+                          <td className="p-3 text-center font-bold text-slate-500">{item.returnedQty}</td>
+                          <td className="p-3 text-center font-black text-amber-700">{item.availableQty}</td>
+                          <td className="p-3 text-center">
+                            <input
+                              type="number"
+                              min="0"
+                              max={item.availableQty}
+                              step="any"
+                              value={item.returnQty}
+                              onChange={e => {
+                                const copy = [...returnItems];
+                                copy[index].returnQty = e.target.value;
+                                setReturnItems(copy);
+                              }}
+                              className="w-24 rounded-xl border border-slate-200 bg-slate-50 p-2 text-center font-black outline-none focus:border-amber-400"
+                            />
+                          </td>
+                          <td className="p-3 text-left font-black text-slate-900">{(qty * Number(item.price || 0)).toLocaleString("ar-EG")} ج</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              <textarea
+                value={returnNote}
+                onChange={e => setReturnNote(e.target.value)}
+                className="w-full min-h-20 bg-slate-50 border-2 border-slate-100 rounded-2xl p-4 text-sm font-bold text-slate-700 outline-none focus:border-amber-300"
+                placeholder="ملاحظة المرتجع (اختياري)..."
+              />
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="rounded-2xl bg-amber-50 border border-amber-100 p-4 text-center">
+                  <p className="text-[10px] font-black text-amber-700 mb-1">قيمة المرتجع</p>
+                  <p className="text-2xl font-black text-amber-700">{returnTotal.toLocaleString("ar-EG")} ج</p>
+                </div>
+                <div className="rounded-2xl bg-slate-50 border border-slate-100 p-4 text-center">
+                  <p className="text-[10px] font-black text-slate-400 mb-1">تأثير الربح</p>
+                  <p className="text-2xl font-black text-slate-700">-{returnProfitImpact.toLocaleString("ar-EG")} ج</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-[#0f172a] p-5 flex justify-between items-center gap-3">
+              <button
+                type="button"
+                onClick={() => setReturnInvoice(null)}
+                className="bg-white/10 hover:bg-white/20 text-white px-5 py-3 rounded-xl text-sm font-black transition-all"
+              >
+                إلغاء
+              </button>
+              <button
+                type="button"
+                onClick={handleReturnSave}
+                disabled={returnSaving || returnTotal <= 0}
+                className="bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-white px-7 py-3 rounded-xl text-sm font-black transition-all"
+              >
+                {returnSaving ? "جاري حفظ المرتجع..." : "حفظ المرتجع"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {printTransaction && (
         <section className="print-invoice hidden" dir="rtl">
           <div className="print-card">
@@ -404,18 +646,18 @@ export default function CustomerHistory() {
               <div>
                 <p className="print-eyebrow">فاتورة بيع</p>
                 <h1>منظومة إدارة المكتبة</h1>
-                <p>إدارة القراء والكتب</p>
+                <p>إدارة العملاء والمبيعات</p>
               </div>
               <div className="print-meta">
                 <p>التاريخ: {new Date(printTransaction.created_at).toLocaleDateString("ar-EG")}</p>
-                <p>القارئ: {customer?.name || "-"}</p>
+                <p>العميل: {customer?.name || "-"}</p>
                 <p>رقم الفاتورة: {printTransaction.id}</p>
               </div>
             </div>
             <table className="print-table">
               <thead>
                 <tr>
-                  <th>الكتاب</th>
+                  <th>الصنف</th>
                   <th>الوحدة</th>
                   <th>الكمية</th>
                   <th>السعر</th>

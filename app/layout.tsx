@@ -8,7 +8,7 @@ const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"]
 
 export const metadata: Metadata = {
   title: "نظام إدارة مكتبة",
-  description: "إدارة الكتب والقراء والموردين والتقارير",
+  description: "إدارة الكتب والأدوات المكتبية والعملاء والموردين",
 };
 
 const isAppLocked = process.env.NEXT_PUBLIC_APP_LOCKED === "true";

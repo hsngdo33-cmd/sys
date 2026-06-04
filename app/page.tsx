@@ -84,9 +84,9 @@ export default function Dashboard() {
 
       // تنبيهات ذكية
       const newAlerts: string[] = [];
-      if (lowStock.length > 0) newAlerts.push(`⚠️ ${lowStock.length} كتب نسخها قليلة: ${lowStock.slice(0,2).map(p=>p.name).join("، ")}...`);
+      if (lowStock.length > 0) newAlerts.push(`⚠️ ${lowStock.length} أصناف كميتها قليلة: ${lowStock.slice(0,2).map(p=>p.name).join("، ")}...`);
       const totalDebts = (customers ?? []).reduce((s, c) => s + (Number(c.balance) || 0), 0);
-      if (totalDebts > 50000) newAlerts.push(`🔴 إجمالي مديونيات القراء تجاوز ${fmt(totalDebts)} ج.م — راجع التحصيل`);
+      if (totalDebts > 50000) newAlerts.push(`🔴 إجمالي ديون العملاء تجاوز ${fmt(totalDebts)} ج.م — راجع التحصيل`);
       const margin = monthRevenue > 0 ? Math.round((monthProfit / monthRevenue) * 100) : 0;
       if (margin > 0 && margin < 10) newAlerts.push(`📉 هامش الربح هذا الشهر ${margin}% — راجع الأسعار`);
       if (margin >= 25) newAlerts.push(`📈 أداء ممتاز! هامش الربح ${margin}% هذا الشهر 🎉`);
@@ -126,7 +126,7 @@ export default function Dashboard() {
             <div>
               <p className="text-slate-400 text-xs font-black uppercase tracking-widest mb-1">{getGreeting()}</p>
               <h1 className="text-2xl font-black text-white">منظومة إدارة المكتبة</h1>
-              <p className="text-slate-500 text-[10px] font-black uppercase tracking-widest mt-1">إدارة الكتب والقراء والتوريد</p>
+              <p className="text-slate-500 text-[10px] font-black uppercase tracking-widest mt-1">إدارة الكتب والأدوات المكتبية والمبيعات</p>
             </div>
             <div className="flex items-center gap-3 flex-wrap">
               <div className="bg-white/5 border border-white/10 px-5 py-2.5 rounded-2xl text-center">
@@ -235,9 +235,9 @@ export default function Dashboard() {
                 <div className="flex-1 h-px bg-slate-200" />
               </div>
               <div className="grid grid-cols-2 gap-3">
-                <StatCard label="مديونيات القراء" value={fmt(stats.totalCustomerDebts)} sub="ج.م" accent="rose" emoji="🔴" />
+                <StatCard label="ديون العملاء" value={fmt(stats.totalCustomerDebts)} sub="ج.م" accent="rose" emoji="🔴" />
                 <StatCard label="ديون الموردين" value={fmt(stats.totalSupplierDebts)} sub="ج.م" accent="indigo" emoji="📦" />
-                <StatCard label="عدد القراء" value={String(stats.customersCount)} sub="قارئ" accent="slate" emoji="👥" />
+                <StatCard label="عدد العملاء" value={String(stats.customersCount)} sub="عميل" accent="slate" emoji="👥" />
                 <StatCard label="عدد الموردين" value={String(stats.suppliersCount)} sub="مورد" accent="slate" emoji="🏭" />
               </div>
             </section>
@@ -275,14 +275,14 @@ export default function Dashboard() {
               <div className="app-home-low-stock bg-amber-50 border-2 border-amber-200 rounded-[1.25rem] p-4 flex items-center gap-3">
                 <span className="text-3xl shrink-0">⚠️</span>
                 <div className="flex-1">
-                  <p className="font-black text-amber-800">تحذير: {stats.lowStockCount} كتب نسخها منخفضة جداً</p>
-                  <p className="text-amber-600 text-sm font-bold mt-0.5">راجع فهرس الكتب وأعد الطلب قبل النفاد</p>
+                  <p className="font-black text-amber-800">تحذير: {stats.lowStockCount} أصناف كميتها منخفضة جداً</p>
+                  <p className="text-amber-600 text-sm font-bold mt-0.5">راجع الأصناف وأعد الطلب قبل النفاد</p>
                 </div>
                 <Link
                   href="/inventory"
                   className="bg-amber-500 hover:bg-amber-600 text-white px-5 py-2.5 rounded-xl font-black text-sm transition-all shrink-0"
                 >
-                  جرد الكتب
+                  جرد الأصناف
                 </Link>
               </div>
             )}
@@ -297,10 +297,10 @@ export default function Dashboard() {
                 <NavCard
                   href="/customer"
                   emoji="👥"
-                  title="دليل القراء"
-                  desc="تسجيل القراء، متابعة المبيعات أو الإعارات، وتحصيل المبالغ"
+                  title="إدارة العملاء"
+                  desc="تسجيل العملاء، متابعة فواتير البيع، وتحصيل المبالغ"
                   color="emerald"
-                  badge={stats.customersCount > 0 ? `${stats.customersCount} قارئ` : undefined}
+                  badge={stats.customersCount > 0 ? `${stats.customersCount} عميل` : undefined}
                 />
                 <NavCard
                   href="/suppliers"
@@ -313,10 +313,10 @@ export default function Dashboard() {
                 <NavCard
                   href="/inventory"
                   emoji="🌾"
-                  title="فهرس الكتب"
-                  desc="مراقبة النسخ المتاحة، تحديث الأسعار، وطباعة باركود الكتب"
+                  title="الأصناف والباركود"
+                  desc="إدارة الكتب والأدوات المكتبية، تحديث الأسعار، وطباعة الباركود"
                   color="amber"
-                  badge={stats.lowStockCount > 0 ? `${stats.lowStockCount} كتاب قليل` : undefined}
+                  badge={stats.lowStockCount > 0 ? `${stats.lowStockCount} صنف قليل` : undefined}
                   badgeAlert={stats.lowStockCount > 0}
                 />
               </div>

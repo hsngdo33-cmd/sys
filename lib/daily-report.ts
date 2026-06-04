@@ -201,13 +201,13 @@ export function formatDailyReportMessage(report: DailyReport) {
   const netCash = report.customerCollected - report.supplierPaid;
   const stockLine =
     report.lowStockCount > 0
-      ? `${report.lowStockCount} كتاب نسخه منخفضة${report.lowStockNames.length ? `: ${report.lowStockNames.join("، ")}` : ""}`
+      ? `${report.lowStockCount} صنف منخفض${report.lowStockNames.length ? `: ${report.lowStockNames.join("، ")}` : ""}`
       : "المخزون مستقر";
 
   return [
     `تقرير اليوم - ${report.dateLabel}`,
     "",
-    "المبيعات والقراء:",
+    "المبيعات والعملاء:",
     `- عدد فواتير البيع: ${report.customerSalesCount}`,
     `- إجمالي المبيعات: ${formatMoney(report.customerRevenue)} ج.م`,
     `- صافي الربح: ${formatMoney(report.customerProfit)} ج.م (${profitMargin}%)`,
@@ -220,7 +220,7 @@ export function formatDailyReportMessage(report: DailyReport) {
     `- ${stockLine}`,
     "",
     "الأرصدة الحالية:",
-    `- مديونيات القراء: ${formatMoney(report.totalCustomerDebt)} ج.م`,
+    `- ديون العملاء: ${formatMoney(report.totalCustomerDebt)} ج.م`,
     `- ديون الموردين: ${formatMoney(report.totalSupplierDebt)} ج.م`,
     `- صافي حركة الكاش اليوم: ${formatMoney(netCash)} ج.م`,
   ].join("\n");

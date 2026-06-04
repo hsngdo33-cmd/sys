@@ -6,8 +6,8 @@ import { BarChart3, Filter, Truck, UsersRound } from "lucide-react";
 const reportPages = [
   {
     href: "/reports/customers",
-    title: "تقارير القراء",
-    description: "مبيعات، تحصيل، أرباح، مديونيات، وآخر حركة لكل قارئ.",
+    title: "تقارير العملاء",
+    description: "مبيعات، تحصيل، أرباح، ديون، وآخر حركة لكل عميل.",
     icon: UsersRound,
     tone: "bg-emerald-600",
   },
@@ -21,7 +21,7 @@ const reportPages = [
   {
     href: "/reports/filter",
     title: "التصفية العامة",
-    description: "فلترة يومية وشهرية وسنوية مع مقارنة حركة القراء والموردين.",
+    description: "فلترة يومية وشهرية وسنوية مع مقارنة حركة العملاء والموردين.",
     icon: Filter,
     tone: "bg-slate-950",
   },
