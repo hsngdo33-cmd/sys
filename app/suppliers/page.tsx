@@ -103,7 +103,7 @@ export default function SuppliersPage() {
           </div>
           <button
             onClick={() => setShowAddModal(true)}
-            className="app-btn app-btn-primary"
+            className="app-btn bg-emerald-500 hover:bg-emerald-400 text-white border border-emerald-300 shadow-lg shadow-emerald-900/20"
           >
             ➕ إضافة مورد
           </button>
