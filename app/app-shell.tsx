@@ -38,7 +38,7 @@ function getPageTitle(pathname: string) {
   if (pathname.startsWith("/inventory")) return "الأصناف والباركود";
   if (pathname.startsWith("/reports")) return "التقارير والتحليلات";
   if (pathname.startsWith("/settings")) return "إعدادات النظام";
-  return "لوحة المكتبة";
+  return "لوحة المحل";
 }
 
 export function AppShell({ children }: { children: React.ReactNode }) {
@@ -55,8 +55,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 <LayoutDashboard className="h-6 w-6" />
               </div>
               <div>
-                <p className="text-lg font-black">نظام إدارة مكتبة</p>
-                <p className="text-xs text-slate-400 font-bold">كتب وأدوات، عملاء، موردين</p>
+                <p className="text-lg font-black">نظام إدارة محل تجاري</p>
+                <p className="text-xs text-slate-400 font-bold">مبيعات، مخزون، عملاء، موردين</p>
               </div>
             </Link>
           </div>
@@ -121,7 +121,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <div className="px-3 py-3 sm:px-6 sm:py-4 lg:px-8">
               <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
                 <div className="min-w-0">
-                  <p className="text-xs font-black text-emerald-600">المكتبة</p>
+                  <p className="text-xs font-black text-emerald-600">المحل</p>
                   <h1 className="truncate text-xl font-black text-slate-950 sm:text-2xl">{pageTitle}</h1>
                 </div>
 

@@ -29,7 +29,8 @@ create table if not exists public.products (
   created_at timestamptz default now(),
   supplier_id uuid,
   barcode text,
-  product_category text not null default 'stationery',
+  product_category text not null default 'general',
+  product_attributes jsonb not null default '{}'::jsonb,
   constraint products_pkey primary key (id),
   constraint products_barcode_key unique (barcode),
   constraint products_supplier_id_fkey foreign key (supplier_id) references public.suppliers(id)
@@ -88,14 +89,20 @@ create index if not exists transactions_created_at_idx on public.transactions(cr
 create index if not exists products_supplier_id_idx on public.products(supplier_id);
 
 alter table public.products
-  add column if not exists product_category text not null default 'stationery';
+  add column if not exists product_category text not null default 'general';
 
 alter table public.products
   drop constraint if exists products_product_category_check;
 
 alter table public.products
-  add constraint products_product_category_check
-  check (product_category in ('books', 'stationery'));
+  alter column product_category set default 'general';
+
+update public.products
+set product_category = 'general'
+where product_category is null or trim(product_category) = '';
+
+alter table public.products
+  add column if not exists product_attributes jsonb not null default '{}'::jsonb;
 
 create index if not exists products_product_category_idx on public.products(product_category);
 

@@ -3,7 +3,11 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { supabase } from "@/lib/supabase";
 import Link from "next/link";
-import { PRODUCT_CATEGORIES, ProductCategory, normalizeProductCategory, productCategoryLabel } from "@/lib/product-category";
+import { ProductCategory, normalizeProductCategory, productCategoryLabel } from "@/lib/product-category";
+import { barcodeValidationMessage, cleanBarcode, generateInternalBarcode, isPrintableBarcode, isUuidLike } from "@/lib/barcode";
+import { CategorySelect } from "@/app/category-select";
+import { ProductAttributes, ProductCategoryFields, cleanProductAttributes, productAttributesSummary } from "@/app/product-category-fields";
+import { useBarcodeHardwareSettings } from "@/app/barcode-hardware-settings";
 
 type Product = {
   id: string;
@@ -14,6 +18,7 @@ type Product = {
   stock_quantity: number | string;
   barcode?: string | null;
   product_category?: ProductCategory | string | null;
+  product_attributes?: ProductAttributes | null;
 };
 
 type ScannerControls = {
@@ -21,28 +26,7 @@ type ScannerControls = {
   stop?: () => void;
 };
 
-const generateBarcode = () => {
-  const randomPart =
-    typeof crypto !== "undefined"
-      ? Array.from(crypto.getRandomValues(new Uint8Array(10)))
-          .map((value) => value % 10)
-          .join("")
-      : Math.floor(Math.random() * 10_000_000_000)
-          .toString()
-          .padStart(10, "0");
-
-  return `20${randomPart}`;
-};
-
-const isUuid = (value: string) => {
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
-};
-
-const isPrintableBarcode = (value: string) => {
-  return /^[A-Za-z0-9-]{4,24}$/.test(value);
-};
-
-const UNITS = ["قطعة", "نسخة", "كتاب", "علبة", "دستة", "مجموعة", "مجلد", "سلسلة", "كرتونة"];
+const UNITS = ["قطعة", "علبة", "كرتونة", "كيلو", "جرام", "لتر", "متر", "زوج", "طقم", "عبوة", "شريط", "خدمة"];
 
 export default function InventoryPage() {
 
@@ -52,16 +36,18 @@ export default function InventoryPage() {
 
   const [products, setProducts] = useState<Product[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
-  const [activeCategory, setActiveCategory] = useState<ProductCategory>("books");
+  const [activeCategory, setActiveCategory] = useState<ProductCategory>("general");
   const [loading, setLoading] = useState(true);
 
   // مودالات
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isScannerOpen, setIsScannerOpen] = useState(false);
   const [isBarcodeViewOpen, setIsBarcodeViewOpen] = useState(false);
+  const { hardwareSettings } = useBarcodeHardwareSettings();
 
   // الصنف الحالي للعرض
   const [barcodeProduct, setBarcodeProduct] = useState<Product | null>(null);
+  const [barcodeLabelCount, setBarcodeLabelCount] = useState(1);
 
   // تعديل
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -75,7 +61,8 @@ export default function InventoryPage() {
     sale_price: "",
     stock_quantity: "",
     barcode: "",
-    product_category: "books" as ProductCategory,
+    product_category: "general" as ProductCategory,
+    product_attributes: {} as ProductAttributes,
   });
 
   // سكانر USB
@@ -115,10 +102,6 @@ export default function InventoryPage() {
   // توليد باركود تلقائي
   // =========================
 
-  const cleanBarcode = (value: unknown) => {
-    return value?.toString().trim() || "";
-  };
-
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchProducts();
@@ -129,17 +112,7 @@ export default function InventoryPage() {
   }, []);
 
   const generateUniqueBarcode = () => {
-    let barcode = generateBarcode();
-
-    while (
-      products.some(
-        (product) => cleanBarcode(product.barcode) === barcode
-      )
-    ) {
-      barcode = generateBarcode();
-    }
-
-    return barcode;
+    return generateInternalBarcode(products.map((product) => product.barcode));
   };
 
   const escapeHtml = (value: unknown) => {
@@ -155,7 +128,7 @@ export default function InventoryPage() {
   const ensureProductBarcode = (product: Product) => {
     const existingBarcode = cleanBarcode(product.barcode);
 
-    if (existingBarcode && !isUuid(existingBarcode) && existingBarcode.length <= 24) {
+    if (existingBarcode && !isUuidLike(existingBarcode) && isPrintableBarcode(existingBarcode)) {
       return { ...product, barcode: existingBarcode };
     }
 
@@ -208,6 +181,7 @@ export default function InventoryPage() {
   const openBarcodeView = (product: Product) => {
     const productWithBarcode = ensureProductBarcode(product);
     setBarcodeProduct(productWithBarcode);
+    setBarcodeLabelCount(1);
     setIsBarcodeViewOpen(true);
 
     setTimeout(async () => {
@@ -225,6 +199,7 @@ export default function InventoryPage() {
 
     if (!barcodeCanvasRef.current || !barcodeProduct) return;
 
+    const labelCount = Math.min(Math.max(Number(barcodeLabelCount) || 1, 1), 100);
     const dataUrl = barcodeCanvasRef.current.toDataURL("image/png");
 
     const win = window.open("", "_blank");
@@ -244,12 +219,21 @@ export default function InventoryPage() {
             padding:20px;
           }
 
+          .labels{
+            display:flex;
+            flex-wrap:wrap;
+            gap:${hardwareSettings.labelGapMm}mm;
+            align-items:flex-start;
+            justify-content:center;
+          }
+
           .label{
-            width:230px;
-            margin:auto;
+            width:${hardwareSettings.labelWidthMm}mm;
+            min-height:${hardwareSettings.labelHeightMm}mm;
             border:1px dashed #999;
-            padding:10px;
-            border-radius:10px;
+            padding:4mm;
+            border-radius:2mm;
+            break-inside:avoid;
           }
 
           img{
@@ -273,28 +257,24 @@ export default function InventoryPage() {
 
       <body>
 
-        <div class="label">
-
-          <img src="${dataUrl}" />
-
-          <h2>${escapeHtml(barcodeProduct.name)}</h2>
-
-          <p>
-            سعر البيع:
-            ${escapeHtml(barcodeProduct.sale_price)}
-            ج.م
-          </p>
-
-          <p>
-            الوحدة:
-            ${escapeHtml(barcodeProduct.unit)}
-          </p>
-
+        <div class="labels">
+          ${Array.from({ length: labelCount })
+            .map(
+              () => `
+                <div class="label">
+                  <img src="${dataUrl}" />
+                  <h2>${escapeHtml(barcodeProduct.name)}</h2>
+                  <p>سعر البيع: ${escapeHtml(barcodeProduct.sale_price)} ج.م</p>
+                  <p>الوحدة: ${escapeHtml(barcodeProduct.unit)}</p>
+                </div>
+              `
+            )
+            .join("")}
         </div>
 
         <script>
           window.onload = () => {
-            window.print();
+            setTimeout(() => window.print(), ${hardwareSettings.printDelayMs});
           }
         </script>
 
@@ -461,6 +441,7 @@ export default function InventoryPage() {
     setEditForm({
   ...product,
   barcode: product.barcode || "",
+  product_attributes: product.product_attributes || {},
 });
   };
 
@@ -469,7 +450,7 @@ export default function InventoryPage() {
     const barcodeValue = cleanBarcode(editForm.barcode);
 
     if (barcodeValue && !isPrintableBarcode(barcodeValue)) {
-      return alert("الباركود لازم يكون 4 إلى 24 رقم/حرف إنجليزي فقط عشان يطبع ويتسكن بسهولة.");
+      return alert(barcodeValidationMessage(barcodeValue));
     }
 
     const exists = products.find(
@@ -493,6 +474,7 @@ export default function InventoryPage() {
         stock_quantity: Number(editForm.stock_quantity),
         barcode: barcodeValue,
         product_category: normalizeProductCategory(editForm.product_category),
+        product_attributes: cleanProductAttributes(editForm.product_category, editForm.product_attributes),
       })
       .eq("id", editingId);
 
@@ -526,7 +508,7 @@ export default function InventoryPage() {
         : generateUniqueBarcode();
 
     if (!isPrintableBarcode(barcodeValue)) {
-      return alert("الباركود لازم يكون 4 إلى 24 رقم/حرف إنجليزي فقط. سيب الخانة فاضية وأنا هولده تلقائيًا.");
+      return alert(`${barcodeValidationMessage(barcodeValue)} سيب الخانة فاضية وأنا هولده تلقائيًا.`);
     }
 
     // منع التكرار
@@ -552,6 +534,7 @@ export default function InventoryPage() {
             Number(newProduct.stock_quantity) || 0,
           barcode: barcodeValue,
           product_category: normalizeProductCategory(newProduct.product_category),
+          product_attributes: cleanProductAttributes(newProduct.product_category, newProduct.product_attributes),
         },
       ]);
 
@@ -569,6 +552,7 @@ export default function InventoryPage() {
         stock_quantity: "",
         barcode: "",
         product_category: activeCategory,
+        product_attributes: {},
       });
 
       fetchProducts();
@@ -592,6 +576,19 @@ export default function InventoryPage() {
     return matchesCategory && matchesSearch;
   });
 
+  const categoryCounts = products.reduce<Partial<Record<ProductCategory, number>>>((counts, product) => {
+    const category = normalizeProductCategory(product.product_category);
+    counts[category] = (counts[category] || 0) + 1;
+    return counts;
+  }, {});
+
+  const newProductNameSuggestions = products
+    .filter((product) => {
+      const name = newProduct.name.trim().toLowerCase();
+      return name.length >= 2 && product.name.toLowerCase().includes(name);
+    })
+    .slice(0, 5);
+
   // =========================
   // UI
   // =========================
@@ -613,7 +610,8 @@ export default function InventoryPage() {
           setScannerValue(e.target.value)
         }
         onKeyDown={(e) => {
-          if (e.key === "Enter") {
+          if (e.key === "Enter" || (hardwareSettings.submitOnTab && e.key === "Tab")) {
+            e.preventDefault();
             handleScannerInput(scannerValue);
           }
         }}
@@ -632,7 +630,7 @@ export default function InventoryPage() {
             </h1>
 
             <p className="text-slate-500 font-bold mt-1">
-              إدارة الكتب والأدوات المكتبية بالباركود
+              إدارة منتجات المحل بالباركود
             </p>
           </div>
 
@@ -669,22 +667,12 @@ export default function InventoryPage() {
         {/* SEARCH */}
 
         <div className="bg-white p-4 rounded-3xl shadow mb-6 space-y-3">
-          <div className="grid grid-cols-2 gap-2">
-            {PRODUCT_CATEGORIES.map((category) => (
-              <button
-                key={category.key}
-                type="button"
-                onClick={() => setActiveCategory(category.key)}
-                className={`rounded-2xl px-4 py-3 text-sm font-black transition-all ${
-                  activeCategory === category.key
-                    ? "bg-slate-900 text-white"
-                    : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-                }`}
-              >
-                {category.label} ({products.filter((p) => normalizeProductCategory(p.product_category) === category.key).length})
-              </button>
-            ))}
-          </div>
+          <CategorySelect
+            value={activeCategory}
+            onChange={setActiveCategory}
+            label="فلترة حسب القسم"
+            counts={categoryCounts}
+          />
 
           <input
             type="text"
@@ -759,20 +747,25 @@ export default function InventoryPage() {
                       </td>
 
                       <td className="p-2">
-                        <select
+                        <CategorySelect
                           value={normalizeProductCategory(editForm.product_category)}
-                          onChange={(e) =>
+                          onChange={(category) =>
                             setEditForm({
                               ...editForm,
-                              product_category: e.target.value as ProductCategory,
+                              product_category: category,
+                              product_attributes: {},
                             })
                           }
-                          className="w-full border p-2 rounded"
-                        >
-                          {PRODUCT_CATEGORIES.map((category) => (
-                            <option key={category.key} value={category.key}>{category.label}</option>
-                          ))}
-                        </select>
+                        />
+                        <div className="mt-2">
+                          <ProductCategoryFields
+                            category={normalizeProductCategory(editForm.product_category)}
+                            value={(editForm.product_attributes as ProductAttributes) || {}}
+                            onChange={(attributes) =>
+                              setEditForm({ ...editForm, product_attributes: attributes })
+                            }
+                          />
+                        </div>
                       </td>
 
                       <td className="p-2">
@@ -887,11 +880,16 @@ export default function InventoryPage() {
 
                       <td className="p-4 font-bold">
                         {p.name}
+                        {productAttributesSummary(p.product_category, p.product_attributes) && (
+                          <p className="mt-1 text-[10px] font-bold text-slate-400">
+                            {productAttributesSummary(p.product_category, p.product_attributes)}
+                          </p>
+                        )}
                       </td>
 
                       <td className="p-4">
                         <span className={`rounded-full px-3 py-1 text-xs font-black ${
-                          normalizeProductCategory(p.product_category) === "books"
+                          normalizeProductCategory(p.product_category) === "general"
                             ? "bg-indigo-100 text-indigo-700"
                             : "bg-emerald-100 text-emerald-700"
                         }`}>
@@ -971,15 +969,17 @@ export default function InventoryPage() {
 
       {isModalOpen && (
 
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50">
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-3 sm:p-6 z-50">
 
-          <div className="bg-white rounded-3xl p-6 w-full max-w-md">
+          <div className="flex max-h-[calc(100vh-2rem)] w-full max-w-6xl flex-col overflow-hidden rounded-3xl bg-white shadow-2xl">
 
-            <h2 className="text-2xl font-black mb-6 text-center">
+            <div className="border-b border-slate-100 px-5 py-4 sm:px-7">
+              <h2 className="text-xl font-black text-slate-900 sm:text-2xl">
               إضافة صنف {productCategoryLabel(newProduct.product_category)}
-            </h2>
+              </h2>
+            </div>
 
-            <div className="space-y-4">
+            <div className="grid flex-1 gap-4 overflow-y-auto p-5 sm:p-7 lg:grid-cols-3">
 
               <input
                 placeholder="اسم الصنف"
@@ -990,25 +990,45 @@ export default function InventoryPage() {
                     name: e.target.value,
                   })
                 }
-                className="w-full border p-4 rounded-2xl"
+                className="w-full border p-4 rounded-2xl lg:col-span-2"
               />
 
-              <div className="grid grid-cols-2 gap-2">
-                {PRODUCT_CATEGORIES.map((category) => (
-                  <button
-                    key={category.key}
-                    type="button"
-                    onClick={() => setNewProduct({ ...newProduct, product_category: category.key })}
-                    className={`rounded-2xl px-4 py-3 text-sm font-black transition-all ${
-                      normalizeProductCategory(newProduct.product_category) === category.key
-                        ? "bg-slate-900 text-white"
-                        : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-                    }`}
-                  >
-                    {category.label}
-                  </button>
-                ))}
-              </div>
+              {newProductNameSuggestions.length > 0 && (
+                <div className="rounded-2xl border border-amber-200 bg-amber-50 p-2 lg:col-span-2">
+                  <p className="px-2 pb-1 text-[10px] font-black text-amber-700">أصناف مشابهة مسجلة قبل كده</p>
+                  <div className="space-y-1">
+                    {newProductNameSuggestions.map((product) => (
+                      <button
+                        key={product.id}
+                        type="button"
+                        onClick={() => {
+                          setSearchTerm(product.name);
+                          setActiveCategory(normalizeProductCategory(product.product_category));
+                          setIsModalOpen(false);
+                        }}
+                        className="w-full rounded-xl bg-white px-3 py-2 text-right text-xs font-black text-slate-700 hover:bg-amber-100"
+                      >
+                        {product.name}
+                        <span className="mr-2 font-bold text-slate-400">
+                          {product.stock_quantity} {product.unit} - {productCategoryLabel(product.product_category)}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <CategorySelect
+                value={normalizeProductCategory(newProduct.product_category)}
+                onChange={(category) => setNewProduct({ ...newProduct, product_category: category, product_attributes: {} })}
+              />
+
+              <ProductCategoryFields
+                category={normalizeProductCategory(newProduct.product_category)}
+                value={newProduct.product_attributes}
+                onChange={(attributes) => setNewProduct({ ...newProduct, product_attributes: attributes })}
+                className="lg:col-span-3"
+              />
 
               <select
                 value={newProduct.unit}
@@ -1081,7 +1101,7 @@ export default function InventoryPage() {
 
               <button
                 onClick={handleAddProduct}
-                className="w-full bg-emerald-600 text-white py-4 rounded-2xl font-bold"
+                className="w-full bg-emerald-600 text-white py-4 rounded-2xl font-bold lg:col-span-2"
               >
                 حفظ الصنف ✅
               </button>
@@ -1156,6 +1176,20 @@ export default function InventoryPage() {
               {barcodeProduct.barcode}
             </p>
 
+            <label className="mb-4 block text-right text-xs font-black text-slate-500">
+              عدد الملصقات
+              <input
+                type="number"
+                min={1}
+                max={100}
+                value={barcodeLabelCount}
+                onChange={(e) =>
+                  setBarcodeLabelCount(Math.min(Math.max(Number(e.target.value) || 1, 1), 100))
+                }
+                className="mt-2 w-full rounded-2xl border border-slate-200 p-3 text-center text-lg font-black outline-none focus:border-indigo-400"
+              />
+            </label>
+
             <div className="flex gap-3">
 
               <button
@@ -1163,6 +1197,16 @@ export default function InventoryPage() {
                 className="flex-1 bg-slate-900 text-white py-4 rounded-2xl font-bold"
               >
                 🖨️ طباعة
+              </button>
+
+              <button
+                onClick={() => {
+                  navigator.clipboard?.writeText(cleanBarcode(barcodeProduct.barcode));
+                  alert("تم نسخ الباركود");
+                }}
+                className="flex-1 bg-indigo-100 text-indigo-700 py-4 rounded-2xl font-bold"
+              >
+                نسخ الكود
               </button>
 
               <button

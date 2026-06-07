@@ -3,8 +3,8 @@ import "./globals.css";
 import { AppShell } from "./app-shell";
 
 export const metadata: Metadata = {
-  title: "نظام إدارة مكتبة",
-  description: "إدارة الكتب والأدوات المكتبية والعملاء والموردين",
+  title: "نظام إدارة محل تجاري",
+  description: "إدارة المبيعات والمخزون والعملاء والموردين لكل أنواع المحلات",
 };
 
 const isAppLocked = process.env.NEXT_PUBLIC_APP_LOCKED === "true";

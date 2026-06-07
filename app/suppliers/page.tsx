@@ -84,6 +84,15 @@ export default function SuppliersPage() {
     return list;
   }, [suppliers, searchTerm, sortBy, filterDebt]);
 
+  const supplierNameSuggestions = useMemo(() => {
+    const name = newSupp.name.trim().toLowerCase();
+    if (name.length < 2) return [];
+
+    return suppliers
+      .filter((supplier) => supplier.name.toLowerCase().includes(name))
+      .slice(0, 5);
+  }, [newSupp.name, suppliers]);
+
   const totalDebt   = suppliers.reduce((s, x) => s + Math.max(x.balance, 0), 0);
   const debtorCount = suppliers.filter(s => s.balance > 0).length;
   const clearCount  = suppliers.filter(s => s.balance <= 0).length;
@@ -305,6 +314,24 @@ export default function SuppliersPage() {
                 onChange={e => setNewSupp({...newSupp, name: e.target.value})}
                 autoFocus
               />
+              {supplierNameSuggestions.length > 0 && (
+                <div className="mt-2 rounded-2xl border border-amber-200 bg-amber-50 p-2">
+                  <p className="px-2 pb-1 text-[10px] font-black text-amber-700">أسماء مشابهة مسجلة قبل كده</p>
+                  <div className="space-y-1">
+                    {supplierNameSuggestions.map((supplier) => (
+                      <button
+                        key={supplier.id}
+                        type="button"
+                        onClick={() => setNewSupp({ name: supplier.name, phone: supplier.phone || "", balance: String(supplier.balance || "") })}
+                        className="w-full rounded-xl bg-white px-3 py-2 text-right text-xs font-black text-slate-700 hover:bg-amber-100"
+                      >
+                        {supplier.name}
+                        <span className="mr-2 font-bold text-slate-400">{supplier.phone || "بدون موبايل"}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
             <div>
               <label className="text-xs font-black text-slate-400 mb-1 block">رقم التواصل</label>

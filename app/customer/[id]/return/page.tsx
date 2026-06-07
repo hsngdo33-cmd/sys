@@ -39,7 +39,7 @@ export default function CustomerReturnInvoicePage() {
 
   const [customer, setCustomer] = useState<Customer | null>(null);
   const [transactions, setTransactions] = useState<any[]>([]);
-  const [activeCategory, setActiveCategory] = useState<ProductCategory>("books");
+  const [activeCategory, setActiveCategory] = useState<ProductCategory>("general");
   const [searchTerm, setSearchTerm] = useState("");
   const [cart, setCart] = useState<ReturnItem[]>([]);
   const [note, setNote] = useState("");
@@ -442,7 +442,7 @@ export default function CustomerReturnInvoicePage() {
           <div className="print-header">
             <div>
               <p className="print-eyebrow">فاتورة مرتجع {productCategoryLabel(activeCategory)}</p>
-              <h1>منظومة إدارة المكتبة</h1>
+              <h1>منظومة إدارة المحل التجاري</h1>
               <p>إدارة العملاء والمبيعات</p>
             </div>
             <div className="print-meta">

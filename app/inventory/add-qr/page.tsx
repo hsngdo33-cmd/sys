@@ -3,15 +3,30 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { supabase } from "@/lib/supabase";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { PRODUCT_CATEGORIES, ProductCategory, normalizeProductCategory, productCategoryLabel } from "@/lib/product-category";
+import { ProductCategory, normalizeProductCategory, productCategoryLabel } from "@/lib/product-category";
+import { barcodeValidationMessage, cleanBarcode, generateInternalBarcode, isPrintableBarcode } from "@/lib/barcode";
+import { CategorySelect } from "@/app/category-select";
+import { ProductAttributes, ProductCategoryFields, cleanProductAttributes } from "@/app/product-category-fields";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type ScanMode = "camera" | "manual" | null;
 
-const UNITS = ["قطعة", "نسخة", "كتاب", "علبة", "دستة", "مجموعة", "مجلد", "سلسلة", "كرتونة"];
+type ExistingProduct = {
+  id: string;
+  name: string;
+  unit?: string | null;
+  barcode?: string | null;
+  stock_quantity?: number | string | null;
+  purchase_price?: number | string | null;
+  sale_price?: number | string | null;
+  product_category?: ProductCategory | string | null;
+  product_attributes?: ProductAttributes | null;
+};
+
+const UNITS = ["قطعة", "علبة", "كرتونة", "كيلو", "جرام", "لتر", "متر", "زوج", "طقم", "عبوة", "شريط", "خدمة"];
 
 function generateCode() {
-  return "PRD-" + Math.random().toString(36).substring(2, 8).toUpperCase();
+  return generateInternalBarcode();
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -25,7 +40,8 @@ export default function AddProductPage() {
     stock_quantity: "",
     purchase_price: "",
     sale_price:     "",
-    product_category: "books" as ProductCategory,
+    product_category: "general" as ProductCategory,
+    product_attributes: {} as ProductAttributes,
   });
 
   const [scanMode, setScanMode]         = useState<ScanMode>(null);
@@ -34,7 +50,8 @@ export default function AddProductPage() {
   const [saving, setSaving]             = useState(false);
   const [savedProduct, setSavedProduct] = useState<any>(null); // للـ QR label
   const [showQR, setShowQR]             = useState(false);
-  const [existingProduct, setExistingProduct] = useState<any>(null); // لو الباركود موجود
+  const [existingProduct, setExistingProduct] = useState<ExistingProduct | null>(null); // لو الباركود موجود
+  const [products, setProducts] = useState<ExistingProduct[]>([]);
 
   const videoRef    = useRef<HTMLVideoElement>(null);
   const streamRef   = useRef<MediaStream | null>(null);
@@ -43,6 +60,14 @@ export default function AddProductPage() {
   // ── تنظيف الكاميرا عند الخروج ──
   useEffect(() => {
     return () => stopCamera();
+  }, []);
+
+  useEffect(() => {
+    supabase
+      .from("products")
+      .select("id,name,unit,barcode,stock_quantity,purchase_price,sale_price,product_category,product_attributes")
+      .order("name")
+      .then(({ data }) => setProducts((data || []) as ExistingProduct[]));
   }, []);
 
   async function startCamera() {
@@ -61,7 +86,7 @@ export default function AddProductPage() {
       // تحميل ZXing ديناميكياً
       const ZXing = await import("@zxing/browser" as any).catch(() => null);
       if (!ZXing) {
-        setScanError("مكتبة الـ Scanner غير متاحة — ادخل الكود يدوياً");
+        setScanError("مكوّن الـ Scanner غير متاحة — ادخل الكود يدوياً");
         stopCamera();
         return;
       }
@@ -116,7 +141,22 @@ export default function AddProductPage() {
     if (!form.sale_price)            return alert("سعر البيع مطلوب!");
 
     // لو ما فيش باركود → ولّد كود تلقائي
-    const barcode = form.barcode.trim() || generateCode();
+    const barcode = cleanBarcode(form.barcode) || generateCode();
+
+    if (!isPrintableBarcode(barcode)) {
+      return alert(barcodeValidationMessage(barcode));
+    }
+
+    const { data: duplicateProduct } = await supabase
+      .from("products")
+      .select("id,name")
+      .eq("barcode", barcode)
+      .maybeSingle();
+
+    if (duplicateProduct) {
+      setExistingProduct(duplicateProduct);
+      return alert(`الباركود مستخدم بالفعل مع الصنف: ${duplicateProduct.name}`);
+    }
 
     setSaving(true);
     try {
@@ -128,6 +168,7 @@ export default function AddProductPage() {
         sale_price:     Number(form.sale_price),
         barcode:        barcode,
         product_category: normalizeProductCategory(form.product_category),
+        product_attributes: cleanProductAttributes(form.product_category, form.product_attributes),
       }]).select().single();
 
       if (error) throw error;
@@ -150,6 +191,7 @@ export default function AddProductPage() {
           purchase_price: Number(form.purchase_price),
         sale_price:     Number(form.sale_price),
         product_category: normalizeProductCategory(form.product_category),
+        product_attributes: cleanProductAttributes(form.product_category, form.product_attributes),
       }]).select().single() as any;
         if (!error2 && data) {
           setSavedProduct({ ...data, barcode: generateCode() });
@@ -169,6 +211,13 @@ export default function AddProductPage() {
   const margin = form.purchase_price && form.sale_price
     ? Math.round(((Number(form.sale_price) - Number(form.purchase_price)) / Number(form.sale_price)) * 100)
     : null;
+
+  const productNameSuggestions = products
+    .filter((product) => {
+      const name = form.name.trim().toLowerCase();
+      return name.length >= 2 && product.name.toLowerCase().includes(name);
+    })
+    .slice(0, 5);
 
   return (
     <div className="min-h-screen bg-[#f1f5f9] text-right font-sans text-slate-900 pb-16" dir="rtl">
@@ -264,25 +313,16 @@ export default function AddProductPage() {
         <div className="bg-white rounded-[2rem] border border-slate-200 shadow-sm p-6 space-y-5">
             <p className="font-black text-slate-900 border-r-4 border-indigo-500 pr-3">بيانات الصنف</p>
 
-          <div>
-            <label className="text-xs font-black text-slate-400 mb-1.5 block">القسم</label>
-            <div className="grid grid-cols-2 gap-2">
-              {PRODUCT_CATEGORIES.map((category) => (
-                <button
-                  key={category.key}
-                  type="button"
-                  onClick={() => setForm(f => ({...f, product_category: category.key}))}
-                  className={`px-4 py-3 rounded-xl text-sm font-black transition-all ${
-                    normalizeProductCategory(form.product_category) === category.key
-                      ? "bg-[#0f172a] text-white"
-                      : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-                  }`}
-                >
-                  {category.label}
-                </button>
-              ))}
-            </div>
-          </div>
+          <CategorySelect
+            value={normalizeProductCategory(form.product_category)}
+            onChange={(category) => setForm(f => ({...f, product_category: category, product_attributes: {}}))}
+          />
+
+          <ProductCategoryFields
+            category={normalizeProductCategory(form.product_category)}
+            value={form.product_attributes}
+            onChange={(attributes) => setForm(f => ({...f, product_attributes: attributes}))}
+          />
 
           {/* اسم الصنف */}
           <div>
@@ -293,6 +333,37 @@ export default function AddProductPage() {
               value={form.name}
               onChange={e => setForm(f => ({...f, name: e.target.value}))}
             />
+            {productNameSuggestions.length > 0 && (
+              <div className="mt-2 rounded-2xl border border-amber-200 bg-amber-50 p-2">
+                <p className="px-2 pb-1 text-[10px] font-black text-amber-700">أصناف مشابهة مسجلة قبل كده</p>
+                <div className="space-y-1">
+                  {productNameSuggestions.map((product) => (
+                    <button
+                      key={product.id}
+                      type="button"
+                      onClick={() => {
+                        setExistingProduct(product);
+                        setForm((current) => ({
+                          ...current,
+                          name: product.name,
+                          unit: product.unit || current.unit,
+                        purchase_price: String(product.purchase_price || ""),
+                        sale_price: String(product.sale_price || ""),
+                        product_category: normalizeProductCategory(product.product_category),
+                          product_attributes: product.product_attributes || {},
+                      }));
+                      }}
+                      className="w-full rounded-xl bg-white px-3 py-2 text-right text-xs font-black text-slate-700 hover:bg-amber-100"
+                    >
+                      {product.name}
+                      <span className="mr-2 font-bold text-slate-400">
+                        {product.stock_quantity || 0} {product.unit || "وحدة"} - {productCategoryLabel(product.product_category)}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* وحدة القياس */}

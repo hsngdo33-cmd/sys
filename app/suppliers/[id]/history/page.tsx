@@ -725,7 +725,7 @@ export default function SupplierHistoryPage() {
             <div className="print-header">
               <div>
                 <p className="print-eyebrow">{isSupplierReturn(printTransaction.type) ? "فاتورة مرتجع مورد" : "فاتورة توريد"}</p>
-                <h1>منظومة إدارة المكتبة</h1>
+                <h1>منظومة إدارة المحل التجاري</h1>
                 <p>إدارة الموردين والأصناف</p>
               </div>
               <div className="print-meta">

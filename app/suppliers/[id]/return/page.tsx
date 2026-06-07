@@ -47,7 +47,7 @@ export default function SupplierReturnInvoicePage() {
 
   const [supplier, setSupplier] = useState<Supplier | null>(null);
   const [transactions, setTransactions] = useState<any[]>([]);
-  const [activeCategory, setActiveCategory] = useState<ProductCategory>("books");
+  const [activeCategory, setActiveCategory] = useState<ProductCategory>("general");
   const [stockById, setStockById] = useState<Record<string, number>>({});
   const [searchTerm, setSearchTerm] = useState("");
   const [cart, setCart] = useState<ReturnItem[]>([]);
@@ -451,7 +451,7 @@ export default function SupplierReturnInvoicePage() {
           <div className="print-header">
             <div>
               <p className="print-eyebrow">فاتورة مرتجع مورد {productCategoryLabel(activeCategory)}</p>
-              <h1>منظومة إدارة المكتبة</h1>
+              <h1>منظومة إدارة المحل التجاري</h1>
               <p>إدارة الموردين والأصناف</p>
             </div>
             <div className="print-meta">

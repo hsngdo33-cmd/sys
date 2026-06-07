@@ -1,398 +1,536 @@
 "use client";
-import { useState, useEffect } from "react";
-import { supabase } from "@/lib/supabase";
+
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import {
+  AlertTriangle,
+  ArrowDownRight,
+  ArrowUpRight,
+  BarChart3,
+  Boxes,
+  RefreshCw,
+  ShoppingCart,
+  TrendingUp,
+  WalletCards,
+} from "lucide-react";
+import {
+  Area,
+  AreaChart,
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Cell,
+  Pie,
+  PieChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
+import { supabase } from "@/lib/supabase";
+import { normalizeProductCategory, productCategoryLabel } from "@/lib/product-category";
 
-// ─── Types ────────────────────────────────────────────────────────────────────
-interface Stats {
-  customersCount: number;
-  suppliersCount: number;
-  totalCustomerDebts: number;
-  totalSupplierDebts: number;
-  monthRevenue: number;
-  monthProfit: number;
-  monthCollected: number;
-  lowStockCount: number;
-  todayTransactions: number;
+type RangeDays = 14 | 30 | 90;
+type MetricKey = "sales" | "profit" | "collected";
+
+type CustomerRow = { balance: number | string | null };
+type SupplierRow = { balance: number | string | null };
+type ProductRow = {
+  id: string;
+  name: string;
+  unit: string | null;
+  stock_quantity: number | string | null;
+  product_category: string | null;
+};
+type CustomerTx = {
+  created_at: string;
+  amount: number | string | null;
+  profit: number | string | null;
+  type: string | null;
+  items: unknown;
+};
+
+type TrendPoint = {
+  date: string;
+  label: string;
+  sales: number;
+  profit: number;
+  collected: number;
+  invoices: number;
+};
+
+type TopProduct = {
+  name: string;
+  qty: number;
+  revenue: number;
+};
+
+const SALE_TYPES = new Set(["sale", "بيع"]);
+const PAYMENT_TYPES = new Set(["payment", "تحصيل نقدي", "تحصيل", "دفع"]);
+const CHART_COLORS = ["#0f766e", "#2563eb", "#d97706", "#be123c", "#7c3aed", "#475569"];
+
+function num(value: unknown) {
+  return Number(value) || 0;
 }
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-const SALE_TYPES = ["sale", "بيع"];
-
-function fmt(n: number) {
-  if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + "م";
-  if (n >= 1_000)     return (n / 1_000).toFixed(1) + "ك";
-  return n.toLocaleString("ar-EG", { maximumFractionDigits: 0 });
+function money(value: number) {
+  return value.toLocaleString("ar-EG", { maximumFractionDigits: 0 });
 }
 
-function getGreeting() {
-  const h = new Date().getHours();
-  if (h < 12) return "صباح الخير 🌅";
-  if (h < 17) return "مساء النور 🌤";
-  return "مساء الخير 🌙";
+function shortMoney(value: number) {
+  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}م`;
+  if (value >= 1_000) return `${(value / 1_000).toFixed(1)}ك`;
+  return money(value);
 }
 
-// ─── Component ────────────────────────────────────────────────────────────────
-export default function Dashboard() {
-  const [stats, setStats] = useState<Stats>({
-    customersCount: 0, suppliersCount: 0,
-    totalCustomerDebts: 0, totalSupplierDebts: 0,
-    monthRevenue: 0, monthProfit: 0, monthCollected: 0,
-    lowStockCount: 0, todayTransactions: 0,
+function inputDate(date: Date) {
+  return date.toISOString().slice(0, 10);
+}
+
+function isSale(type: string | null) {
+  const safeType = type || "";
+  return SALE_TYPES.has(safeType) || safeType.includes("بيع");
+}
+
+function isPayment(type: string | null) {
+  const safeType = type || "";
+  return PAYMENT_TYPES.has(safeType) || safeType.includes("تحصيل") || safeType.includes("دفع");
+}
+
+function parseItems(items: unknown): Array<Record<string, unknown>> {
+  if (Array.isArray(items)) return items.filter((item): item is Record<string, unknown> => !!item && typeof item === "object");
+  if (typeof items !== "string") return [];
+
+  try {
+    const parsed = JSON.parse(items) as unknown;
+    return Array.isArray(parsed)
+      ? parsed.filter((item): item is Record<string, unknown> => !!item && typeof item === "object")
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+function makeTrend(rangeDays: RangeDays, txs: CustomerTx[]) {
+  const today = new Date();
+  const points = new Map<string, TrendPoint>();
+
+  for (let offset = rangeDays - 1; offset >= 0; offset -= 1) {
+    const day = new Date(today);
+    day.setDate(today.getDate() - offset);
+    const key = inputDate(day);
+    points.set(key, {
+      date: key,
+      label: day.toLocaleDateString("ar-EG", { day: "numeric", month: "short" }),
+      sales: 0,
+      profit: 0,
+      collected: 0,
+      invoices: 0,
+    });
+  }
+
+  txs.forEach((tx) => {
+    const key = inputDate(new Date(tx.created_at));
+    const point = points.get(key);
+    if (!point) return;
+
+    if (isSale(tx.type)) {
+      point.sales += num(tx.amount);
+      point.profit += num(tx.profit);
+      point.invoices += 1;
+    }
+
+    if (isPayment(tx.type)) {
+      point.collected += num(tx.amount);
+    }
   });
+
+  return [...points.values()];
+}
+
+function getTopProducts(txs: CustomerTx[]) {
+  const productMap = new Map<string, TopProduct>();
+
+  txs.filter((tx) => isSale(tx.type)).forEach((tx) => {
+    parseItems(tx.items).forEach((item) => {
+      const name = String(item.name || "صنف غير مسمى");
+      const qty = num(item.qty);
+      const price = num(item.price || item.sale_price);
+      const revenue = price > 0 ? qty * price : num(item.total);
+      const current = productMap.get(name) || { name, qty: 0, revenue: 0 };
+      current.qty += qty;
+      current.revenue += revenue;
+      productMap.set(name, current);
+    });
+  });
+
+  return [...productMap.values()].sort((a, b) => b.revenue - a.revenue).slice(0, 5);
+}
+
+export default function Dashboard() {
+  const [rangeDays, setRangeDays] = useState<RangeDays>(30);
+  const [metric, setMetric] = useState<MetricKey>("sales");
   const [loading, setLoading] = useState(true);
-  const [alerts, setAlerts] = useState<string[]>([]);
-  const [alertIdx, setAlertIdx] = useState(0);
+  const [customers, setCustomers] = useState<CustomerRow[]>([]);
+  const [suppliers, setSuppliers] = useState<SupplierRow[]>([]);
+  const [products, setProducts] = useState<ProductRow[]>([]);
+  const [transactions, setTransactions] = useState<CustomerTx[]>([]);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    fetchStats();
-  }, []);
+    fetchDashboard();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rangeDays]);
 
-  // تدوير التنبيهات
-  useEffect(() => {
-    if (alerts.length <= 1) return;
-    const t = setInterval(() => setAlertIdx(i => (i + 1) % alerts.length), 4000);
-    return () => clearInterval(t);
-  }, [alerts]);
-
-  async function fetchStats() {
+  async function fetchDashboard() {
     setLoading(true);
+    setError(null);
+
+    const since = new Date();
+    since.setDate(since.getDate() - rangeDays + 1);
+    since.setHours(0, 0, 0, 0);
+
     try {
-      const now   = new Date();
-      const start = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2,"0")}-01`;
-      const end   = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2,"0")}-31`;
-      const today = now.toISOString().split("T")[0];
+      const [{ data: customersData }, { data: suppliersData }, { data: productsData }, { data: txData }] =
+        await Promise.all([
+          supabase.from("customers").select("balance"),
+          supabase.from("suppliers").select("balance"),
+          supabase.from("products").select("id,name,unit,stock_quantity,product_category"),
+          supabase
+            .from("customer_transactions")
+            .select("created_at,amount,profit,type,items")
+            .gte("created_at", since.toISOString())
+            .order("created_at", { ascending: true }),
+        ]);
 
-      const [
-        { data: customers },
-        { data: suppliers },
-        { data: monthTx },
-        { data: products },
-        { data: todayTx },
-      ] = await Promise.all([
-        supabase.from("customers").select("balance"),
-        supabase.from("suppliers").select("balance"),
-        supabase.from("customer_transactions").select("amount, profit, type").gte("created_at", start).lte("created_at", end),
-        supabase.from("products").select("name, stock_quantity"),
-        supabase.from("customer_transactions").select("id").gte("created_at", today),
-      ]);
-
-      const monthRevenue  = (monthTx ?? []).filter(t => SALE_TYPES.includes(t.type)).reduce((s, t) => s + (Number(t.amount) || 0), 0);
-      const monthProfit   = (monthTx ?? []).filter(t => SALE_TYPES.includes(t.type)).reduce((s, t) => s + (Number(t.profit) || 0), 0);
-      const monthCollected = (monthTx ?? []).filter(t => t.type === "payment" || t.type === "تحصيل نقدي").reduce((s, t) => s + (Number(t.amount) || 0), 0);
-      const lowStock      = (products ?? []).filter(p => Number(p.stock_quantity) <= 5);
-
-      // تنبيهات ذكية
-      const newAlerts: string[] = [];
-      if (lowStock.length > 0) newAlerts.push(`⚠️ ${lowStock.length} أصناف كميتها قليلة: ${lowStock.slice(0,2).map(p=>p.name).join("، ")}...`);
-      const totalDebts = (customers ?? []).reduce((s, c) => s + (Number(c.balance) || 0), 0);
-      if (totalDebts > 50000) newAlerts.push(`🔴 إجمالي ديون العملاء تجاوز ${fmt(totalDebts)} ج.م — راجع التحصيل`);
-      const margin = monthRevenue > 0 ? Math.round((monthProfit / monthRevenue) * 100) : 0;
-      if (margin > 0 && margin < 10) newAlerts.push(`📉 هامش الربح هذا الشهر ${margin}% — راجع الأسعار`);
-      if (margin >= 25) newAlerts.push(`📈 أداء ممتاز! هامش الربح ${margin}% هذا الشهر 🎉`);
-      if (newAlerts.length === 0) newAlerts.push("✅ كل حاجة تمام — مفيش تنبيهات دلوقتي");
-
-      setAlerts(newAlerts);
-      setStats({
-        customersCount:    customers?.length || 0,
-        suppliersCount:    suppliers?.length || 0,
-        totalCustomerDebts: (customers ?? []).reduce((s, c) => s + (Number(c.balance) || 0), 0),
-        totalSupplierDebts: (suppliers ?? []).reduce((s, c) => s + (Number(c.balance) || 0), 0),
-        monthRevenue, monthProfit, monthCollected,
-        lowStockCount: lowStock.length,
-        todayTransactions: todayTx?.length || 0,
-      });
-    } catch (e) {
-      console.error(e);
+      setCustomers((customersData || []) as CustomerRow[]);
+      setSuppliers((suppliersData || []) as SupplierRow[]);
+      setProducts((productsData || []) as ProductRow[]);
+      setTransactions((txData || []) as CustomerTx[]);
+    } catch (dashboardError) {
+      console.error(dashboardError);
+      setError("تعذر تحميل بيانات الداشبورد");
     } finally {
       setLoading(false);
     }
   }
 
-  const profitMargin = stats.monthRevenue > 0
-    ? Math.round((stats.monthProfit / stats.monthRevenue) * 100)
-    : 0;
+  const trend = useMemo(() => makeTrend(rangeDays, transactions), [rangeDays, transactions]);
+  const topProducts = useMemo(() => getTopProducts(transactions), [transactions]);
 
-  const now = new Date();
-  const monthName = now.toLocaleDateString("ar-EG", { month: "long", year: "numeric" });
+  const stats = useMemo(() => {
+    const salesTxs = transactions.filter((tx) => isSale(tx.type));
+    const paymentTxs = transactions.filter((tx) => isPayment(tx.type));
+    const revenue = salesTxs.reduce((sum, tx) => sum + num(tx.amount), 0);
+    const profit = salesTxs.reduce((sum, tx) => sum + num(tx.profit), 0);
+    const collected = paymentTxs.reduce((sum, tx) => sum + num(tx.amount), 0);
+    const customerDebts = customers.reduce((sum, row) => sum + Math.max(num(row.balance), 0), 0);
+    const supplierDebts = suppliers.reduce((sum, row) => sum + Math.max(num(row.balance), 0), 0);
+    const lowStock = products.filter((product) => num(product.stock_quantity) <= 5);
+    const previous = trend.slice(0, Math.floor(trend.length / 2)).reduce((sum, point) => sum + point.sales, 0);
+    const current = trend.slice(Math.floor(trend.length / 2)).reduce((sum, point) => sum + point.sales, 0);
+    const growth = previous > 0 ? Math.round(((current - previous) / previous) * 100) : current > 0 ? 100 : 0;
+
+    return {
+      revenue,
+      profit,
+      collected,
+      customerDebts,
+      supplierDebts,
+      lowStock,
+      invoices: salesTxs.length,
+      margin: revenue > 0 ? Math.round((profit / revenue) * 100) : 0,
+      growth,
+    };
+  }, [customers, products, suppliers, transactions, trend]);
+
+  const categoryData = useMemo(() => {
+    const categoryMap = new Map<string, number>();
+    products.forEach((product) => {
+      const category = productCategoryLabel(normalizeProductCategory(product.product_category));
+      categoryMap.set(category, (categoryMap.get(category) || 0) + 1);
+    });
+    return [...categoryMap.entries()].map(([name, value]) => ({ name, value }));
+  }, [products]);
+
+  const insights = useMemo(() => {
+    const notes: Array<{ title: string; body: string; tone: "good" | "warn" | "risk" }> = [];
+
+    if (stats.margin > 0 && stats.margin < 12) {
+      notes.push({ title: "هامش الربح منخفض", body: `الهامش ${stats.margin}% فقط. راجع أسعار البيع أو تكلفة الشراء.`, tone: "risk" });
+    } else if (stats.margin >= 25) {
+      notes.push({ title: "ربحية قوية", body: `هامش الربح ${stats.margin}% خلال آخر ${rangeDays} يوم. حافظ على نفس سياسة التسعير.`, tone: "good" });
+    }
+
+    if (stats.lowStock.length > 0) {
+      notes.push({ title: "أصناف قربت تخلص", body: `${stats.lowStock.length} صنف كميته 5 أو أقل. ابدأ طلب توريد للأهم.`, tone: "warn" });
+    }
+
+    if (stats.customerDebts > stats.revenue && stats.revenue > 0) {
+      notes.push({ title: "التحصيل محتاج متابعة", body: "ديون العملاء أعلى من مبيعات الفترة. راجع العملاء المتأخرين.", tone: "risk" });
+    }
+
+    if (stats.growth < -10) {
+      notes.push({ title: "هبوط في المبيعات", body: `المبيعات نازلة ${Math.abs(stats.growth)}% مقارنة ببداية الفترة. راجع العروض وحركة الأصناف.`, tone: "warn" });
+    }
+
+    if (notes.length === 0) {
+      notes.push({ title: "الأداء مستقر", body: "الأرقام الحالية لا تظهر مخاطر واضحة. راقب المخزون والتحصيل باستمرار.", tone: "good" });
+    }
+
+    return notes.slice(0, 4);
+  }, [rangeDays, stats]);
+
+  const metricLabel: Record<MetricKey, string> = {
+    sales: "المبيعات",
+    profit: "الربح",
+    collected: "التحصيل",
+  };
 
   return (
-    <div className="min-h-screen bg-[#f1f5f9] text-right font-sans pb-6 text-slate-900" dir="rtl">
-
-      {/* ══ Header ══ */}
-      <header className="hidden">
-        <div className="max-w-[1500px] mx-auto px-6 py-4">
-          <div className="flex justify-between items-start flex-wrap gap-4">
+    <div className="min-h-screen bg-[#f4f7fb] pb-8 text-right text-slate-900" dir="rtl">
+      <main className="mx-auto max-w-7xl space-y-5 px-2 sm:px-4">
+        <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div>
-              <p className="text-slate-400 text-xs font-black uppercase tracking-widest mb-1">{getGreeting()}</p>
-              <h1 className="text-2xl font-black text-white">منظومة إدارة المكتبة</h1>
-              <p className="text-slate-500 text-[10px] font-black uppercase tracking-widest mt-1">إدارة الكتب والأدوات المكتبية والمبيعات</p>
+              <p className="text-xs font-black text-emerald-600">لوحة القرار</p>
+              <h1 className="mt-1 text-2xl font-black text-slate-950">مؤشرات المحل وتحليل الأداء</h1>
+              <p className="mt-2 text-sm font-bold text-slate-500">
+                تابع المبيعات والربح والمخزون والتحصيل في مكان واحد.
+              </p>
             </div>
-            <div className="flex items-center gap-3 flex-wrap">
-              <div className="bg-white/5 border border-white/10 px-5 py-2.5 rounded-2xl text-center">
-                <p className="text-[9px] text-slate-500 font-black uppercase">اليوم</p>
-                <p className="text-sm font-black text-white mt-0.5">{now.toLocaleDateString("ar-EG", { weekday:"long", day:"numeric", month:"long" })}</p>
-              </div>
-              <Link
-                href="/reports"
-                className="bg-indigo-600 hover:bg-indigo-500 text-white px-5 py-3 rounded-2xl font-black text-sm transition-all active:scale-95 flex items-center gap-2 shadow-lg shadow-indigo-900/40"
-              >
-                📊 التقارير
-              </Link>
+            <div className="flex flex-wrap gap-2">
+              {([14, 30, 90] as RangeDays[]).map((days) => (
+                <button
+                  key={days}
+                  type="button"
+                  onClick={() => setRangeDays(days)}
+                  className={`h-11 rounded-2xl px-4 text-sm font-black transition ${
+                    rangeDays === days ? "bg-slate-950 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                  }`}
+                >
+                  آخر {days} يوم
+                </button>
+              ))}
               <button
-                onClick={fetchStats}
-                className="bg-white/10 hover:bg-white/20 text-white px-4 py-3 rounded-2xl font-black text-sm transition-all active:scale-95"
+                type="button"
+                onClick={fetchDashboard}
+                className="inline-flex h-11 items-center gap-2 rounded-2xl bg-emerald-600 px-4 text-sm font-black text-white hover:bg-emerald-500"
               >
-                🔄
+                <RefreshCw className="h-4 w-4" />
+                تحديث
               </button>
             </div>
           </div>
+        </section>
 
-          {/* شريط التنبيهات المتحرك */}
-          {alerts.length > 0 && (
-            <div className="mt-4 bg-white/5 border border-white/10 rounded-2xl px-4 py-2.5 flex items-center gap-3 overflow-hidden">
-              <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest shrink-0">تنبيه</span>
-              <div className="h-4 w-px bg-white/10 shrink-0" />
-              <p
-                key={alertIdx}
-                className="text-sm font-bold text-slate-300 transition-all duration-500 truncate"
-                style={{ animation: "fadeSlide 0.4s ease" }}
-              >
-                {alerts[alertIdx]}
-              </p>
-              {alerts.length > 1 && (
-                <div className="flex gap-1 shrink-0 mr-auto">
-                  {alerts.map((_, i) => (
-                    <button
-                      key={i}
-                      onClick={() => setAlertIdx(i)}
-                      className={`w-1.5 h-1.5 rounded-full transition-all ${i === alertIdx ? "bg-indigo-400 w-4" : "bg-white/20"}`}
-                    />
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-      </header>
-
-      <main className="app-home-layout max-w-[1500px] mx-auto px-4 pt-2">
+        {error && (
+          <div className="rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm font-black text-rose-700">
+            {error}
+          </div>
+        )}
 
         {loading ? (
-          <div className="bg-white rounded-[1.5rem] p-12 text-center border border-slate-200 shadow-sm">
-            <p className="text-slate-400 font-black text-xl animate-pulse">⏳ جاري تحميل البيانات...</p>
+          <div className="rounded-3xl border border-slate-200 bg-white p-12 text-center text-lg font-black text-slate-400 shadow-sm">
+            جاري تحميل التحليلات...
           </div>
         ) : (
           <>
-            {/* ══ كروت الشهر الحالي ══ */}
-            <section className="app-home-performance">
-              <div className="flex items-center gap-3 mb-3">
-                <h2 className="font-black text-slate-500 text-[10px] uppercase tracking-widest">أداء {monthName}</h2>
-                <div className="flex-1 h-px bg-slate-200" />
-              </div>
-              <div className="grid grid-cols-2 gap-3">
+            <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+              <MetricCard title="مبيعات الفترة" value={`${money(stats.revenue)} ج`} hint={`${stats.invoices} فاتورة`} icon={ShoppingCart} tone="emerald" delta={stats.growth} />
+              <MetricCard title="صافي الربح" value={`${money(stats.profit)} ج`} hint={`هامش ${stats.margin}%`} icon={TrendingUp} tone="blue" />
+              <MetricCard title="التحصيل" value={`${money(stats.collected)} ج`} hint="مدفوعات العملاء" icon={WalletCards} tone="amber" />
+              <MetricCard title="مخزون منخفض" value={`${stats.lowStock.length}`} hint="صنف يحتاج متابعة" icon={Boxes} tone="rose" />
+            </section>
 
-                {/* إيرادات الشهر */}
-                <div className="bg-[#0f172a] text-white app-home-card shadow-lg col-span-2">
-                  <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-3">إيرادات الشهر</p>
-                  <p className="text-3xl font-black">{fmt(stats.monthRevenue)}</p>
-                  <p className="text-xs text-slate-500 font-bold mt-1">جنيه مصري</p>
-                </div>
-
-                {/* الربح */}
-                <div className="bg-emerald-500 text-white app-home-card shadow-lg shadow-emerald-500/20">
-                  <p className="text-[10px] font-black uppercase tracking-widest text-emerald-100 mb-3">صافي الربح</p>
-                  <p className="text-3xl font-black">{fmt(stats.monthProfit)}</p>
-                  <div className="flex items-center gap-2 mt-2">
-                    <div className="flex-1 bg-emerald-400/30 rounded-full h-1.5">
-                      <div className="bg-white h-1.5 rounded-full" style={{ width: `${Math.min(profitMargin * 2, 100)}%` }} />
-                    </div>
-                    <span className="text-[10px] font-black text-emerald-100">{profitMargin}%</span>
+            <section className="grid gap-5 xl:grid-cols-[1.5fr_1fr]">
+              <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+                <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <h2 className="text-lg font-black text-slate-950">اتجاه الأداء</h2>
+                    <p className="text-xs font-bold text-slate-500">تغير المؤشرات خلال الفترة المختارة</p>
                   </div>
-                </div>
-
-                {/* التحصيل */}
-                <div className="bg-indigo-600 text-white app-home-card shadow-lg shadow-indigo-500/20">
-                  <p className="text-[10px] font-black uppercase tracking-widest text-indigo-200 mb-3">تم تحصيله</p>
-                  <p className="text-3xl font-black">{fmt(stats.monthCollected)}</p>
-                  <p className="text-xs text-indigo-300 font-bold mt-1">هذا الشهر</p>
-                </div>
-
-                {/* معاملات اليوم */}
-                <div className="bg-amber-500 text-white app-home-card shadow-lg shadow-amber-500/20 col-span-2">
-                  <p className="text-[10px] font-black uppercase tracking-widest text-amber-100 mb-3">معاملات اليوم</p>
-                  <p className="text-3xl font-black">{stats.todayTransactions}</p>
-                  <p className="text-xs text-amber-200 font-bold mt-1">عملية مسجلة</p>
-                </div>
-
-              </div>
-            </section>
-
-            {/* ══ كروت الإجماليات ══ */}
-            <section className="app-home-summary">
-              <div className="flex items-center gap-3 mb-3">
-                <h2 className="font-black text-slate-500 text-[10px] uppercase tracking-widest">الإجماليات</h2>
-                <div className="flex-1 h-px bg-slate-200" />
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <StatCard label="ديون العملاء" value={fmt(stats.totalCustomerDebts)} sub="ج.م" accent="rose" emoji="🔴" />
-                <StatCard label="ديون الموردين" value={fmt(stats.totalSupplierDebts)} sub="ج.م" accent="indigo" emoji="📦" />
-                <StatCard label="عدد العملاء" value={String(stats.customersCount)} sub="عميل" accent="slate" emoji="👥" />
-                <StatCard label="عدد الموردين" value={String(stats.suppliersCount)} sub="مورد" accent="slate" emoji="🏭" />
-              </div>
-            </section>
-
-            {alerts.length > 0 && (
-              <section className="app-home-alerts app-home-card bg-white border border-slate-200 shadow-sm">
-                <div className="flex items-center gap-3 mb-2">
-                  <h2 className="font-black text-slate-500 text-[10px] uppercase tracking-widest">تنبيه</h2>
-                  <div className="flex-1 h-px bg-slate-200" />
-                  <button onClick={fetchStats} className="app-btn app-btn-soft app-btn-sm">تحديث</button>
-                </div>
-                <p
-                  key={alertIdx}
-                  className="text-sm font-bold text-slate-700 leading-6"
-                  style={{ animation: "fadeSlide 0.4s ease" }}
-                >
-                  {alerts[alertIdx]}
-                </p>
-                {alerts.length > 1 && (
-                  <div className="flex gap-1 mt-3">
-                    {alerts.map((_, i) => (
+                  <div className="flex rounded-2xl bg-slate-100 p-1">
+                    {(["sales", "profit", "collected"] as MetricKey[]).map((key) => (
                       <button
-                        key={i}
-                        onClick={() => setAlertIdx(i)}
-                        className={`h-1.5 rounded-full transition-all ${i === alertIdx ? "bg-indigo-500 w-5" : "bg-slate-200 w-1.5"}`}
-                      />
+                        key={key}
+                        type="button"
+                        onClick={() => setMetric(key)}
+                        className={`h-9 rounded-xl px-3 text-xs font-black transition ${
+                          metric === key ? "bg-white text-slate-950 shadow-sm" : "text-slate-500"
+                        }`}
+                      >
+                        {metricLabel[key]}
+                      </button>
                     ))}
                   </div>
-                )}
-              </section>
-            )}
-
-            {/* ══ تحذير الكتب ══ */}
-            {stats.lowStockCount > 0 && (
-              <div className="app-home-low-stock bg-amber-50 border-2 border-amber-200 rounded-[1.25rem] p-4 flex items-center gap-3">
-                <span className="text-3xl shrink-0">⚠️</span>
-                <div className="flex-1">
-                  <p className="font-black text-amber-800">تحذير: {stats.lowStockCount} أصناف كميتها منخفضة جداً</p>
-                  <p className="text-amber-600 text-sm font-bold mt-0.5">راجع الأصناف وأعد الطلب قبل النفاد</p>
                 </div>
-                <Link
-                  href="/inventory"
-                  className="bg-amber-500 hover:bg-amber-600 text-white px-5 py-2.5 rounded-xl font-black text-sm transition-all shrink-0"
-                >
-                  جرد الأصناف
-                </Link>
+                <div className="h-80">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart data={trend} margin={{ top: 10, right: 8, left: 0, bottom: 0 }}>
+                      <defs>
+                        <linearGradient id="metricFill" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="#0f766e" stopOpacity={0.35} />
+                          <stop offset="95%" stopColor="#0f766e" stopOpacity={0.02} />
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                      <XAxis dataKey="label" tick={{ fontSize: 11 }} stroke="#94a3b8" />
+                      <YAxis tickFormatter={shortMoney} tick={{ fontSize: 11 }} stroke="#94a3b8" />
+                      <Tooltip formatter={(value) => [`${money(num(value))} ج`, metricLabel[metric]]} labelStyle={{ fontWeight: 900 }} />
+                      <Area type="monotone" dataKey={metric} stroke="#0f766e" strokeWidth={3} fill="url(#metricFill)" />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </div>
               </div>
-            )}
 
-            {/* ══ أزرار التنقل ══ */}
-            <section className="app-home-sections">
-              <div className="flex items-center gap-3 mb-3">
-                <h2 className="font-black text-slate-500 text-[10px] uppercase tracking-widest">الأقسام الرئيسية</h2>
-                <div className="flex-1 h-px bg-slate-200" />
-              </div>
-              <div className="grid grid-cols-1 gap-3">
-                <NavCard
-                  href="/customer"
-                  emoji="👥"
-                  title="إدارة العملاء"
-                  desc="تسجيل العملاء، متابعة فواتير البيع، وتحصيل المبالغ"
-                  color="emerald"
-                  badge={stats.customersCount > 0 ? `${stats.customersCount} عميل` : undefined}
-                />
-                <NavCard
-                  href="/suppliers"
-                  emoji="📦"
-                  title="موردو الكتب"
-                  desc="إضافة توريدات الكتب، سداد دفعات، ومراجعة حسابات الموردين"
-                  color="indigo"
-                  badge={stats.suppliersCount > 0 ? `${stats.suppliersCount} مورد` : undefined}
-                />
-                <NavCard
-                  href="/inventory"
-                  emoji="🌾"
-                  title="الأصناف والباركود"
-                  desc="إدارة الكتب والأدوات المكتبية، تحديث الأسعار، وطباعة الباركود"
-                  color="amber"
-                  badge={stats.lowStockCount > 0 ? `${stats.lowStockCount} صنف قليل` : undefined}
-                  badgeAlert={stats.lowStockCount > 0}
-                />
+              <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+                <h2 className="text-lg font-black text-slate-950">قرارات مقترحة</h2>
+                <p className="mb-4 text-xs font-bold text-slate-500">تنبيهات مبنية على الأرقام الحالية</p>
+                <div className="space-y-3">
+                  {insights.map((insight) => (
+                    <InsightCard key={insight.title} {...insight} />
+                  ))}
+                </div>
               </div>
             </section>
 
+            <section className="grid gap-5 xl:grid-cols-3">
+              <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm xl:col-span-1">
+                <h2 className="text-lg font-black text-slate-950">توزيع الأقسام</h2>
+                <p className="mb-3 text-xs font-bold text-slate-500">عدد الأصناف حسب القسم</p>
+                <div className="h-64">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie data={categoryData} dataKey="value" nameKey="name" innerRadius={48} outerRadius={86} paddingAngle={4}>
+                        {categoryData.map((entry, index) => (
+                          <Cell key={entry.name} fill={CHART_COLORS[index % CHART_COLORS.length]} />
+                        ))}
+                      </Pie>
+                      <Tooltip formatter={(value) => [`${value} صنف`, "العدد"]} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+                <div className="grid gap-2">
+                  {categoryData.slice(0, 5).map((item, index) => (
+                    <div key={item.name} className="flex items-center justify-between text-xs font-bold text-slate-600">
+                      <span className="flex items-center gap-2">
+                        <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: CHART_COLORS[index % CHART_COLORS.length] }} />
+                        {item.name}
+                      </span>
+                      <span>{item.value}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm xl:col-span-1">
+                <h2 className="text-lg font-black text-slate-950">أفضل الأصناف</h2>
+                <p className="mb-3 text-xs font-bold text-slate-500">حسب قيمة المبيعات في الفترة</p>
+                <div className="h-72">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={topProducts} layout="vertical" margin={{ top: 10, right: 8, left: 8, bottom: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                      <XAxis type="number" tickFormatter={shortMoney} tick={{ fontSize: 11 }} stroke="#94a3b8" />
+                      <YAxis type="category" dataKey="name" width={90} tick={{ fontSize: 11 }} stroke="#94a3b8" />
+                      <Tooltip formatter={(value) => [`${money(num(value))} ج`, "مبيعات"]} />
+                      <Bar dataKey="revenue" fill="#2563eb" radius={[8, 8, 8, 8]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+
+              <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+                <h2 className="text-lg font-black text-slate-950">متابعة سريعة</h2>
+                <div className="mt-4 space-y-3">
+                  <QuickLink href="/inventory" title="راجع المخزون المنخفض" value={`${stats.lowStock.length} صنف`} tone="rose" />
+                  <QuickLink href="/customer" title="ديون العملاء" value={`${money(stats.customerDebts)} ج`} tone="emerald" />
+                  <QuickLink href="/suppliers" title="ديون الموردين" value={`${money(stats.supplierDebts)} ج`} tone="blue" />
+                  <QuickLink href="/reports" title="افتح التقارير التفصيلية" value="تحليل كامل" tone="slate" />
+                </div>
+              </div>
+            </section>
           </>
         )}
       </main>
-
-      <style jsx global>{`
-        @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;700;900&display=swap');
-        body { font-family: 'Cairo', sans-serif; background-color: #f1f5f9; }
-        @keyframes fadeSlide {
-          from { opacity: 0; transform: translateY(6px); }
-          to   { opacity: 1; transform: translateY(0); }
-        }
-      `}</style>
     </div>
   );
 }
 
-// ─── Sub-components ───────────────────────────────────────────────────────────
-
-function StatCard({ label, value, sub, accent, emoji }: {
-  label: string; value: string; sub: string;
-  accent: "rose" | "indigo" | "slate"; emoji: string;
+function MetricCard({
+  title,
+  value,
+  hint,
+  icon: Icon,
+  tone,
+  delta,
+}: {
+  title: string;
+  value: string;
+  hint: string;
+  icon: typeof BarChart3;
+  tone: "emerald" | "blue" | "amber" | "rose";
+  delta?: number;
 }) {
-  const bar = { rose: "bg-rose-500", indigo: "bg-indigo-500", slate: "bg-slate-400" };
+  const tones = {
+    emerald: "bg-emerald-50 text-emerald-700",
+    blue: "bg-blue-50 text-blue-700",
+    amber: "bg-amber-50 text-amber-700",
+    rose: "bg-rose-50 text-rose-700",
+  };
+
   return (
-    <div className="bg-white app-home-card border border-slate-200 shadow-sm relative overflow-hidden">
-      <div className={`w-1 h-10 ${bar[accent]} absolute left-0 top-1/2 -translate-y-1/2 rounded-r-full`} />
-      <p className="text-slate-400 text-[10px] font-black uppercase tracking-widest mb-2">{emoji} {label}</p>
-      <p className="text-2xl font-black text-slate-900">{value}</p>
-      <p className="text-[10px] text-slate-400 font-bold mt-1">{sub}</p>
+    <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-xs font-black text-slate-400">{title}</p>
+          <p className="mt-2 text-2xl font-black text-slate-950">{value}</p>
+          <p className="mt-1 text-xs font-bold text-slate-500">{hint}</p>
+        </div>
+        <div className={`flex h-12 w-12 items-center justify-center rounded-2xl ${tones[tone]}`}>
+          <Icon className="h-6 w-6" />
+        </div>
+      </div>
+      {typeof delta === "number" && (
+        <div className={`mt-4 inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-black ${delta >= 0 ? "bg-emerald-50 text-emerald-700" : "bg-rose-50 text-rose-700"}`}>
+          {delta >= 0 ? <ArrowUpRight className="h-4 w-4" /> : <ArrowDownRight className="h-4 w-4" />}
+          {Math.abs(delta)}%
+        </div>
+      )}
     </div>
   );
 }
 
-function NavCard({ href, emoji, title, desc, color, badge, badgeAlert }: {
-  href: string; emoji: string; title: string; desc: string;
-  color: "emerald" | "indigo" | "amber";
-  badge?: string; badgeAlert?: boolean;
-}) {
-  const hover = {
-    emerald: "hover:border-emerald-400 hover:shadow-emerald-500/10",
-    indigo:  "hover:border-indigo-400 hover:shadow-indigo-500/10",
-    amber:   "hover:border-amber-400 hover:shadow-amber-500/10",
+function InsightCard({ title, body, tone }: { title: string; body: string; tone: "good" | "warn" | "risk" }) {
+  const tones = {
+    good: "border-emerald-200 bg-emerald-50 text-emerald-800",
+    warn: "border-amber-200 bg-amber-50 text-amber-800",
+    risk: "border-rose-200 bg-rose-50 text-rose-800",
   };
-  const txt = {
-    emerald: "text-emerald-600",
-    indigo:  "text-indigo-600",
-    amber:   "text-amber-600",
-  };
-  const badgeColor = {
-    emerald: "bg-emerald-100 text-emerald-700",
-    indigo:  "bg-indigo-100 text-indigo-700",
-    amber:   "bg-amber-100 text-amber-700",
-  };
+
   return (
-    <Link
-      href={href}
-      className={`group bg-white app-home-card border border-slate-200 shadow-sm ${hover[color]} transition-all hover:shadow-xl flex flex-col`}
-    >
-      <div className="flex items-center justify-between gap-3">
-        <span className="text-3xl group-hover:scale-110 transition-transform duration-300">{emoji}</span>
-        {badge && (
-          <span className={`text-[10px] font-black px-3 py-1 rounded-full ${badgeAlert ? "bg-rose-100 text-rose-600" : badgeColor[color]}`}>
-            {badge}
-          </span>
-        )}
+    <div className={`rounded-2xl border p-4 ${tones[tone]}`}>
+      <div className="mb-1 flex items-center gap-2">
+        <AlertTriangle className="h-4 w-4" />
+        <p className="text-sm font-black">{title}</p>
       </div>
-      <h4 className="mt-3 text-base font-black text-slate-900 mb-1">{title}</h4>
-      <p className="text-slate-500 text-xs font-bold leading-6 flex-1">{desc}</p>
-      <div className={`mt-3 flex items-center gap-1 ${txt[color]} font-black text-xs`}>
-        افتح الآن ⬅️
-      </div>
+      <p className="text-xs font-bold leading-6 opacity-80">{body}</p>
+    </div>
+  );
+}
+
+function QuickLink({ href, title, value, tone }: { href: string; title: string; value: string; tone: "rose" | "emerald" | "blue" | "slate" }) {
+  const tones = {
+    rose: "bg-rose-50 text-rose-700",
+    emerald: "bg-emerald-50 text-emerald-700",
+    blue: "bg-blue-50 text-blue-700",
+    slate: "bg-slate-100 text-slate-700",
+  };
+
+  return (
+    <Link href={href} className="flex items-center justify-between rounded-2xl border border-slate-200 bg-white p-4 transition hover:border-slate-300 hover:shadow-sm">
+      <span className="text-sm font-black text-slate-800">{title}</span>
+      <span className={`rounded-full px-3 py-1 text-xs font-black ${tones[tone]}`}>{value}</span>
     </Link>
   );
 }

@@ -668,7 +668,7 @@ export default function CustomerHistory() {
             <div className="print-header">
               <div>
                 <p className="print-eyebrow">فاتورة بيع</p>
-                <h1>منظومة إدارة المكتبة</h1>
+                <h1>منظومة إدارة المحل التجاري</h1>
                 <p>إدارة العملاء والمبيعات</p>
               </div>
               <div className="print-meta">

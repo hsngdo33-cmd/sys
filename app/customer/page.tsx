@@ -114,6 +114,15 @@ export default function CustomersListPage() {
     return list;
   }, [customers, searchTerm, sortBy, filter]);
 
+  const customerNameSuggestions = useMemo(() => {
+    const name = newCustomer.name.trim().toLowerCase();
+    if (name.length < 2) return [];
+
+    return customers
+      .filter((customer) => customer.name.toLowerCase().includes(name))
+      .slice(0, 5);
+  }, [customers, newCustomer.name]);
+
   const totalDebt   = customers.reduce((s, c) => s + Math.max(c.balance, 0), 0);
   const debtorCount = customers.filter(c => c.balance > 0).length;
   const clearCount  = customers.filter(c => c.balance <= 0).length;
@@ -283,7 +292,27 @@ export default function CustomersListPage() {
         <Modal onClose={() => setShowAddModal(false)}>
           <h3 className="text-xl font-black mb-6">تسجيل عميل جديد</h3>
           <div className="space-y-4">
-            <input className="w-full p-4 bg-slate-50 border rounded-2xl font-bold outline-none" placeholder="الاسم *" value={newCustomer.name} onChange={e => setNewCustomer({...newCustomer, name: e.target.value})} />
+            <div>
+              <input className="w-full p-4 bg-slate-50 border rounded-2xl font-bold outline-none" placeholder="الاسم *" value={newCustomer.name} onChange={e => setNewCustomer({...newCustomer, name: e.target.value})} />
+              {customerNameSuggestions.length > 0 && (
+                <div className="mt-2 rounded-2xl border border-amber-200 bg-amber-50 p-2">
+                  <p className="px-2 pb-1 text-[10px] font-black text-amber-700">أسماء مشابهة مسجلة قبل كده</p>
+                  <div className="space-y-1">
+                    {customerNameSuggestions.map((customer) => (
+                      <button
+                        key={customer.id}
+                        type="button"
+                        onClick={() => setNewCustomer({ name: customer.name, phone: customer.phone || "", balance: customer.balance || 0 })}
+                        className="w-full rounded-xl bg-white px-3 py-2 text-right text-xs font-black text-slate-700 hover:bg-amber-100"
+                      >
+                        {customer.name}
+                        <span className="mr-2 font-bold text-slate-400">{customer.phone || "بدون موبايل"}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
             <input className="w-full p-4 bg-slate-50 border rounded-2xl font-bold outline-none" placeholder="الموبايل" value={newCustomer.phone} onChange={e => setNewCustomer({...newCustomer, phone: e.target.value})} />
             <input className="w-full p-4 bg-slate-50 border rounded-2xl font-bold outline-none text-rose-600" type="number" placeholder="مديونية قديمة" value={newCustomer.balance || ""} onChange={e => setNewCustomer({...newCustomer, balance: Number(e.target.value)})} />
             <div className="flex gap-3">

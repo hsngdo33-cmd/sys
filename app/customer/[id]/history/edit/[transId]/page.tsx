@@ -13,7 +13,7 @@ export default function EditInvoicePage({ params }: { params: Promise<any> }) {
   const [transaction, setTransaction] = useState<any>(null);
   const [items, setItems]             = useState<any[]>([]);
   const [products, setProducts]       = useState<any[]>([]);
-  const [activeCategory, setActiveCategory] = useState<ProductCategory>("books");
+  const [activeCategory, setActiveCategory] = useState<ProductCategory>("general");
   const [productSearch, setProductSearch] = useState("");
   const [discountPercent, setDiscountPercent] = useState<number | string>(0);
   const [isSaving, setIsSaving]       = useState(false);

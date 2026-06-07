@@ -3,13 +3,17 @@ import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { supabase } from "@/lib/supabase";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { PRODUCT_CATEGORIES, ProductCategory, normalizeProductCategory, productCategoryLabel } from "@/lib/product-category";
+import { ProductCategory, normalizeProductCategory, productCategoryLabel } from "@/lib/product-category";
+import { barcodeValidationMessage, cleanBarcode, generateInternalBarcode, isPrintableBarcode } from "@/lib/barcode";
+import { CategorySelect } from "@/app/category-select";
+import { ProductAttributes, ProductCategoryFields, cleanProductAttributes } from "@/app/product-category-fields";
 
 interface Product {
   id: string; name: string; unit: string;
   purchase_price: number; sale_price: number; stock_quantity: number;
   barcode?: string | null;
   product_category?: ProductCategory | string | null;
+  product_attributes?: ProductAttributes | null;
 }
 interface CartItem extends Product {
   qty: number | string;
@@ -22,24 +26,11 @@ interface Supplier {
   balance?: number;
 }
 
-const UNITS = ["قطعة", "نسخة", "كتاب", "علبة", "دستة", "مجموعة", "مجلد", "سلسلة", "كرتونة"];
+const UNITS = ["قطعة", "علبة", "كرتونة", "كيلو", "جرام", "لتر", "متر", "زوج", "طقم", "عبوة", "شريط", "خدمة"];
 
-const INVOICE_UNITS = ["قطعة", "نسخة", "كتاب", "علبة", "دستة", "مجموعة", "مجلد", "سلسلة", "كرتونة"];
+const INVOICE_UNITS = ["قطعة", "علبة", "كرتونة", "كيلو", "جرام", "لتر", "متر", "زوج", "طقم", "عبوة", "شريط", "خدمة"];
 
 void UNITS;
-
-const generateBarcode = () => {
-  const randomPart =
-    typeof crypto !== "undefined"
-      ? Array.from(crypto.getRandomValues(new Uint8Array(10))).map((value) => value % 10).join("")
-      : Math.floor(Math.random() * 10_000_000_000).toString().padStart(10, "0");
-
-  return `20${randomPart}`;
-};
-
-const cleanBarcode = (value: unknown) => value?.toString().trim() || "";
-
-const isPrintableBarcode = (value: string) => /^[A-Za-z0-9-]{4,24}$/.test(value);
 
 export default function SupplierInvoicePage() {
   const { id } = useParams();
@@ -47,7 +38,7 @@ export default function SupplierInvoicePage() {
 
   const [supplier, setSupplier]     = useState<Supplier | null>(null);
   const [products, setProducts]     = useState<Product[]>([]);
-  const [activeCategory, setActiveCategory] = useState<ProductCategory>("books");
+  const [activeCategory, setActiveCategory] = useState<ProductCategory>("general");
   const [cart, setCart]             = useState<CartItem[]>([]);
   const [cashPaid, setCashPaid]     = useState<number | string>(0);
   const [discountPercent, setDiscountPercent] = useState<number | string>(0);
@@ -55,11 +46,12 @@ export default function SupplierInvoicePage() {
   const [isSaving, setIsSaving]     = useState(false);
   const [note, setNote]             = useState("");
   const [showAddModal, setShowAddModal] = useState(false);
-  const [newProd, setNewProd]       = useState({ name: "", unit: "قطعة", purchase_price: "", sale_price: "", product_category: "books" as ProductCategory });
+  const [newProd, setNewProd]       = useState({ name: "", unit: "قطعة", purchase_price: "", sale_price: "", product_category: "general" as ProductCategory, product_attributes: {} as ProductAttributes });
   const [addingSaving, setAddingSaving] = useState(false);
   const [newProdBarcode, setNewProdBarcode] = useState("");
   const [scannerOpen, setScannerOpen] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
   const scanControlsRef = useRef<{ stop?: () => void } | null>(null);
   const scanLockedRef = useRef(false);
 
@@ -160,6 +152,10 @@ export default function SupplierInvoicePage() {
     setScannerOpen(false);
   };
 
+  useEffect(() => {
+    searchInputRef.current?.focus();
+  }, []);
+
   const removeFromCart = (pid: string) => setCart(prev => prev.filter(i => i.id !== pid));
 
   const updateCart = (pid: string, field: "qty" | "p_price", val: string) =>
@@ -176,10 +172,10 @@ export default function SupplierInvoicePage() {
 
   async function handleAddNewProduct() {
     if (!newProd.name.trim() || !newProd.purchase_price) return alert("اكمل البيانات!");
-    const barcode = cleanBarcode(newProdBarcode) || generateBarcode();
+    const barcode = cleanBarcode(newProdBarcode) || generateInternalBarcode(products.map(product => product.barcode));
 
     if (!isPrintableBarcode(barcode)) {
-      return alert("الباركود لازم يكون 4 إلى 24 رقم/حرف إنجليزي فقط.");
+      return alert(barcodeValidationMessage(barcode));
     }
 
     if (products.some(product => cleanBarcode(product.barcode) === barcode)) {
@@ -194,13 +190,14 @@ export default function SupplierInvoicePage() {
       stock_quantity: 0,
       barcode,
       product_category: normalizeProductCategory(newProd.product_category),
+      product_attributes: cleanProductAttributes(newProd.product_category, newProd.product_attributes),
     }]).select().single();
     if (data) {
       setProducts(prev => [...prev, data]);
       addToCart(data);
       setShowAddModal(false);
       setNewProdBarcode("");
-      setNewProd({ name: "", unit: "قطعة", purchase_price: "", sale_price: "", product_category: activeCategory });
+      setNewProd({ name: "", unit: "قطعة", purchase_price: "", sale_price: "", product_category: activeCategory, product_attributes: {} });
     }
     setAddingSaving(false);
   }
@@ -284,35 +281,28 @@ export default function SupplierInvoicePage() {
         <aside className="app-invoice-sidebar bg-white border border-slate-200 shadow-sm flex flex-col">
           <div className="p-4 border-b border-slate-100 space-y-3">
             <h3 className="font-black text-slate-400 text-[10px] uppercase tracking-widest">📦 اختيار الأصناف</h3>
-            <div className="grid grid-cols-2 gap-2">
-              {PRODUCT_CATEGORIES.map((category) => (
-                <button
-                  key={category.key}
-                  type="button"
-                  onClick={() => {
-                    setActiveCategory(category.key);
-                    setCart([]);
-                    setSearchTerm("");
-                    setNewProd((prev) => ({ ...prev, product_category: category.key }));
-                  }}
-                  className={`rounded-xl px-3 py-2 text-xs font-black transition-all ${
-                    activeCategory === category.key
-                      ? "bg-slate-900 text-white"
-                      : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-                  }`}
-                >
-                  شراء {category.label}
-                </button>
-              ))}
-            </div>
+            <CategorySelect
+              value={activeCategory}
+              label="قسم الشراء"
+              onChange={(category) => {
+                setActiveCategory(category);
+                setCart([]);
+                setSearchTerm("");
+                setNewProd((prev) => ({ ...prev, product_category: category, product_attributes: {} }));
+              }}
+            />
             <input
+              ref={searchInputRef}
               type="text"
               placeholder="🔍 ابحث..."
               className="w-full p-3 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-slate-900 outline-none focus:border-indigo-400 transition-all text-sm"
               value={searchTerm}
               onChange={e => setSearchTerm(e.target.value)}
               onKeyDown={e => {
-                if (e.key === "Enter") handleBarcodeEntry(searchTerm);
+                if (e.key === "Enter" || e.key === "Tab") {
+                  e.preventDefault();
+                  handleBarcodeEntry(searchTerm);
+                }
               }}
             />
             <div className="grid grid-cols-2 gap-2">
@@ -331,7 +321,7 @@ export default function SupplierInvoicePage() {
             </div>
             <button
               onClick={() => {
-                setNewProd((prev) => ({ ...prev, product_category: activeCategory }));
+                setNewProd((prev) => ({ ...prev, product_category: activeCategory, product_attributes: {} }));
                 setShowAddModal(true);
               }}
               className="w-full bg-amber-50 hover:bg-amber-100 text-amber-700 border border-dashed border-amber-300 py-2.5 rounded-xl text-xs font-black transition-all"
@@ -502,7 +492,7 @@ export default function SupplierInvoicePage() {
           <div className="print-header">
             <div>
               <p className="print-eyebrow">فاتورة توريد {productCategoryLabel(activeCategory)}</p>
-              <h1>منظومة إدارة المكتبة</h1>
+              <h1>منظومة إدارة المحل التجاري</h1>
               <p>إدارة الموردين والأصناف</p>
             </div>
             <div className="print-meta">
@@ -546,14 +536,14 @@ export default function SupplierInvoicePage() {
 
       {/* ══ Modal: صنف جديد ══ */}
       {showAddModal && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4" onClick={() => setShowAddModal(false)}>
-          <div className="bg-white rounded-[2.5rem] p-8 w-full max-w-md shadow-2xl space-y-5" onClick={e => e.stopPropagation()}>
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-3 sm:p-6" onClick={() => setShowAddModal(false)}>
+          <div className="flex max-h-[calc(100vh-2rem)] w-full max-w-5xl flex-col overflow-hidden rounded-[2rem] bg-white p-6 shadow-2xl sm:p-8" onClick={e => e.stopPropagation()}>
             <div className="border-r-4 border-amber-500 pr-3">
               <h3 className="text-xl font-black text-slate-900">إضافة صنف جديد</h3>
               <p className="text-xs text-slate-400 font-bold mt-0.5">هيتضاف للمخزن وللفاتورة فوراً</p>
             </div>
-            <div className="space-y-4">
-              <div>
+            <div className="grid flex-1 gap-4 overflow-y-auto lg:grid-cols-3">
+              <div className="lg:col-span-2">
                 <label className="text-xs font-black text-slate-400 mb-1 block">اسم الصنف *</label>
                 <input
                   className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-slate-900 outline-none focus:border-amber-400 transition-all"
@@ -563,25 +553,16 @@ export default function SupplierInvoicePage() {
                   autoFocus
                 />
               </div>
-              <div>
-                <label className="text-xs font-black text-slate-400 mb-1 block">القسم</label>
-                <div className="grid grid-cols-2 gap-2">
-                  {PRODUCT_CATEGORIES.map((category) => (
-                    <button
-                      key={category.key}
-                      type="button"
-                      onClick={() => setNewProd({...newProd, product_category: category.key})}
-                      className={`rounded-xl px-3 py-2 text-xs font-black transition-all ${
-                        normalizeProductCategory(newProd.product_category) === category.key
-                          ? "bg-slate-900 text-white"
-                          : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-                      }`}
-                    >
-                      {category.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
+              <CategorySelect
+                value={normalizeProductCategory(newProd.product_category)}
+                onChange={(category) => setNewProd({...newProd, product_category: category, product_attributes: {}})}
+              />
+              <ProductCategoryFields
+                category={normalizeProductCategory(newProd.product_category)}
+                value={newProd.product_attributes}
+                onChange={(attributes) => setNewProd({...newProd, product_attributes: attributes})}
+                className="lg:col-span-3"
+              />
               <div>
                 <label className="text-xs font-black text-slate-400 mb-1 block">الباركود</label>
                 <input
@@ -601,7 +582,7 @@ export default function SupplierInvoicePage() {
                   {INVOICE_UNITS.map(u => <option key={u} value={u}>{u}</option>)}
                 </select>
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-2 gap-3 lg:col-span-2">
                 <div>
                   <label className="text-xs font-black text-slate-400 mb-1 block">سعر الشراء *</label>
                   <input
@@ -624,7 +605,7 @@ export default function SupplierInvoicePage() {
                 </div>
               </div>
             </div>
-            <div className="flex gap-3 pt-2">
+            <div className="flex flex-col gap-3 pt-2 sm:flex-row">
               <button
                 onClick={handleAddNewProduct}
                 disabled={addingSaving || !newProd.name.trim() || !newProd.purchase_price}

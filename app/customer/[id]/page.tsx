@@ -3,7 +3,8 @@ import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { supabase } from "@/lib/supabase";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { PRODUCT_CATEGORIES, ProductCategory, normalizeProductCategory, productCategoryLabel } from "@/lib/product-category";
+import { ProductCategory, normalizeProductCategory, productCategoryLabel } from "@/lib/product-category";
+import { CategorySelect } from "@/app/category-select";
 
 interface Product {
   id: string; name: string; unit: string;
@@ -31,7 +32,7 @@ export default function CustomerInvoicePage() {
 
   const [customer, setCustomer]       = useState<Customer | null>(null);
   const [products, setProducts]       = useState<Product[]>([]);
-  const [activeCategory, setActiveCategory] = useState<ProductCategory>("books");
+  const [activeCategory, setActiveCategory] = useState<ProductCategory>("general");
   const [searchTerm, setSearchTerm]   = useState("");
   const [cart, setCart]               = useState<CartItem[]>([]);
   const [cashPaid, setCashPaid]       = useState<number | string>(0);
@@ -40,6 +41,7 @@ export default function CustomerInvoicePage() {
   const [note, setNote]               = useState("");
   const [scannerOpen, setScannerOpen] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
   const scanControlsRef = useRef<{ stop?: () => void } | null>(null);
   const scanLockedRef = useRef(false);
 
@@ -139,6 +141,10 @@ export default function CustomerInvoicePage() {
     setScannerOpen(false);
   };
 
+  useEffect(() => {
+    searchInputRef.current?.focus();
+  }, []);
+
   const removeFromCart = (pid: string) => setCart(prev => prev.filter(i => i.id !== pid));
 
   const updateCart = (id: string, field: "qty" | "price", val: string) =>
@@ -224,34 +230,27 @@ export default function CustomerInvoicePage() {
         <aside className="app-invoice-sidebar bg-white border border-slate-200 shadow-sm flex flex-col">
           <div className="p-4 border-b border-slate-100 space-y-3">
             <h3 className="font-black text-slate-400 text-[10px] uppercase tracking-widest">📦 اختيار الأصناف</h3>
-            <div className="grid grid-cols-2 gap-2">
-              {PRODUCT_CATEGORIES.map((category) => (
-                <button
-                  key={category.key}
-                  type="button"
-                  onClick={() => {
-                    setActiveCategory(category.key);
-                    setCart([]);
-                    setSearchTerm("");
-                  }}
-                  className={`rounded-xl px-3 py-2 text-xs font-black transition-all ${
-                    activeCategory === category.key
-                      ? "bg-slate-900 text-white"
-                      : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-                  }`}
-                >
-                  بيع {category.label}
-                </button>
-              ))}
-            </div>
+            <CategorySelect
+              value={activeCategory}
+              label="قسم البيع"
+              onChange={(category) => {
+                setActiveCategory(category);
+                setCart([]);
+                setSearchTerm("");
+              }}
+            />
             <input
+              ref={searchInputRef}
               type="text"
               placeholder="🔍 ابحث..."
               className="w-full p-3 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-slate-900 outline-none focus:border-indigo-400 transition-all text-sm"
               value={searchTerm}
               onChange={e => setSearchTerm(e.target.value)}
               onKeyDown={e => {
-                if (e.key === "Enter") handleBarcodeEntry(searchTerm);
+                if (e.key === "Enter" || e.key === "Tab") {
+                  e.preventDefault();
+                  handleBarcodeEntry(searchTerm);
+                }
               }}
             />
             <div className="grid grid-cols-2 gap-2">
@@ -450,7 +449,7 @@ export default function CustomerInvoicePage() {
           <div className="print-header">
             <div>
               <p className="print-eyebrow">فاتورة بيع {productCategoryLabel(activeCategory)}</p>
-              <h1>منظومة إدارة المكتبة</h1>
+              <h1>منظومة إدارة المحل التجاري</h1>
               <p>إدارة العملاء والمبيعات</p>
             </div>
             <div className="print-meta">

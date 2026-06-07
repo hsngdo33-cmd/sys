@@ -2,6 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { BarcodeHardwareSettingsPanel } from "@/app/barcode-hardware-settings";
+import { CategorySettingsPanel } from "@/app/category-select";
 import {
   BellRing,
   CheckCircle2,
@@ -173,16 +175,16 @@ export default function ReportSettingsPage() {
 
   return (
     <div className="min-h-[calc(100vh-8rem)] text-right" dir="rtl">
-      <div className="mx-auto max-w-4xl space-y-6">
+      <div className="mx-auto max-w-7xl space-y-6">
         <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
             <div>
               <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600">
-                <BellRing className="h-7 w-7" />
+                <Settings className="h-7 w-7" />
               </div>
-              <h1 className="text-2xl font-black text-slate-950">إعداد التقارير اليومية</h1>
+              <h1 className="text-2xl font-black text-slate-950">إعدادات النظام</h1>
               <p className="mt-2 max-w-2xl text-sm font-bold leading-7 text-slate-500">
-                افتح البوت وابعت كود الربط، وبعدها اضغط تأكيد الربط. الموقع هيحفظ حساب المكتبة ويرسل التقرير اليومي تلقائيا.
+                تحكم في الأقسام النشطة، قارئ الباركود والطابعة، وربط التقارير اليومية من مكان واحد.
               </p>
             </div>
 
@@ -195,7 +197,22 @@ export default function ReportSettingsPage() {
           </div>
         </section>
 
-        <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+        <div className="grid gap-6 xl:grid-cols-3">
+        <CategorySettingsPanel />
+
+        <BarcodeHardwareSettingsPanel />
+
+        <section className="h-full rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+          <div className="mb-5 flex items-center gap-3">
+            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600">
+              <BellRing className="h-5 w-5" />
+            </div>
+            <div>
+              <h2 className="text-xl font-black text-slate-950">إعداد التقارير اليومية</h2>
+              <p className="text-xs font-bold text-slate-500">ربط تليجرام وإرسال تقرير يومي أو تجربة فورية.</p>
+            </div>
+          </div>
+
           {loading ? (
             <div className="flex items-center justify-center gap-3 py-16 text-slate-400">
               <Loader2 className="h-5 w-5 animate-spin" />
@@ -317,6 +334,7 @@ export default function ReportSettingsPage() {
             </div>
           )}
         </section>
+        </div>
 
         <section className="rounded-3xl border border-amber-200 bg-amber-50 p-5 text-sm font-bold leading-7 text-amber-900">
          انت في امان
