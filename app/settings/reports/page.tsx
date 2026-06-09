@@ -3,7 +3,10 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { BarcodeHardwareSettingsPanel } from "@/app/barcode-hardware-settings";
+import { BusinessSettingsPanel } from "@/app/business-settings-panel";
 import { CategorySettingsPanel } from "@/app/category-select";
+import { StaffSettingsPanel } from "@/app/staff-settings-panel";
+import { UiModal } from "@/app/ui-modal";
 import {
   BellRing,
   CheckCircle2,
@@ -36,6 +39,7 @@ async function readJson(response: Response) {
 }
 
 export default function ReportSettingsPage() {
+  const [activeSettingsPanel, setActiveSettingsPanel] = useState<"business" | "staff" | "categories" | "hardware" | "daily" | null>(null);
   const [telegramChatId, setTelegramChatId] = useState("");
   const [dailyEnabled, setDailyEnabled] = useState(true);
   const [linkCode, setLinkCode] = useState("");
@@ -197,11 +201,31 @@ export default function ReportSettingsPage() {
           </div>
         </section>
 
-        <div className="grid gap-6 xl:grid-cols-3">
-        <CategorySettingsPanel />
+        <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-5">
+          {[
+            { key: "business" as const, title: "إعدادات النشاط", description: "نوع المحل، الضريبة، الفاتورة، وطريقة الدفع." },
+            { key: "staff" as const, title: "الموظفين والأدوار", description: "إضافة موظفين وتحديد دور وكود دخول." },
+            { key: "categories" as const, title: "الأقسام النشطة", description: "اختيار الأقسام التي تظهر في التكويد والفواتير." },
+            { key: "hardware" as const, title: "الهاردوير والباركود", description: "السكانر، الطابعة، ومقاسات الليبل." },
+            { key: "daily" as const, title: "التقارير اليومية", description: "ربط تيليجرام وإرسال تقرير يومي أو تجربة." },
+          ].map((card) => (
+            <button
+              key={card.key}
+              type="button"
+              onClick={() => setActiveSettingsPanel(card.key)}
+              className="rounded-3xl border border-slate-200 bg-white p-5 text-right shadow-sm transition hover:-translate-y-1 hover:border-emerald-200 hover:shadow-xl"
+            >
+              <span className="block text-lg font-black text-slate-950">{card.title}</span>
+              <span className="mt-2 block min-h-12 text-xs font-bold leading-6 text-slate-500">{card.description}</span>
+              <span className="mt-4 inline-flex rounded-2xl bg-slate-950 px-4 py-2 text-xs font-black text-white">
+                فتح التفاصيل
+              </span>
+            </button>
+          ))}
+        </div>
 
-        <BarcodeHardwareSettingsPanel />
-
+        {activeSettingsPanel === "daily" && (
+        <UiModal title="إعداد التقارير اليومية" description="ربط تيليجرام وإرسال تقرير يومي أو تجربة فورية." onClose={() => setActiveSettingsPanel(null)}>
         <section className="h-full rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
           <div className="mb-5 flex items-center gap-3">
             <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600">
@@ -334,10 +358,55 @@ export default function ReportSettingsPage() {
             </div>
           )}
         </section>
-        </div>
+        </UiModal>
+        )}
+
+        {activeSettingsPanel === "business" && (
+          <UiModal title="إعدادات النشاط" description="نوع المحل، الضريبة، الفاتورة، وطريقة الدفع." onClose={() => setActiveSettingsPanel(null)}>
+            <BusinessSettingsPanel />
+          </UiModal>
+        )}
+
+        {activeSettingsPanel === "staff" && (
+          <UiModal title="الموظفين والأدوار" description="إضافة موظفين وتحديد دور وكود دخول." onClose={() => setActiveSettingsPanel(null)}>
+            <StaffSettingsPanel />
+          </UiModal>
+        )}
+
+        {activeSettingsPanel === "categories" && (
+          <UiModal title="الأقسام النشطة" description="اختيار الأقسام التي تظهر في التكويد والفواتير." onClose={() => setActiveSettingsPanel(null)}>
+            <CategorySettingsPanel />
+          </UiModal>
+        )}
+
+        {activeSettingsPanel === "hardware" && (
+          <UiModal title="الهاردوير والباركود" description="السكانر، الطابعة، ومقاسات الليبل." onClose={() => setActiveSettingsPanel(null)}>
+            <BarcodeHardwareSettingsPanel />
+          </UiModal>
+        )}
 
         <section className="rounded-3xl border border-amber-200 bg-amber-50 p-5 text-sm font-bold leading-7 text-amber-900">
-         انت في امان
+          <h2 className="mb-3 text-lg font-black text-amber-950">إرشادات استخدام الإعدادات</h2>
+          <div className="grid gap-4 lg:grid-cols-3">
+            <div className="rounded-2xl bg-white/70 p-4">
+              <h3 className="font-black text-amber-950">1. إعدادات النشاط</h3>
+              <p className="mt-1 text-xs leading-6">
+                ابدأ بتحديد نوع المحل ومقاس الفاتورة وطريقة الدفع الافتراضية. دي الإعدادات الأساسية قبل تشغيل الفواتير.
+              </p>
+            </div>
+            <div className="rounded-2xl bg-white/70 p-4">
+              <h3 className="font-black text-amber-950">2. الأقسام النشطة</h3>
+              <p className="mt-1 text-xs leading-6">
+                فعل الأقسام اللي العميل بيستخدمها فقط. الأقسام غير النشطة مش هتظهر في التكويد والفواتير.
+              </p>
+            </div>
+            <div className="rounded-2xl bg-white/70 p-4">
+              <h3 className="font-black text-amber-950">3. الهاردوير والتقارير</h3>
+              <p className="mt-1 text-xs leading-6">
+                خلى USB scanner هو الأساس، واضبط مقاس الليبل والطابعة. اربط تيليجرام لو محتاج تقرير يومي تلقائي.
+              </p>
+            </div>
+          </div>
         </section>
       </div>
     </div>

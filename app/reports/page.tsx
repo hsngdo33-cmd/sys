@@ -1,7 +1,9 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
-import { BarChart3, Filter, Truck, UsersRound } from "lucide-react";
+import { BarChart3, ClipboardList, Filter, ShieldCheck, Truck, UsersRound } from "lucide-react";
+import { UiModal } from "@/app/ui-modal";
 
 const reportPages = [
   {
@@ -25,9 +27,25 @@ const reportPages = [
     icon: Filter,
     tone: "bg-slate-950",
   },
+  {
+    href: "/operations",
+    title: "مركز العمليات",
+    description: "حركة مخزون، خزنة، ورديات، وتسويات يومية تساعدك تفهم كل رقم اتغير ليه.",
+    icon: ClipboardList,
+    tone: "bg-indigo-600",
+  },
+  {
+    href: "/reports/staff-activity",
+    title: "تقرير نشاط الموظفين",
+    description: "مراجعة تسجيل الدخول والفواتير والمرتجعات وحركات الخزنة والتسويات حسب الموظف والفترة.",
+    icon: ShieldCheck,
+    tone: "bg-rose-600",
+  },
 ];
 
 export default function ReportsHomePage() {
+  const [activeReport, setActiveReport] = useState<(typeof reportPages)[number] | null>(null);
+
   return (
     <div className="min-h-screen bg-[#f4f7fb] px-4 py-6 text-right text-slate-900" dir="rtl">
       <div className="mx-auto max-w-6xl space-y-6">
@@ -48,14 +66,15 @@ export default function ReportsHomePage() {
               <p className="text-xs font-bold text-slate-500">اختار الكارت اللي محتاجه وافتح الصفحة الخاصة به.</p>
             </div>
           </div>
-          <div className="grid gap-4 lg:grid-cols-3">
+          <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-4">
           {reportPages.map((page) => {
             const Icon = page.icon;
             return (
-              <Link
+              <button
+                type="button"
                 key={page.href}
-                href={page.href}
-                className="group rounded-[2rem] border border-slate-200 bg-white p-6 shadow-sm transition hover:-translate-y-1 hover:shadow-xl"
+                onClick={() => setActiveReport(page)}
+                className="group rounded-[2rem] border border-slate-200 bg-white p-6 text-right shadow-sm transition hover:-translate-y-1 hover:shadow-xl"
               >
                 <div className={`mb-6 flex h-14 w-14 items-center justify-center rounded-2xl text-white ${page.tone}`}>
                   <Icon className="h-7 w-7" />
@@ -63,9 +82,9 @@ export default function ReportsHomePage() {
                 <h2 className="text-xl font-black text-slate-950">{page.title}</h2>
                 <p className="mt-2 min-h-14 text-sm font-bold leading-7 text-slate-500">{page.description}</p>
                 <div className="mt-6 inline-flex items-center rounded-2xl bg-slate-950 px-4 py-3 text-sm font-black text-white transition group-hover:bg-emerald-600">
-                  فتح التقرير
+                  عرض التفاصيل
                 </div>
-              </Link>
+              </button>
             );
           })}
           </div>
@@ -84,6 +103,32 @@ export default function ReportsHomePage() {
           </div>
         </section>
       </div>
+
+      {activeReport && (
+        <UiModal
+          title={activeReport.title}
+          description={activeReport.description}
+          onClose={() => setActiveReport(null)}
+          maxWidth="max-w-3xl"
+        >
+          <div className="space-y-5">
+            <div className="rounded-3xl border border-slate-200 bg-slate-50 p-5">
+              <h3 className="text-lg font-black text-slate-950">هتستخدم التقرير ده في إيه؟</h3>
+              <ul className="mt-3 space-y-2 text-sm font-bold leading-7 text-slate-600">
+                <li>متابعة الأرقام المهمة بدون الدخول في صفحات كتير.</li>
+                <li>مراجعة الحركة قبل اتخاذ قرار شراء أو تحصيل أو تسوية.</li>
+                <li>فتح التقرير الكامل عند الحاجة للتفاصيل والطباعة أو الفلترة.</li>
+              </ul>
+            </div>
+            <Link
+              href={activeReport.href}
+              className="inline-flex h-12 w-full items-center justify-center rounded-2xl bg-slate-950 px-5 text-sm font-black text-white hover:bg-emerald-600 sm:w-auto"
+            >
+              فتح التقرير الكامل
+            </Link>
+          </div>
+        </UiModal>
+      )}
     </div>
   );
 }

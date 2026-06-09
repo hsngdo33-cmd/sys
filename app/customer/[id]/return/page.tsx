@@ -5,6 +5,8 @@ import { supabase } from "@/lib/supabase";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { PRODUCT_CATEGORIES, ProductCategory, normalizeProductCategory, productCategoryLabel } from "@/lib/product-category";
+import { recordStaffActivity } from "@/app/staff-activity";
+import { useStaffSession } from "@/app/staff-session";
 
 type Customer = {
   id: string;
@@ -36,6 +38,8 @@ const RETURN_TYPES = ["return", "مرتجع"];
 export default function CustomerReturnInvoicePage() {
   const { id } = useParams();
   const router = useRouter();
+  const staff = useStaffSession();
+  const operatorName = staff?.name || "الكاشير";
 
   const [customer, setCustomer] = useState<Customer | null>(null);
   const [transactions, setTransactions] = useState<any[]>([]);
@@ -65,7 +69,7 @@ export default function CustomerReturnInvoicePage() {
 
   useEffect(() => {
     if (id) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
+       
       loadData();
     }
   }, [id, loadData]);
@@ -182,19 +186,59 @@ export default function CustomerReturnInvoicePage() {
         ? `${note.trim()} - فاتورة مرتجع${discountRate > 0 ? ` - خصم ${discountRate}%` : ""}`
         : `فاتورة مرتجع${discountRate > 0 ? ` - خصم ${discountRate}%` : ""}`;
 
-      const { error: insertError } = await supabase.from("customer_transactions").insert([{
+      const stockBeforeById = Object.fromEntries(
+        await Promise.all(
+          itemsToSave.map(async (item) => {
+            const { data } = await supabase
+              .from("products")
+              .select("stock_quantity")
+              .eq("id", item.id)
+              .maybeSingle();
+            return [String(item.id), Number(data?.stock_quantity || 0)] as const;
+          }),
+        ),
+      );
+
+      const { data: returnInvoice, error: insertError } = await supabase.from("customer_transactions").insert([{
         customer_id: id,
         amount: total,
         type: "return",
         description,
         items: itemsToSave,
         profit: -profitImpact,
-      }]);
+      }]).select("id").single();
       if (insertError) throw insertError;
 
       for (const item of itemsToSave) {
         await supabase.rpc("increment_stock", { row_id: item.id, amount: item.qty });
       }
+
+      await supabase.from("inventory_movements").insert(
+        itemsToSave.map((item) => {
+          const before = Number(stockBeforeById[String(item.id)] || 0);
+          const quantity = Math.abs(Number(item.qty || 0));
+          return {
+            product_id: item.id,
+            movement_type: "customer_return",
+            quantity,
+            quantity_before: before,
+            quantity_after: before + quantity,
+            unit_cost: Number(item.cost || 0),
+            source_type: "customer_return",
+            source_id: returnInvoice?.id,
+            note: `مرتجع عميل - ${customer.name}`,
+            created_by: operatorName,
+          };
+        }),
+      );
+
+      await recordStaffActivity({
+        staff,
+        action: "customer_return_saved",
+        entityType: "customer_return",
+        entityId: returnInvoice?.id,
+        note: `مرتجع عميل - ${customer.name} - ${total.toLocaleString("ar-EG")} ج`,
+      });
 
       const { error: balanceError } = await supabase
         .from("customers")

@@ -103,7 +103,7 @@ export default function InventoryPage() {
   // =========================
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
+     
     fetchProducts();
   }, [fetchProducts]);
 
@@ -1046,18 +1046,6 @@ export default function InventoryPage() {
               </select>
 
               <input
-                placeholder="الباركود"
-                value={newProduct.barcode}
-                onChange={(e) =>
-                  setNewProduct({
-                    ...newProduct,
-                    barcode: e.target.value,
-                  })
-                }
-                className="w-full border p-4 rounded-2xl font-mono"
-              />
-
-              <input
                 type="number"
                 placeholder="الكمية"
                 value={newProduct.stock_quantity}
@@ -1069,6 +1057,18 @@ export default function InventoryPage() {
                   })
                 }
                 className="w-full border p-4 rounded-2xl"
+              />
+
+              <input
+                placeholder="الباركود"
+                value={newProduct.barcode}
+                onChange={(e) =>
+                  setNewProduct({
+                    ...newProduct,
+                    barcode: e.target.value,
+                  })
+                }
+                className="w-full border p-4 rounded-2xl font-mono"
               />
 
               <input

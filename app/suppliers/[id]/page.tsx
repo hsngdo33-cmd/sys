@@ -7,6 +7,9 @@ import { ProductCategory, normalizeProductCategory, productCategoryLabel } from 
 import { barcodeValidationMessage, cleanBarcode, generateInternalBarcode, isPrintableBarcode } from "@/lib/barcode";
 import { CategorySelect } from "@/app/category-select";
 import { ProductAttributes, ProductCategoryFields, cleanProductAttributes } from "@/app/product-category-fields";
+import { recordStaffActivity } from "@/app/staff-activity";
+import { useStaffSession } from "@/app/staff-session";
+import { requireOpenShiftForCash } from "@/app/cash-session";
 
 interface Product {
   id: string; name: string; unit: string;
@@ -35,6 +38,8 @@ void UNITS;
 export default function SupplierInvoicePage() {
   const { id } = useParams();
   const router  = useRouter();
+  const staff = useStaffSession();
+  const operatorName = staff?.name || "الكاشير";
 
   const [supplier, setSupplier]     = useState<Supplier | null>(null);
   const [products, setProducts]     = useState<Product[]>([]);
@@ -66,7 +71,7 @@ export default function SupplierInvoicePage() {
 
   useEffect(() => {
     if (id) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
+       
       loadData();
     }
   }, [id, loadData]);
@@ -207,7 +212,13 @@ export default function SupplierInvoicePage() {
     if (cart.length === 0) return alert("الفاتورة فارغة!");
     setIsSaving(true);
     try {
-      await supabase.from("transactions").insert([{
+      const shiftCheck = await requireOpenShiftForCash(cash);
+      if (!shiftCheck.ok) {
+        alert(shiftCheck.message);
+        return;
+      }
+
+      const { data: invoice, error: invoiceError } = await supabase.from("transactions").insert([{
         supplier_id: id,
         amount: totalInvoice,
         type: "فاتورة توريد",
@@ -221,11 +232,24 @@ export default function SupplierInvoicePage() {
           product_category: normalizeProductCategory(i.product_category),
         })),
         description: note || `توريد ${productCategoryLabel(activeCategory)} من ${supplier?.name}${discountRate > 0 ? ` - خصم ${discountRate}%` : ""}`,
-      }]);
+      }]).select("id").single();
+      if (invoiceError) throw invoiceError;
 
       if (cash > 0) {
         await supabase.from("transactions").insert([{
           supplier_id: id, amount: cash, type: "سداد نقدي", description: "دفعة من الفاتورة",
+        }]);
+
+        await supabase.from("cash_entries").insert([{
+          session_id: shiftCheck.sessionId,
+          entry_type: "supplier_payment",
+          direction: "out",
+          payment_method: "cash",
+          amount: cash,
+          source_type: "supplier_invoice",
+          source_id: invoice?.id?.toString(),
+          note: `سداد فاتورة توريد - ${supplier.name}`,
+          created_by: operatorName,
         }]);
       }
 
@@ -240,6 +264,33 @@ export default function SupplierInvoicePage() {
           .update({ purchase_price: Number((Number(item.p_price || 0) * purchasePriceFactor).toFixed(2)) })
           .eq("id", item.id);
       }
+
+      await supabase.from("inventory_movements").insert(
+        cart.map((item) => {
+          const before = Number(item.stock_quantity || 0);
+          const quantity = Math.abs(Number(item.qty || 0));
+          return {
+            product_id: item.id,
+            movement_type: "purchase",
+            quantity,
+            quantity_before: before,
+            quantity_after: before + quantity,
+            unit_cost: Number((Number(item.p_price || 0) * purchasePriceFactor).toFixed(2)),
+            source_type: "supplier_invoice",
+            source_id: invoice?.id?.toString(),
+            note: `فاتورة توريد - ${supplier.name}`,
+            created_by: operatorName,
+          };
+        }),
+      );
+
+      await recordStaffActivity({
+        staff,
+        action: "supplier_invoice_saved",
+        entityType: "supplier_invoice",
+        entityId: invoice?.id,
+        note: `فاتورة توريد - ${supplier.name} - ${totalInvoice.toLocaleString("ar-EG")} ج`,
+      });
 
       if (printAfterSave) {
         window.print();

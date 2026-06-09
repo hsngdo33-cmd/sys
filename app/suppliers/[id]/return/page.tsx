@@ -5,6 +5,8 @@ import { supabase } from "@/lib/supabase";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { PRODUCT_CATEGORIES, ProductCategory, normalizeProductCategory, productCategoryLabel } from "@/lib/product-category";
+import { recordStaffActivity } from "@/app/staff-activity";
+import { useStaffSession } from "@/app/staff-session";
 
 type Supplier = {
   id: string;
@@ -44,6 +46,8 @@ function isSupplierReturn(type: string) {
 export default function SupplierReturnInvoicePage() {
   const { id } = useParams();
   const router = useRouter();
+  const staff = useStaffSession();
+  const operatorName = staff?.name || "الكاشير";
 
   const [supplier, setSupplier] = useState<Supplier | null>(null);
   const [transactions, setTransactions] = useState<any[]>([]);
@@ -76,7 +80,7 @@ export default function SupplierReturnInvoicePage() {
 
   useEffect(() => {
     if (id) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
+       
       loadData();
     }
   }, [id, loadData]);
@@ -191,18 +195,45 @@ export default function SupplierReturnInvoicePage() {
         ? `${note.trim()} - فاتورة مرتجع مورد${discountRate > 0 ? ` - خصم ${discountRate}%` : ""}`
         : `فاتورة مرتجع مورد${discountRate > 0 ? ` - خصم ${discountRate}%` : ""}`;
 
-      const { error: insertError } = await supabase.from("transactions").insert([{
+      const { data: returnInvoice, error: insertError } = await supabase.from("transactions").insert([{
         supplier_id: id,
         amount: total,
         type: "supplier_return",
         description,
         items: itemsToSave,
-      }]);
+      }]).select("id").single();
       if (insertError) throw insertError;
 
       for (const item of itemsToSave) {
         await supabase.rpc("decrement_stock", { row_id: String(item.id), amount: Number(item.qty) });
       }
+
+      await supabase.from("inventory_movements").insert(
+        itemsToSave.map((item) => {
+          const before = Number(stockById[String(item.id)] || 0);
+          const quantity = -Math.abs(Number(item.qty || 0));
+          return {
+            product_id: item.id,
+            movement_type: "supplier_return",
+            quantity,
+            quantity_before: before,
+            quantity_after: before + quantity,
+            unit_cost: Number(item.price || 0),
+            source_type: "supplier_return",
+            source_id: returnInvoice?.id?.toString(),
+            note: `مرتجع مورد - ${supplier.name}`,
+            created_by: operatorName,
+          };
+        }),
+      );
+
+      await recordStaffActivity({
+        staff,
+        action: "supplier_return_saved",
+        entityType: "supplier_return",
+        entityId: returnInvoice?.id,
+        note: `مرتجع مورد - ${supplier.name} - ${total.toLocaleString("ar-EG")} ج`,
+      });
 
       const { error: balanceError } = await supabase
         .from("suppliers")

@@ -5,6 +5,9 @@ import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { ProductCategory, normalizeProductCategory, productCategoryLabel } from "@/lib/product-category";
 import { CategorySelect } from "@/app/category-select";
+import { recordStaffActivity } from "@/app/staff-activity";
+import { useStaffSession } from "@/app/staff-session";
+import { requireOpenShiftForCash } from "@/app/cash-session";
 
 interface Product {
   id: string; name: string; unit: string;
@@ -29,6 +32,8 @@ const cleanBarcode = (value: unknown) => value?.toString().trim() || "";
 export default function CustomerInvoicePage() {
   const { id } = useParams();
   const router  = useRouter();
+  const staff = useStaffSession();
+  const operatorName = staff?.name || "الكاشير";
 
   const [customer, setCustomer]       = useState<Customer | null>(null);
   const [products, setProducts]       = useState<Product[]>([]);
@@ -56,7 +61,7 @@ export default function CustomerInvoicePage() {
 
   useEffect(() => {
     if (id) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
+       
       loadData();
     }
   }, [id, loadData]);
@@ -166,6 +171,12 @@ export default function CustomerInvoicePage() {
     if (cart.length === 0) return alert("الفاتورة فاضية!");
     setIsSaving(true);
     try {
+      const shiftCheck = await requireOpenShiftForCash(cash);
+      if (!shiftCheck.ok) {
+        alert(shiftCheck.message);
+        return;
+      }
+
       const itemsToSave = cart.map(i => ({
         id: i.id, name: i.name, unit: i.unit,
         qty: Number(i.qty), price: Number(i.price), cost: Number(i.cost),
@@ -183,6 +194,18 @@ export default function CustomerInvoicePage() {
         await supabase.from("customer_transactions").insert([{
           customer_id: id, amount: cash, type: "payment", description: `سداد من فاتورة #${invoice?.id}`,
         }]);
+
+        await supabase.from("cash_entries").insert([{
+          session_id: shiftCheck.sessionId,
+          entry_type: "sale_payment",
+          direction: "in",
+          payment_method: "cash",
+          amount: cash,
+          source_type: "customer_invoice",
+          source_id: invoice?.id,
+          note: `تحصيل من فاتورة بيع - ${customer.name}`,
+          created_by: operatorName,
+        }]);
       }
 
       await supabase.from("customers")
@@ -191,6 +214,33 @@ export default function CustomerInvoicePage() {
 
       for (const item of cart)
         await supabase.rpc("decrement_stock", { row_id: item.id, amount: Number(item.qty) });
+
+      await supabase.from("inventory_movements").insert(
+        cart.map((item) => {
+          const before = Number(item.stock_quantity || 0);
+          const quantity = -Math.abs(Number(item.qty || 0));
+          return {
+            product_id: item.id,
+            movement_type: "sale",
+            quantity,
+            quantity_before: before,
+            quantity_after: before + quantity,
+            unit_cost: Number(item.cost || 0),
+            source_type: "customer_invoice",
+            source_id: invoice?.id,
+            note: `فاتورة بيع - ${customer.name}`,
+            created_by: operatorName,
+          };
+        }),
+      );
+
+      await recordStaffActivity({
+        staff,
+        action: "customer_invoice_saved",
+        entityType: "customer_invoice",
+        entityId: invoice?.id,
+        note: `فاتورة بيع - ${customer.name} - ${total.toLocaleString("ar-EG")} ج`,
+      });
 
       if (printAfterSave) {
         window.print();

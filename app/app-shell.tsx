@@ -6,8 +6,11 @@ import {
   BarChart3,
   BookOpen,
   ChevronLeft,
+  ClipboardList,
   Home,
   LayoutDashboard,
+  LogIn,
+  LogOut,
   PackagePlus,
   ReceiptText,
   Search,
@@ -16,26 +19,31 @@ import {
   UsersRound,
   WalletCards,
 } from "lucide-react";
+import { clearStaffSession, useStaffSession } from "@/app/staff-session";
+import { hasPermission, permissionForPath, roleLabels } from "@/lib/permissions";
 
 const navItems = [
-  { href: "/", label: "الرئيسية", icon: Home },
-  { href: "/suppliers", label: "الموردين", icon: Truck },
-  { href: "/customer", label: "العملاء", icon: UsersRound },
-  { href: "/inventory", label: "الأصناف", icon: BookOpen },
-  { href: "/reports", label: "التقارير", icon: BarChart3 },
-  { href: "/settings/reports", label: "الإعدادات", icon: Settings },
+  { href: "/", label: "الرئيسية", icon: Home, permission: "dashboard:view" as const },
+  { href: "/suppliers", label: "الموردين", icon: Truck, permission: "purchases:manage" as const },
+  { href: "/customer", label: "العملاء", icon: UsersRound, permission: "sales:manage" as const },
+  { href: "/inventory", label: "الأصناف", icon: BookOpen, permission: "inventory:manage" as const },
+  { href: "/operations", label: "العمليات", icon: ClipboardList, permission: "operations:manage" as const },
+  { href: "/reports", label: "التقارير", icon: BarChart3, permission: "reports:view" as const },
+  { href: "/settings/reports", label: "الإعدادات", icon: Settings, permission: "settings:manage" as const },
 ];
 
 const quickLinks = [
-  { href: "/inventory", label: "إضافة صنف", icon: PackagePlus },
-  { href: "/suppliers", label: "فاتورة توريد", icon: ReceiptText },
-  { href: "/customer", label: "فاتورة بيع", icon: WalletCards },
+  { href: "/inventory", label: "إضافة صنف", icon: PackagePlus, permission: "inventory:manage" as const },
+  { href: "/suppliers", label: "فاتورة توريد", icon: ReceiptText, permission: "purchases:manage" as const },
+  { href: "/customer", label: "فاتورة بيع", icon: WalletCards, permission: "sales:manage" as const },
 ];
 
 function getPageTitle(pathname: string) {
+  if (pathname.startsWith("/login")) return "دخول الموظفين";
   if (pathname.startsWith("/suppliers")) return "إدارة الموردين";
   if (pathname.startsWith("/customer")) return "إدارة العملاء";
   if (pathname.startsWith("/inventory")) return "الأصناف والباركود";
+  if (pathname.startsWith("/operations")) return "مركز العمليات";
   if (pathname.startsWith("/reports")) return "التقارير والتحليلات";
   if (pathname.startsWith("/settings")) return "إعدادات النظام";
   return "لوحة المحل";
@@ -44,6 +52,17 @@ function getPageTitle(pathname: string) {
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const pageTitle = getPageTitle(pathname);
+  const staff = useStaffSession();
+  const isLoginPage = pathname.startsWith("/login");
+  const visibleNavItems = staff ? navItems.filter((item) => hasPermission(staff.role, item.permission)) : navItems;
+  const visibleQuickLinks = staff ? quickLinks.filter((item) => hasPermission(staff.role, item.permission)) : quickLinks;
+  const requiredPermission = permissionForPath(pathname);
+  const isAllowed = !staff || isLoginPage || hasPermission(staff.role, requiredPermission);
+
+  function logout() {
+    clearStaffSession();
+    window.location.href = "/login";
+  }
 
   return (
     <body className="min-h-screen overflow-x-hidden bg-[#f4f7fb] text-slate-900 font-sans">
@@ -62,7 +81,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </div>
 
           <nav className="flex-1 px-4 py-5 space-y-2">
-            {navItems.map((item) => {
+            {visibleNavItems.map((item) => {
               const active =
                 item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
               const Icon = item.icon;
@@ -90,7 +109,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <div className="mx-4 mb-4 rounded-3xl border border-white/10 bg-white/5 p-4">
             <p className="text-xs font-black text-slate-400 mb-3">اختصارات سريعة</p>
             <div className="space-y-2">
-              {quickLinks.map((item) => {
+              {visibleQuickLinks.map((item) => {
                 const Icon = item.icon;
                 return (
                   <Link
@@ -108,11 +127,27 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
           <div className="px-6 py-4 border-t border-white/10 text-xs text-slate-400">
             <div className="flex items-center justify-between">
-              <span className="font-black">حالة النظام</span>
-              <span className="rounded-full bg-emerald-400/15 px-3 py-1 text-emerald-300 font-black">
-                يعمل
-              </span>
+              <span className="font-black">الموظف</span>
+              {staff ? (
+                <span className="rounded-full bg-emerald-400/15 px-3 py-1 text-emerald-300 font-black">
+                  {staff.name}
+                </span>
+              ) : (
+                <Link href="/login" className="rounded-full bg-amber-400/15 px-3 py-1 text-amber-300 font-black">
+                  دخول
+                </Link>
+              )}
             </div>
+            {staff && (
+              <button
+                type="button"
+                onClick={logout}
+                className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-white/5 px-3 py-2 font-black text-slate-300 hover:bg-white/10"
+              >
+                <LogOut className="h-4 w-4" />
+                خروج
+              </button>
+            )}
           </div>
         </aside>
 
@@ -136,7 +171,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                   </div>
 
                   <div className="flex min-w-0 gap-2 overflow-x-auto pb-1 md:pb-0">
-                    {quickLinks.map((item) => {
+                    {visibleQuickLinks.map((item) => {
                       const Icon = item.icon;
                       return (
                         <Link
@@ -150,20 +185,57 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                       );
                     })}
                   </div>
+
+                  <div className="flex shrink-0 items-center gap-2">
+                    {staff ? (
+                      <>
+                        <div className="rounded-2xl bg-emerald-50 px-3 py-2 text-xs font-black text-emerald-700">
+                          {staff.name} - {roleLabels[staff.role]}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={logout}
+                          className="inline-flex h-11 items-center justify-center rounded-2xl bg-slate-100 px-3 text-xs font-black text-slate-600 hover:bg-slate-200"
+                        >
+                          <LogOut className="h-4 w-4" />
+                        </button>
+                      </>
+                    ) : (
+                      <Link
+                        href="/login"
+                        className="inline-flex h-11 items-center gap-2 rounded-2xl bg-emerald-600 px-3 text-xs font-black text-white hover:bg-emerald-500"
+                      >
+                        <LogIn className="h-4 w-4" />
+                        دخول
+                      </Link>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>
           </header>
 
           <div className="px-3 py-4 sm:px-6 sm:py-6 lg:px-8">
-            <div className="mx-auto max-w-7xl min-w-0">{children}</div>
+            <div className="mx-auto max-w-7xl min-w-0">
+              {isAllowed ? (
+                children
+              ) : (
+                <section className="rounded-3xl border border-rose-200 bg-rose-50 p-8 text-center text-rose-700">
+                  <h2 className="text-2xl font-black">لا توجد صلاحية لفتح الصفحة</h2>
+                  <p className="mt-2 text-sm font-bold">سجل دخول بموظف له صلاحية مناسبة أو راجع المدير.</p>
+                  <Link href="/login" className="mt-5 inline-flex h-12 items-center justify-center rounded-2xl bg-rose-600 px-5 text-sm font-black text-white">
+                    تسجيل دخول آخر
+                  </Link>
+                </section>
+              )}
+            </div>
           </div>
         </main>
       </div>
 
       <nav className="fixed inset-x-0 bottom-0 z-50 border-t border-slate-200 bg-white/95 px-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))] pt-2 shadow-2xl backdrop-blur-xl lg:hidden">
-        <div className="grid grid-cols-6 gap-1">
-          {navItems.map((item) => {
+        <div className="grid gap-1" style={{ gridTemplateColumns: `repeat(${visibleNavItems.length}, minmax(0, 1fr))` }}>
+          {visibleNavItems.map((item) => {
             const active =
               item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
             const Icon = item.icon;
