@@ -26,6 +26,8 @@ create table if not exists public.products (
   purchase_price numeric default 0,
   sale_price numeric default 0,
   stock_quantity numeric default 0,
+  reorder_point numeric default 5,
+  reorder_target numeric default 10,
   created_at timestamptz default now(),
   supplier_id uuid,
   barcode text,

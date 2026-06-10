@@ -95,7 +95,7 @@ export default function StaffActivityReportPage() {
       setActivities([]);
       setError(
         loadError instanceof Error
-          ? `${loadError.message}. شغل ملف supabase-staff-activity-upgrade.sql لو جدول النشاط غير موجود.`
+          ? `${loadError.message}. تواصل مع مسؤول النظام لتفعيل سجل نشاط الموظفين.`
           : "تعذر تحميل تقرير نشاط الموظفين.",
       );
     } finally {

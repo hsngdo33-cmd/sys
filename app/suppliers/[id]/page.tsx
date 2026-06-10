@@ -10,6 +10,7 @@ import { ProductAttributes, ProductCategoryFields, cleanProductAttributes } from
 import { recordStaffActivity } from "@/app/staff-activity";
 import { useStaffSession } from "@/app/staff-session";
 import { requireOpenShiftForCash } from "@/app/cash-session";
+import { calculateInvoiceTax, paperSizeCss, useBusinessSettings } from "@/app/business-settings";
 
 interface Product {
   id: string; name: string; unit: string;
@@ -40,6 +41,7 @@ export default function SupplierInvoicePage() {
   const router  = useRouter();
   const staff = useStaffSession();
   const operatorName = staff?.name || "الكاشير";
+  const { settings: businessSettings } = useBusinessSettings();
 
   const [supplier, setSupplier]     = useState<Supplier | null>(null);
   const [products, setProducts]     = useState<Product[]>([]);
@@ -169,10 +171,14 @@ export default function SupplierInvoicePage() {
   const subtotalInvoice = cart.reduce((s, i) => s + Number(i.qty || 0) * Number(i.p_price || 0), 0);
   const discountRate = Math.min(Math.max(Number(discountPercent) || 0, 0), 100);
   const discountAmount = subtotalInvoice * (discountRate / 100);
-  const totalInvoice = Math.max(subtotalInvoice - discountAmount, 0);
-  const purchasePriceFactor = subtotalInvoice > 0 ? totalInvoice / subtotalInvoice : 1;
+  const netBeforeTax = Math.max(subtotalInvoice - discountAmount, 0);
+  const taxInfo = calculateInvoiceTax(netBeforeTax, businessSettings.tax_mode);
+  const taxAmount = taxInfo.taxAmount;
+  const totalInvoice = taxInfo.totalWithTax;
+  const purchasePriceFactor = subtotalInvoice > 0 ? taxInfo.taxableSales / subtotalInvoice : 1;
   const cash         = Number(cashPaid) || 0;
   const remaining    = totalInvoice - cash;
+  const printPageSize = paperSizeCss(businessSettings.invoice_paper_size);
 
 
   async function handleAddNewProduct() {
@@ -231,7 +237,7 @@ export default function SupplierInvoicePage() {
           net_price: Number((Number(i.p_price || 0) * purchasePriceFactor).toFixed(2)),
           product_category: normalizeProductCategory(i.product_category),
         })),
-        description: note || `توريد ${productCategoryLabel(activeCategory)} من ${supplier?.name}${discountRate > 0 ? ` - خصم ${discountRate}%` : ""}`,
+        description: note || `توريد ${productCategoryLabel(activeCategory)} من ${supplier?.name}${discountRate > 0 ? ` - خصم ${discountRate}%` : ""}${taxAmount > 0 ? ` - ${taxInfo.label}` : ""}`,
       }]).select("id").single();
       if (invoiceError) throw invoiceError;
 
@@ -500,6 +506,11 @@ export default function SupplierInvoicePage() {
               <div>
                 <p className="text-[9px] text-slate-500 font-black uppercase tracking-widest mb-1">إجمالي الفاتورة</p>
                 <p className="text-xl font-black">{totalInvoice.toLocaleString("ar-EG", { maximumFractionDigits: 2 })} <small className="text-xs opacity-50">ج</small></p>
+                {businessSettings.tax_mode !== "none" && (
+                  <p className="mt-1 text-[10px] font-bold text-slate-400">
+                    {taxInfo.label}: {taxAmount.toLocaleString("ar-EG", { maximumFractionDigits: 2 })} ج
+                  </p>
+                )}
               </div>
               <div>
                 <p className="text-[9px] text-slate-500 font-black uppercase tracking-widest mb-1">دفع كاش</p>
@@ -577,6 +588,9 @@ export default function SupplierInvoicePage() {
           <div className="print-summary">
             <p><span>الإجمالي قبل الخصم</span><b>{subtotalInvoice.toLocaleString("ar-EG", { maximumFractionDigits: 2 })} ج</b></p>
             <p><span>الخصم ({discountRate}%)</span><b>{discountAmount.toLocaleString("ar-EG", { maximumFractionDigits: 2 })} ج</b></p>
+            {businessSettings.tax_mode !== "none" && (
+              <p><span>{taxInfo.label}</span><b>{taxAmount.toLocaleString("ar-EG", { maximumFractionDigits: 2 })} ج</b></p>
+            )}
             <p><span>الصافي</span><b>{totalInvoice.toLocaleString("ar-EG", { maximumFractionDigits: 2 })} ج</b></p>
             <p><span>المدفوع</span><b>{cash.toLocaleString("ar-EG", { maximumFractionDigits: 2 })} ج</b></p>
             <p className="print-total"><span>المتبقي للمورد</span><b>{remaining.toLocaleString("ar-EG", { maximumFractionDigits: 2 })} ج</b></p>
@@ -689,7 +703,7 @@ export default function SupplierInvoicePage() {
         @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;700;900&display=swap');
         body { font-family: 'Cairo', sans-serif; background-color: #f1f5f9; }
         @media print {
-          @page { size: auto; margin: 6mm; }
+          @page { size: ${printPageSize}; margin: 6mm; }
           html, body { width: auto !important; height: auto !important; margin: 0 !important; padding: 0 !important; overflow: visible !important; background: #fff !important; }
           body * { visibility: hidden !important; }
           body > div > aside, body > div > nav, body > div > main > header { display: none !important; }

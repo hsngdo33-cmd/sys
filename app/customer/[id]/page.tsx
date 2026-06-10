@@ -8,6 +8,7 @@ import { CategorySelect } from "@/app/category-select";
 import { recordStaffActivity } from "@/app/staff-activity";
 import { useStaffSession } from "@/app/staff-session";
 import { requireOpenShiftForCash } from "@/app/cash-session";
+import { calculateInvoiceTax, paperSizeCss, useBusinessSettings } from "@/app/business-settings";
 
 interface Product {
   id: string; name: string; unit: string;
@@ -34,6 +35,7 @@ export default function CustomerInvoicePage() {
   const router  = useRouter();
   const staff = useStaffSession();
   const operatorName = staff?.name || "الكاشير";
+  const { settings: businessSettings } = useBusinessSettings();
 
   const [customer, setCustomer]       = useState<Customer | null>(null);
   const [products, setProducts]       = useState<Product[]>([]);
@@ -160,11 +162,15 @@ export default function CustomerInvoicePage() {
   const totalCost  = cart.reduce((s, i) => s + Number(i.qty || 0) * Number(i.cost || 0), 0);
   const discountRate = Math.min(Math.max(Number(discountPercent) || 0, 0), 100);
   const discountAmount = subtotal * (discountRate / 100);
-  const total      = Math.max(subtotal - discountAmount, 0);
-  const profit     = total - totalCost;
+  const netBeforeTax = Math.max(subtotal - discountAmount, 0);
+  const taxInfo = calculateInvoiceTax(netBeforeTax, businessSettings.tax_mode);
+  const taxAmount = taxInfo.taxAmount;
+  const total      = taxInfo.totalWithTax;
+  const profit     = taxInfo.taxableSales - totalCost;
   const cash       = Number(cashPaid) || 0;
   const remaining  = total - cash;
-  const margin     = total > 0 ? Math.round((profit / total) * 100) : 0;
+  const margin     = taxInfo.taxableSales > 0 ? Math.round((profit / taxInfo.taxableSales) * 100) : 0;
+  const printPageSize = paperSizeCss(businessSettings.invoice_paper_size);
 
   const saveInvoice = async (printAfterSave = false) => {
     if (!customer) return alert("بيانات العميل لم تحمل بعد");
@@ -186,7 +192,7 @@ export default function CustomerInvoicePage() {
       const { data: invoice, error: invoiceError } = await supabase.from("customer_transactions").insert([{
         customer_id: id, amount: total, type: "sale",
         items: itemsToSave, profit,
-        description: note || `بيع ${productCategoryLabel(activeCategory)} لـ ${customer.name}${discountRate > 0 ? ` - خصم ${discountRate}%` : ""}`,
+        description: note || `بيع ${productCategoryLabel(activeCategory)} لـ ${customer.name}${discountRate > 0 ? ` - خصم ${discountRate}%` : ""}${taxAmount > 0 ? ` - ${taxInfo.label}` : ""}`,
       }]).select("id").single();
       if (invoiceError) throw invoiceError;
 
@@ -450,6 +456,11 @@ export default function CustomerInvoicePage() {
               <div>
                 <p className="text-[9px] text-slate-500 font-black uppercase tracking-widest mb-1">الإجمالي</p>
                 <p className="text-xl font-black">{total.toLocaleString("ar-EG", { maximumFractionDigits: 2 })} <small className="text-xs opacity-50">ج</small></p>
+                {businessSettings.tax_mode !== "none" && (
+                  <p className="mt-1 text-[10px] font-bold text-slate-400">
+                    {taxInfo.label}: {taxAmount.toLocaleString("ar-EG", { maximumFractionDigits: 2 })} ج
+                  </p>
+                )}
               </div>
               <div>
                 <p className="text-[9px] text-slate-500 font-black uppercase tracking-widest mb-1">الربح المتوقع</p>
@@ -533,6 +544,9 @@ export default function CustomerInvoicePage() {
           <div className="print-summary">
             <p><span>الإجمالي قبل الخصم</span><b>{subtotal.toLocaleString("ar-EG", { maximumFractionDigits: 2 })} ج</b></p>
             <p><span>الخصم ({discountRate}%)</span><b>{discountAmount.toLocaleString("ar-EG", { maximumFractionDigits: 2 })} ج</b></p>
+            {businessSettings.tax_mode !== "none" && (
+              <p><span>{taxInfo.label}</span><b>{taxAmount.toLocaleString("ar-EG", { maximumFractionDigits: 2 })} ج</b></p>
+            )}
             <p><span>الصافي</span><b>{total.toLocaleString("ar-EG", { maximumFractionDigits: 2 })} ج</b></p>
             <p><span>المدفوع</span><b>{cash.toLocaleString("ar-EG", { maximumFractionDigits: 2 })} ج</b></p>
             <p className="print-total"><span>المتبقي</span><b>{remaining.toLocaleString("ar-EG", { maximumFractionDigits: 2 })} ج</b></p>
@@ -560,7 +574,7 @@ export default function CustomerInvoicePage() {
         @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;700;900&display=swap');
         body { font-family: 'Cairo', sans-serif; background-color: #f1f5f9; }
         @media print {
-          @page { size: auto; margin: 6mm; }
+          @page { size: ${printPageSize}; margin: 6mm; }
           html, body { width: auto !important; height: auto !important; margin: 0 !important; padding: 0 !important; overflow: visible !important; background: #fff !important; }
           body * { visibility: hidden !important; }
           body > div > aside, body > div > nav, body > div > main > header { display: none !important; }

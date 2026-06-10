@@ -49,7 +49,7 @@ export function StaffSettingsPanel() {
       if (loadError) throw loadError;
       setMembers((data || []) as StaffMember[]);
     } catch (loadError) {
-      setError(`${errorMessage(loadError)} شغل ملف supabase-professional-upgrade.sql لو الجدول غير موجود.`);
+      setError(`${errorMessage(loadError)} تواصل مع مسؤول النظام لتفعيل إدارة الموظفين.`);
     } finally {
       setLoading(false);
     }

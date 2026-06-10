@@ -1,11 +1,11 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { supabase } from "@/lib/supabase";
 import Link from "next/link";
 import { ProductCategory, normalizeProductCategory, productCategoryLabel } from "@/lib/product-category";
 import { barcodeValidationMessage, cleanBarcode, generateInternalBarcode, isPrintableBarcode, isUuidLike } from "@/lib/barcode";
-import { CategorySelect } from "@/app/category-select";
+import { CategorySelect, useCategoryUnits } from "@/app/category-select";
 import { ProductAttributes, ProductCategoryFields, cleanProductAttributes, productAttributesSummary } from "@/app/product-category-fields";
 import { useBarcodeHardwareSettings } from "@/app/barcode-hardware-settings";
 
@@ -16,17 +16,24 @@ type Product = {
   purchase_price: number | string;
   sale_price: number | string;
   stock_quantity: number | string;
+  reorder_point?: number | string | null;
+  reorder_target?: number | string | null;
+  supplier_id?: string | null;
   barcode?: string | null;
   product_category?: ProductCategory | string | null;
   product_attributes?: ProductAttributes | null;
+};
+
+type Supplier = {
+  id: string;
+  name: string;
+  phone?: string | null;
 };
 
 type ScannerControls = {
   reset?: () => void;
   stop?: () => void;
 };
-
-const UNITS = ["قطعة", "علبة", "كرتونة", "كيلو", "جرام", "لتر", "متر", "زوج", "طقم", "عبوة", "شريط", "خدمة"];
 
 export default function InventoryPage() {
 
@@ -35,6 +42,7 @@ export default function InventoryPage() {
   // =========================
 
   const [products, setProducts] = useState<Product[]>([]);
+  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [activeCategory, setActiveCategory] = useState<ProductCategory>("general");
   const [loading, setLoading] = useState(true);
@@ -60,10 +68,21 @@ export default function InventoryPage() {
     purchase_price: "",
     sale_price: "",
     stock_quantity: "",
+    reorder_point: "5",
+    reorder_target: "10",
+    supplier_id: "",
     barcode: "",
     product_category: "general" as ProductCategory,
     product_attributes: {} as ProductAttributes,
   });
+  const newProductUnits = useCategoryUnits(newProduct.product_category);
+  const editFormUnits = useCategoryUnits(editForm.product_category);
+
+  useEffect(() => {
+    if (newProductUnits.length > 0 && !newProductUnits.includes(newProduct.unit)) {
+      setNewProduct((current) => ({ ...current, unit: newProductUnits[0] }));
+    }
+  }, [newProduct.product_category, newProduct.unit, newProductUnits]);
 
   // سكانر USB
   const scannerInputRef = useRef<HTMLInputElement>(null);
@@ -98,6 +117,15 @@ export default function InventoryPage() {
     }, 100);
   }, []);
 
+  const fetchSuppliers = useCallback(async () => {
+    const { data } = await supabase
+      .from("suppliers")
+      .select("id,name,phone")
+      .order("name", { ascending: true });
+
+    setSuppliers((data || []) as Supplier[]);
+  }, []);
+
   // =========================
   // توليد باركود تلقائي
   // =========================
@@ -105,7 +133,8 @@ export default function InventoryPage() {
   useEffect(() => {
      
     fetchProducts();
-  }, [fetchProducts]);
+    fetchSuppliers();
+  }, [fetchProducts, fetchSuppliers]);
 
   useEffect(() => {
     scannerInputRef.current?.focus();
@@ -464,6 +493,9 @@ export default function InventoryPage() {
       return alert("الباركود مستخدم بالفعل");
     }
 
+    const reorderPoint = Number(editForm.reorder_point || 0);
+    const reorderTarget = Math.max(Number(editForm.reorder_target || 0), reorderPoint);
+
     const { error } = await supabase
       .from("products")
       .update({
@@ -472,6 +504,9 @@ export default function InventoryPage() {
         purchase_price: Number(editForm.purchase_price),
         sale_price: Number(editForm.sale_price),
         stock_quantity: Number(editForm.stock_quantity),
+        reorder_point: reorderPoint,
+        reorder_target: reorderTarget,
+        supplier_id: editForm.supplier_id || null,
         barcode: barcodeValue,
         product_category: normalizeProductCategory(editForm.product_category),
         product_attributes: cleanProductAttributes(editForm.product_category, editForm.product_attributes),
@@ -520,6 +555,9 @@ export default function InventoryPage() {
       return alert("الباركود مستخدم بالفعل");
     }
 
+    const reorderPoint = Number(newProduct.reorder_point) || 5;
+    const reorderTarget = Math.max(Number(newProduct.reorder_target) || 10, reorderPoint);
+
     const { error } = await supabase
       .from("products")
       .insert([
@@ -532,6 +570,9 @@ export default function InventoryPage() {
             Number(newProduct.sale_price) || 0,
           stock_quantity:
             Number(newProduct.stock_quantity) || 0,
+          reorder_point: reorderPoint,
+          reorder_target: reorderTarget,
+          supplier_id: newProduct.supplier_id || null,
           barcode: barcodeValue,
           product_category: normalizeProductCategory(newProduct.product_category),
           product_attributes: cleanProductAttributes(newProduct.product_category, newProduct.product_attributes),
@@ -550,6 +591,9 @@ export default function InventoryPage() {
         purchase_price: "",
         sale_price: "",
         stock_quantity: "",
+        reorder_point: "5",
+        reorder_target: "10",
+        supplier_id: "",
         barcode: "",
         product_category: activeCategory,
         product_attributes: {},
@@ -582,12 +626,21 @@ export default function InventoryPage() {
     return counts;
   }, {});
 
+  const supplierMap = useMemo(() => {
+    return new Map(suppliers.map((supplier) => [supplier.id, supplier]));
+  }, [suppliers]);
+
   const newProductNameSuggestions = products
     .filter((product) => {
       const name = newProduct.name.trim().toLowerCase();
       return name.length >= 2 && product.name.toLowerCase().includes(name);
     })
     .slice(0, 5);
+
+  const getReorderPoint = (product: Product) => Number(product.reorder_point ?? 5);
+  const getReorderTarget = (product: Product) => Number(product.reorder_target ?? 10);
+  const getSupplierName = (supplierId?: string | null) =>
+    supplierId ? supplierMap.get(supplierId)?.name || "مورد غير مسجل" : "بدون مورد";
 
   // =========================
   // UI
@@ -766,6 +819,23 @@ export default function InventoryPage() {
                             }
                           />
                         </div>
+                        <select
+                          value={editForm.supplier_id || ""}
+                          onChange={(e) =>
+                            setEditForm({
+                              ...editForm,
+                              supplier_id: e.target.value || null,
+                            })
+                          }
+                          className="mt-2 w-full border p-2 rounded bg-white text-xs font-bold"
+                        >
+                          <option value="">بدون مورد</option>
+                          {suppliers.map((supplier) => (
+                            <option key={supplier.id} value={supplier.id}>
+                              {supplier.name}
+                            </option>
+                          ))}
+                        </select>
                       </td>
 
                       <td className="p-2">
@@ -780,7 +850,7 @@ export default function InventoryPage() {
                           }
                           className="w-full border p-2 rounded"
                         >
-                          {UNITS.map((unit) => (
+                          {[...new Set([...(editFormUnits || []), editForm.unit?.toString() || ""])].filter(Boolean).map((unit) => (
                             <option key={unit} value={unit}>{unit}</option>
                           ))}
                         </select>
@@ -788,18 +858,50 @@ export default function InventoryPage() {
                       </td>
 
                       <td className="p-2">
-                        <input
-                          type="number"
-                          value={editForm.stock_quantity}
-                          onChange={(e) =>
-                            setEditForm({
-                              ...editForm,
-                              stock_quantity:
-                                e.target.value,
-                            })
-                          }
-                          className="w-full border p-2 rounded"
-                        />
+                        <div className="grid gap-2">
+                          <input
+                            type="number"
+                            value={editForm.stock_quantity}
+                            onChange={(e) =>
+                              setEditForm({
+                                ...editForm,
+                                stock_quantity:
+                                  e.target.value,
+                              })
+                            }
+                            className="w-full border p-2 rounded"
+                          />
+                          <div className="grid grid-cols-2 gap-2">
+                            <input
+                              type="number"
+                              min="0"
+                              title="حد إعادة الطلب"
+                              value={editForm.reorder_point ?? ""}
+                              onChange={(e) =>
+                                setEditForm({
+                                  ...editForm,
+                                  reorder_point: e.target.value,
+                                })
+                              }
+                              className="w-full border p-2 rounded text-xs"
+                              placeholder="حد الطلب"
+                            />
+                            <input
+                              type="number"
+                              min="0"
+                              title="الكمية المستهدفة"
+                              value={editForm.reorder_target ?? ""}
+                              onChange={(e) =>
+                                setEditForm({
+                                  ...editForm,
+                                  reorder_target: e.target.value,
+                                })
+                              }
+                              className="w-full border p-2 rounded text-xs"
+                              placeholder="الهدف"
+                            />
+                          </div>
+                        </div>
                       </td>
 
                       <td className="p-2">
@@ -885,6 +987,9 @@ export default function InventoryPage() {
                             {productAttributesSummary(p.product_category, p.product_attributes)}
                           </p>
                         )}
+                        <p className="mt-1 text-[10px] font-black text-amber-600">
+                          المورد: {getSupplierName(p.supplier_id)}
+                        </p>
                       </td>
 
                       <td className="p-4">
@@ -908,7 +1013,10 @@ export default function InventoryPage() {
                             : "text-emerald-600"
                         }`}
                       >
-                        {p.stock_quantity}
+                        <div>{p.stock_quantity}</div>
+                        <div className="mt-1 text-[10px] font-black text-slate-400">
+                          حد الطلب: {getReorderPoint(p)} / الهدف: {getReorderTarget(p)}
+                        </div>
                       </td>
 
                       <td className="p-4">
@@ -1030,6 +1138,29 @@ export default function InventoryPage() {
                 className="lg:col-span-3"
               />
 
+              <label className="block">
+                <select
+                  value={newProduct.supplier_id}
+                  onChange={(e) =>
+                    setNewProduct({
+                      ...newProduct,
+                      supplier_id: e.target.value,
+                    })
+                  }
+                  className="w-full border p-4 rounded-2xl bg-white font-bold"
+                >
+                  <option value="">بدون مورد افتراضي</option>
+                  {suppliers.map((supplier) => (
+                    <option key={supplier.id} value={supplier.id}>
+                      {supplier.name}
+                    </option>
+                  ))}
+                </select>
+                <span className="mt-1 block px-1 text-[11px] font-bold text-slate-400">
+                  اختيار المورد هنا يخلي تقرير إعادة التوريد يجمع الأصناف المطلوبة حسب المورد.
+                </span>
+              </label>
+
               <select
                 value={newProduct.unit}
                 onChange={(e) =>
@@ -1040,7 +1171,7 @@ export default function InventoryPage() {
                 }
                 className="w-full border p-4 rounded-2xl bg-white font-bold"
               >
-                {UNITS.map((unit) => (
+                {[...new Set([...(newProductUnits || []), newProduct.unit])].filter(Boolean).map((unit) => (
                   <option key={unit} value={unit}>{unit}</option>
                 ))}
               </select>
@@ -1058,6 +1189,44 @@ export default function InventoryPage() {
                 }
                 className="w-full border p-4 rounded-2xl"
               />
+
+              <label className="block">
+                <input
+                  type="number"
+                  min="0"
+                  placeholder="حد إعادة الطلب"
+                  value={newProduct.reorder_point}
+                  onChange={(e) =>
+                    setNewProduct({
+                      ...newProduct,
+                      reorder_point: e.target.value,
+                    })
+                  }
+                  className="w-full border p-4 rounded-2xl"
+                />
+                <span className="mt-1 block px-1 text-[11px] font-bold text-slate-400">
+                  لما الكمية توصل للرقم ده الصنف يظهر في تقرير إعادة التوريد.
+                </span>
+              </label>
+
+              <label className="block">
+                <input
+                  type="number"
+                  min="0"
+                  placeholder="الكمية المستهدفة"
+                  value={newProduct.reorder_target}
+                  onChange={(e) =>
+                    setNewProduct({
+                      ...newProduct,
+                      reorder_target: e.target.value,
+                    })
+                  }
+                  className="w-full border p-4 rounded-2xl"
+                />
+                <span className="mt-1 block px-1 text-[11px] font-bold text-slate-400">
+                  التقرير هيقترح شراء الكمية الناقصة لحد ما الصنف يوصل للهدف ده.
+                </span>
+              </label>
 
               <input
                 placeholder="الباركود"

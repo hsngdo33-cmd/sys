@@ -32,6 +32,21 @@ function shortInvoiceNumber(id: unknown) {
   return cleanId ? `C-${cleanId.slice(0, 8)}` : "-";
 }
 
+function csvCell(value: unknown) {
+  return `"${String(value ?? "").replace(/"/g, '""')}"`;
+}
+
+function downloadCsv(fileName: string, rows: unknown[][]) {
+  const csv = rows.map(row => row.map(csvCell).join(",")).join("\n");
+  const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = fileName;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
 export default function CustomerHistory() {
   const { id } = useParams();
   const [customer, setCustomer]         = useState<any>(null);
@@ -49,14 +64,34 @@ export default function CustomerHistory() {
   const [returnItems, setReturnItems] = useState<any[]>([]);
   const [returnNote, setReturnNote] = useState("");
   const [returnSaving, setReturnSaving] = useState(false);
+  const [internalNote, setInternalNote] = useState("");
+  const [noteSaved, setNoteSaved] = useState(false);
+  const [printStatement, setPrintStatement] = useState(false);
 
   useEffect(() => { if (id) loadData(); }, [id]);
+
+  useEffect(() => {
+    if (!id) return;
+    setInternalNote(window.localStorage.getItem(`sys.customer-note.${id}`) || "");
+  }, [id]);
 
   useEffect(() => {
     if (!printTransaction) return;
     const timer = window.setTimeout(() => window.print(), 50);
     return () => window.clearTimeout(timer);
   }, [printTransaction]);
+
+  useEffect(() => {
+    if (!printStatement) return;
+    const timer = window.setTimeout(() => window.print(), 50);
+    return () => window.clearTimeout(timer);
+  }, [printStatement]);
+
+  useEffect(() => {
+    const resetStatementPrint = () => setPrintStatement(false);
+    window.addEventListener("afterprint", resetStatementPrint);
+    return () => window.removeEventListener("afterprint", resetStatementPrint);
+  }, []);
 
   async function loadData() {
     setLoading(true);
@@ -245,6 +280,24 @@ export default function CustomerHistory() {
     }
   }
 
+  function saveInternalNote() {
+    window.localStorage.setItem(`sys.customer-note.${id}`, internalNote);
+    setNoteSaved(true);
+    window.setTimeout(() => setNoteSaved(false), 1800);
+  }
+
+  function exportStatement() {
+    downloadCsv(`customer-statement-${shortInvoiceNumber(id)}.csv`, [
+      ["التاريخ", "النوع", "الوصف", "المبلغ"],
+      ...filtered.map(t => [
+        new Date(t.created_at).toLocaleString("ar-EG"),
+        txLabel(t.type),
+        t.description || "",
+        Number(t.amount || 0),
+      ]),
+    ]);
+  }
+
   const filtered = useMemo(() => {
     let list = [...transactions];
     if (filterType !== "all") list = list.filter(t => t.type === filterType);
@@ -273,6 +326,18 @@ export default function CustomerHistory() {
     })
     .reduce((sum, t) => sum + Number(t.amount || 0), 0) : 0;
   const printRemaining = Math.max(printNetTotal - printPaid, 0);
+  const lastTransaction = transactions[0] || null;
+  const daysFromLastActivity = lastTransaction
+    ? Math.floor((Date.now() - new Date(lastTransaction.created_at).getTime()) / 86400000)
+    : null;
+  const averageTransaction = transactions.length
+    ? transactions.reduce((sum, t) => sum + Number(t.amount || 0), 0) / transactions.length
+    : 0;
+  const followupAlerts = [
+    Number(customer?.balance || 0) > 0 ? `متابعة تحصيل: على العميل ${Number(customer?.balance || 0).toLocaleString("ar-EG")} ج.م` : "",
+    transactions.length === 0 ? "العميل لم يسجل أي حركة حتى الآن" : "",
+    daysFromLastActivity != null && daysFromLastActivity > 30 ? `لا توجد حركة منذ ${daysFromLastActivity.toLocaleString("ar-EG")} يوم` : "",
+  ].filter(Boolean);
 
   const filterTabs: { key: TxType; label: string }[] = [
     { key: "all",          label: `الكل (${transactions.length})` },
@@ -311,8 +376,91 @@ export default function CustomerHistory() {
             >
               ↩ فاتورة مرتجع
             </Link>
+            <button
+              type="button"
+              onClick={exportStatement}
+              disabled={filtered.length === 0}
+              className="bg-white/10 hover:bg-white/20 disabled:opacity-40 text-white px-5 py-2.5 rounded-xl font-black text-sm transition-all active:scale-95"
+            >
+              تصدير CSV
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setPrintTransaction(null);
+                setPrintStatement(true);
+              }}
+              disabled={filtered.length === 0}
+              className="bg-white text-slate-900 hover:bg-slate-100 disabled:opacity-40 px-5 py-2.5 rounded-xl font-black text-sm transition-all active:scale-95"
+            >
+              طباعة كشف حساب
+            </button>
           </div>
         </header>
+
+        <section className="grid gap-4 lg:grid-cols-[1.15fr_0.85fr]">
+          <div className="bg-white rounded-[2rem] border border-slate-200 shadow-sm p-5">
+            <div className="flex items-start justify-between gap-3 mb-4">
+              <div>
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">بروفايل العميل</p>
+                <h2 className="text-lg font-black text-slate-900 mt-1">{customer?.name || "-"}</h2>
+              </div>
+              <span className={`px-3 py-1 rounded-full text-[10px] font-black ${followupAlerts.length ? "bg-amber-100 text-amber-700" : "bg-emerald-100 text-emerald-700"}`}>
+                {followupAlerts.length ? "يحتاج متابعة" : "متابعة مستقرة"}
+              </span>
+            </div>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <div className="rounded-2xl bg-slate-50 p-3">
+                <p className="text-[10px] font-black text-slate-400 mb-1">عدد الحركات</p>
+                <p className="text-lg font-black text-slate-900">{transactions.length.toLocaleString("ar-EG")}</p>
+              </div>
+              <div className="rounded-2xl bg-slate-50 p-3">
+                <p className="text-[10px] font-black text-slate-400 mb-1">آخر حركة</p>
+                <p className="text-sm font-black text-slate-900">{lastTransaction ? new Date(lastTransaction.created_at).toLocaleDateString("ar-EG") : "-"}</p>
+              </div>
+              <div className="rounded-2xl bg-slate-50 p-3">
+                <p className="text-[10px] font-black text-slate-400 mb-1">متوسط الحركة</p>
+                <p className="text-lg font-black text-slate-900">{averageTransaction.toLocaleString("ar-EG", { maximumFractionDigits: 0 })}</p>
+              </div>
+              <div className="rounded-2xl bg-slate-50 p-3">
+                <p className="text-[10px] font-black text-slate-400 mb-1">الرصيد</p>
+                <p className={`text-lg font-black ${Number(customer?.balance || 0) > 0 ? "text-rose-600" : "text-emerald-600"}`}>
+                  {Number(customer?.balance || 0).toLocaleString("ar-EG")}
+                </p>
+              </div>
+            </div>
+            <div className="mt-4 space-y-2">
+              {(followupAlerts.length ? followupAlerts : ["لا توجد تنبيهات متابعة حالية"]).map((alert, index) => (
+                <div key={index} className={`rounded-2xl px-4 py-3 text-xs font-black ${followupAlerts.length ? "bg-amber-50 text-amber-800 border border-amber-100" : "bg-emerald-50 text-emerald-700 border border-emerald-100"}`}>
+                  {alert}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="bg-white rounded-[2rem] border border-slate-200 shadow-sm p-5">
+            <div className="flex items-center justify-between gap-3 mb-3">
+              <div>
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">ملاحظات داخلية</p>
+                <h2 className="text-lg font-black text-slate-900 mt-1">متابعة إدارية</h2>
+              </div>
+              {noteSaved && <span className="text-[10px] font-black text-emerald-600">تم الحفظ</span>}
+            </div>
+            <textarea
+              value={internalNote}
+              onChange={e => setInternalNote(e.target.value)}
+              className="w-full min-h-28 bg-slate-50 border-2 border-slate-100 rounded-2xl p-4 text-sm font-bold text-slate-700 outline-none focus:border-indigo-300"
+              placeholder="اكتب ملاحظة داخلية عن طريقة التعامل، ميعاد متابعة، أو أي تنبيه للفريق..."
+            />
+            <button
+              type="button"
+              onClick={saveInternalNote}
+              className="mt-3 w-full bg-[#0f172a] hover:bg-slate-700 text-white px-5 py-3 rounded-xl text-sm font-black transition-all"
+            >
+              حفظ الملاحظة
+            </button>
+          </div>
+        </section>
 
         {/* ══ Summary Cards ══ */}
         <div className="grid grid-cols-4 gap-4">
@@ -660,6 +808,52 @@ export default function CustomerHistory() {
             </div>
           </div>
         </div>
+      )}
+
+      {printStatement && (
+        <section className="print-invoice hidden" dir="rtl">
+          <div className="print-card">
+            <div className="print-header">
+              <div>
+                <p className="print-eyebrow">كشف حساب عميل</p>
+                <h1>{customer?.name || "-"}</h1>
+                <p>كشف حساب حسب الفلتر الحالي</p>
+              </div>
+              <div className="print-meta">
+                <p>التاريخ: {new Date().toLocaleDateString("ar-EG")}</p>
+                <p>عدد الحركات: {filtered.length.toLocaleString("ar-EG")}</p>
+                <p>الرصيد الحالي: {Number(customer?.balance || 0).toLocaleString("ar-EG")} ج</p>
+              </div>
+            </div>
+            <div className="print-summary">
+              <p><span>إجمالي المبيعات</span><b>{totalSales.toLocaleString("ar-EG")} ج</b></p>
+              <p><span>إجمالي المرتجعات</span><b>{totalReturns.toLocaleString("ar-EG")} ج</b></p>
+              <p><span>إجمالي المدفوع</span><b>{totalPaid.toLocaleString("ar-EG")} ج</b></p>
+              <p className="print-total"><span>الرصيد الحالي</span><b>{Number(customer?.balance || 0).toLocaleString("ar-EG")} ج</b></p>
+            </div>
+            <table className="print-table" style={{ marginTop: 10 }}>
+              <thead>
+                <tr>
+                  <th>التاريخ</th>
+                  <th>النوع</th>
+                  <th>الوصف</th>
+                  <th>المبلغ</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map(t => (
+                  <tr key={t.id}>
+                    <td>{new Date(t.created_at).toLocaleDateString("ar-EG")}</td>
+                    <td>{txLabel(t.type)}</td>
+                    <td>{t.description || "-"}</td>
+                    <td>{Number(t.amount || 0).toLocaleString("ar-EG")} ج</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {internalNote.trim() && <p className="print-note">ملاحظة داخلية: {internalNote}</p>}
+          </div>
+        </section>
       )}
 
       {printTransaction && (

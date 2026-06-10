@@ -57,7 +57,7 @@ export default function StaffLoginPage() {
         setStaffRows(rows);
         setSelectedId(rows[0]?.id || "");
       } catch (loadError) {
-        if (!cancelled) setError(`${getErrorMessage(loadError)} شغل ملف supabase-professional-upgrade.sql لو الجدول غير موجود.`);
+        if (!cancelled) setError(`${getErrorMessage(loadError)} تواصل مع مسؤول النظام لتفعيل دخول الموظفين.`);
       } finally {
         if (!cancelled) setLoading(false);
       }

@@ -1,6 +1,8 @@
 "use client";
 
-import { useSyncExternalStore } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
+import { supabase } from "@/lib/supabase";
+import { BusinessSettings, normalizeBusinessSettings } from "@/app/business-settings";
 
 export type BarcodeHardwareSettings = {
   submitOnTab: boolean;
@@ -81,6 +83,58 @@ export function useBarcodeHardwareSettings() {
 
 export function BarcodeHardwareSettingsPanel() {
   const { hardwareSettings, setHardwareSettings } = useBarcodeHardwareSettings();
+  const [invoicePaperSize, setInvoicePaperSize] = useState("thermal_80");
+  const [paperMessage, setPaperMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadPaperSize() {
+      const { data } = await supabase
+        .from("business_settings")
+        .select("invoice_paper_size")
+        .eq("id", "main")
+        .maybeSingle();
+
+      if (!cancelled && data?.invoice_paper_size) {
+        setInvoicePaperSize(data.invoice_paper_size);
+      }
+    }
+
+    loadPaperSize().catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  async function saveInvoicePaperSize(nextSize: string) {
+    setInvoicePaperSize(nextSize);
+    setPaperMessage(null);
+
+    const { data } = await supabase
+      .from("business_settings")
+      .select("*")
+      .eq("id", "main")
+      .maybeSingle();
+
+    const currentSettings = normalizeBusinessSettings(data as Partial<BusinessSettings> | null);
+
+    const { error } = await supabase
+      .from("business_settings")
+      .upsert(
+        {
+          id: "main",
+          ...currentSettings,
+          invoice_paper_size: nextSize,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: "id" },
+      )
+      .select("id")
+      .single();
+
+    setPaperMessage(error ? "تعذر حفظ مقاس الفاتورة." : "تم حفظ مقاس الفاتورة.");
+  }
 
   return (
     <section className="h-full rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
@@ -98,6 +152,26 @@ export function BarcodeHardwareSettingsPanel() {
         >
           رجوع للافتراضي
         </button>
+      </div>
+
+      <div className="mb-4 rounded-2xl border border-indigo-100 bg-indigo-50 p-4">
+        <label className="block">
+          <span className="mb-1 block text-xs font-black text-indigo-900">مقاس طباعة الفاتورة</span>
+          <select
+            value={invoicePaperSize}
+            onChange={(event) => saveInvoicePaperSize(event.target.value)}
+            className="h-12 w-full rounded-2xl border border-indigo-100 bg-white px-4 text-sm font-bold text-slate-900 outline-none focus:border-indigo-400"
+          >
+            <option value="thermal_80">حراري 80mm</option>
+            <option value="thermal_58">حراري 58mm</option>
+            <option value="a5">A5</option>
+            <option value="a4">A4</option>
+          </select>
+          <span className="mt-1 block text-[11px] font-bold leading-5 text-indigo-900/70">
+            الاختيار ده بيأثر على شكل صفحة الطباعة في فواتير البيع والتوريد.
+          </span>
+        </label>
+        {paperMessage && <p className="mt-2 text-xs font-black text-indigo-800">{paperMessage}</p>}
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2">

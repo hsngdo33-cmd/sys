@@ -3,28 +3,7 @@
 import { useEffect, useState } from "react";
 import { Building2, Save } from "lucide-react";
 import { supabase } from "@/lib/supabase";
-
-type BusinessSettings = {
-  business_name: string;
-  activity_type: string;
-  currency: string;
-  invoice_paper_size: string;
-  tax_mode: string;
-  allow_negative_stock: boolean;
-  require_shift_close: boolean;
-  default_payment_method: string;
-};
-
-const defaultSettings: BusinessSettings = {
-  business_name: "محل تجاري",
-  activity_type: "general",
-  currency: "EGP",
-  invoice_paper_size: "thermal_80",
-  tax_mode: "none",
-  allow_negative_stock: false,
-  require_shift_close: true,
-  default_payment_method: "cash",
-};
+import { BusinessSettings, TaxMode, defaultBusinessSettings, normalizeBusinessSettings } from "@/app/business-settings";
 
 function getSupabaseErrorMessage(error: unknown) {
   if (error instanceof Error) return error.message;
@@ -34,11 +13,11 @@ function getSupabaseErrorMessage(error: unknown) {
     const message = [source.message, source.details, source.hint].filter(Boolean).join(" ");
 
     if (source.code === "42P01") {
-      return "جدول إعدادات النشاط غير موجود. شغل ملف supabase-professional-upgrade.sql في Supabase SQL Editor.";
+      return "إعدادات النشاط غير مفعلة على قاعدة البيانات. تواصل مع مسؤول النظام لتجهيزها.";
     }
 
     if (source.code === "PGRST204") {
-      return "Supabase لا يرى أعمدة إعدادات النشاط بعد. شغل ملف supabase-professional-upgrade.sql ثم اعمل Refresh للصفحة.";
+      return "إعدادات النشاط تحتاج تحديث من مسؤول النظام، ثم أعد تحميل الصفحة.";
     }
 
     if (source.code === "42501") {
@@ -52,7 +31,7 @@ function getSupabaseErrorMessage(error: unknown) {
 }
 
 export function BusinessSettingsPanel() {
-  const [settings, setSettings] = useState<BusinessSettings>(defaultSettings);
+  const [settings, setSettings] = useState<BusinessSettings>(defaultBusinessSettings);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -74,23 +53,14 @@ export function BusinessSettingsPanel() {
 
         if (loadError) throw loadError;
         if (!cancelled && data) {
-          setSettings({
-            business_name: data.business_name || defaultSettings.business_name,
-            activity_type: data.activity_type || defaultSettings.activity_type,
-            currency: data.currency || defaultSettings.currency,
-            invoice_paper_size: data.invoice_paper_size || defaultSettings.invoice_paper_size,
-            tax_mode: data.tax_mode || defaultSettings.tax_mode,
-            allow_negative_stock: Boolean(data.allow_negative_stock),
-            require_shift_close: data.require_shift_close !== false,
-            default_payment_method: data.default_payment_method || defaultSettings.default_payment_method,
-          });
+          setSettings(normalizeBusinessSettings(data));
         }
       } catch (loadError) {
         if (!cancelled) {
           setError(
             loadError instanceof Error
               ? loadError.message
-              : "شغل ملف supabase-professional-upgrade.sql لتفعيل إعدادات النشاط.",
+              : "تعذر تحميل إعدادات النشاط. تواصل مع مسؤول النظام.",
           );
         }
       } finally {
@@ -192,26 +162,10 @@ export function BusinessSettingsPanel() {
             </label>
 
             <label className="block">
-              <span className="mb-1 block text-xs font-black text-slate-500">مقاس الفاتورة</span>
-              <select
-                value={settings.invoice_paper_size}
-                onChange={(event) => setSettings({ ...settings, invoice_paper_size: event.target.value })}
-                className="h-12 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm font-bold outline-none focus:border-indigo-400"
-              >
-                <option value="thermal_80">حراري 80mm</option>
-                <option value="thermal_58">حراري 58mm</option>
-                <option value="a4">A4</option>
-              </select>
-              <span className="mt-1 block text-[11px] font-bold leading-5 text-slate-400">
-                اختار مقاس الطابعة الأساسية عند الكاشير أو الإدارة.
-              </span>
-            </label>
-
-            <label className="block">
               <span className="mb-1 block text-xs font-black text-slate-500">نظام الضريبة</span>
               <select
                 value={settings.tax_mode}
-                onChange={(event) => setSettings({ ...settings, tax_mode: event.target.value })}
+                onChange={(event) => setSettings({ ...settings, tax_mode: event.target.value as TaxMode })}
                 className="h-12 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm font-bold outline-none focus:border-indigo-400"
               >
                 <option value="none">بدون ضريبة</option>
@@ -286,7 +240,7 @@ export function BusinessSettingsPanel() {
             <ol className="mt-2 list-inside list-decimal space-y-1 text-xs font-bold leading-6 text-indigo-900/80">
               <li>اكتب اسم النشاط زي ما تحب يظهر في التقارير والفواتير.</li>
               <li>اختار نوع النشاط الأقرب لطبيعة المحل عشان الحقول والأقسام تبقى مناسبة.</li>
-              <li>اختار مقاس الفاتورة حسب الطابعة الموجودة عند العميل.</li>
+              <li>اختار نظام الضريبة الصحيح قبل تشغيل الفواتير لأنه يؤثر على الإجمالي النهائي.</li>
               <li>لو العميل بيقفل يومية، فعل إلزام قفل الوردية واستخدم مركز العمليات يوميًا.</li>
             </ol>
           </div>

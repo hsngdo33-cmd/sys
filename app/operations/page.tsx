@@ -20,6 +20,7 @@ import { supabase } from "@/lib/supabase";
 import { recordStaffActivity } from "@/app/staff-activity";
 import { useStaffSession } from "@/app/staff-session";
 import { UiModal } from "@/app/ui-modal";
+import { getActiveCashSession, requireOpenShiftForCash } from "@/app/cash-session";
 
 type Product = {
   id: string;
@@ -66,16 +67,6 @@ type CashEntry = {
   created_at: string;
 };
 
-type StaffActivity = {
-  id: string;
-  staff_name: string | null;
-  staff_role: string | null;
-  action: string;
-  entity_type: string | null;
-  note: string | null;
-  created_at: string;
-};
-
 const movementTypes = [
   { value: "adjustment_in", label: "تسوية زيادة", icon: PlusCircle, tone: "text-emerald-600 bg-emerald-50" },
   { value: "adjustment_out", label: "تسوية نقص", icon: MinusCircle, tone: "text-rose-600 bg-rose-50" },
@@ -100,11 +91,10 @@ function signedQuantity(type: string, qty: number) {
 
 export default function OperationsPage() {
   const staff = useStaffSession();
-  const [activeOperationsPanel, setActiveOperationsPanel] = useState<"actions" | "history" | "activity" | null>(null);
+  const [activeOperationsPanel, setActiveOperationsPanel] = useState<"actions" | "history" | null>(null);
   const [products, setProducts] = useState<Product[]>([]);
   const [movements, setMovements] = useState<Movement[]>([]);
   const [cashEntries, setCashEntries] = useState<CashEntry[]>([]);
-  const [activities, setActivities] = useState<StaffActivity[]>([]);
   const [activeSession, setActiveSession] = useState<CashSession | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -121,6 +111,11 @@ export default function OperationsPage() {
   const [sessionForm, setSessionForm] = useState({
     openedBy: "المدير",
     openingBalance: "",
+  });
+
+  const [closeForm, setCloseForm] = useState({
+    closingBalance: "",
+    note: "",
   });
 
   const [cashForm, setCashForm] = useState({
@@ -149,6 +144,8 @@ export default function OperationsPage() {
 
   const expectedCash =
     Number(activeSession?.opening_balance || 0) + cashSummary.in - cashSummary.out;
+  const actualClosingBalance = Number(closeForm.closingBalance || 0);
+  const closingVariance = closeForm.closingBalance ? actualClosingBalance - expectedCash : 0;
   const operatorName = staff?.name || "غير مسجل";
   const isCashier = staff?.role === "cashier";
 
@@ -157,7 +154,7 @@ export default function OperationsPage() {
     setError(null);
 
     try {
-      const [productsResult, movementsResult, sessionsResult, activitiesResult] = await Promise.all([
+      const [productsResult, movementsResult, sessionsResult] = await Promise.all([
         supabase
           .from("products")
           .select("id,name,unit,stock_quantity,purchase_price,sale_price")
@@ -173,11 +170,6 @@ export default function OperationsPage() {
           .eq("status", "open")
           .order("opened_at", { ascending: false })
           .limit(1),
-        supabase
-          .from("staff_activity_logs")
-          .select("id,staff_name,staff_role,action,entity_type,note,created_at")
-          .order("created_at", { ascending: false })
-          .limit(10),
       ]);
 
       if (productsResult.error) throw productsResult.error;
@@ -204,12 +196,11 @@ export default function OperationsPage() {
       );
       setActiveSession(activeCashSession);
       setCashEntries((cashResult.data || []) as CashEntry[]);
-      setActivities(activitiesResult.error ? [] : ((activitiesResult.data || []) as StaffActivity[]));
     } catch (loadError) {
       setError(
         loadError instanceof Error
           ? loadError.message
-          : "تعذر تحميل مركز العمليات. شغل ملف supabase-professional-upgrade.sql لو الجداول لسه متضافتش.",
+          : "تعذر تحميل مركز العمليات. تواصل مع مسؤول النظام لتجهيز قاعدة البيانات.",
       );
     } finally {
       setLoading(false);
@@ -222,6 +213,18 @@ export default function OperationsPage() {
     }, 0);
     return () => window.clearTimeout(timer);
   }, []);
+
+  useEffect(() => {
+    if (!activeSession) {
+      setCloseForm({ closingBalance: "", note: "" });
+      return;
+    }
+
+    setCloseForm((current) => ({
+      ...current,
+      closingBalance: current.closingBalance || String(expectedCash),
+    }));
+  }, [activeSession, expectedCash]);
 
   async function saveMovement() {
     if (!selectedProduct) return setError("اختار الصنف الأول.");
@@ -280,6 +283,12 @@ export default function OperationsPage() {
     setMessage(null);
 
     try {
+      const existingSession = activeSession || (await getActiveCashSession());
+      if (existingSession) {
+        await loadData();
+        throw new Error("توجد وردية مفتوحة بالفعل. اقفل الوردية الحالية قبل فتح وردية جديدة.");
+      }
+
       const { error: sessionError } = await supabase.from("cash_sessions").insert([
         {
           opened_by: sessionForm.openedBy || operatorName,
@@ -308,6 +317,12 @@ export default function OperationsPage() {
 
   async function closeSession() {
     if (!activeSession) return;
+    if (!closeForm.closingBalance.trim()) return setError("اكتب الرصيد الفعلي الموجود في الخزنة قبل قفل الوردية.");
+
+    const closingBalance = Number(closeForm.closingBalance);
+    if (Number.isNaN(closingBalance) || closingBalance < 0) return setError("الرصيد الفعلي لازم يكون رقم صحيح.");
+
+    const variance = closingBalance - expectedCash;
     setSaving(true);
     setError(null);
     setMessage(null);
@@ -318,9 +333,10 @@ export default function OperationsPage() {
         .update({
           status: "closed",
           closed_by: operatorName,
-          closing_balance: expectedCash,
+          closing_balance: closingBalance,
           expected_balance: expectedCash,
           closed_at: new Date().toISOString(),
+          note: closeForm.note || `فرق العهدة: ${variance}`,
         })
         .eq("id", activeSession.id);
       if (closeError) throw closeError;
@@ -330,9 +346,10 @@ export default function OperationsPage() {
         action: "cash_session_close",
         entityType: "cash_session",
         entityId: activeSession.id,
-        note: `رصيد متوقع ${expectedCash}`,
+        note: `رصيد متوقع ${expectedCash} - فعلي ${closingBalance} - فرق ${variance}`,
       });
 
+      setCloseForm({ closingBalance: "", note: "" });
       setMessage("تم قفل وردية الخزنة.");
       await loadData();
     } catch (closeError) {
@@ -354,9 +371,13 @@ export default function OperationsPage() {
     setMessage(null);
 
     try {
+      const shiftCheck = await requireOpenShiftForCash(amount);
+      if (!shiftCheck.ok) throw new Error(shiftCheck.message);
+      const sessionId = shiftCheck.sessionId || activeSession?.id || null;
+
       const { error: cashError } = await supabase.from("cash_entries").insert([
         {
-          session_id: activeSession?.id || null,
+          session_id: sessionId,
           entry_type: selectedType.value,
           direction: selectedType.direction,
           payment_method: cashForm.paymentMethod,
@@ -435,23 +456,13 @@ export default function OperationsPage() {
           </div>
         )}
 
-        <section className={`grid gap-4 ${isCashier ? "lg:grid-cols-2" : "lg:grid-cols-4"}`}>
-          {!isCashier && (
+        <section className={`grid gap-4 ${isCashier ? "lg:grid-cols-3" : "lg:grid-cols-4"}`}>
           <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-            <p className="text-xs font-black text-slate-400">قيمة المخزون التقريبية</p>
-            <p className="mt-3 text-2xl font-black text-slate-950">
-              {money(products.reduce((sum, product) => sum + Number(product.stock_quantity || 0) * Number(product.purchase_price || 0), 0))} ج
+            <p className="text-xs font-black text-slate-400">حالة الوردية</p>
+            <p className={`mt-3 text-2xl font-black ${activeSession ? "text-emerald-600" : "text-amber-600"}`}>
+              {activeSession ? "مفتوحة" : "مغلقة"}
             </p>
           </div>
-          )}
-          {!isCashier && (
-          <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-            <p className="text-xs font-black text-slate-400">أصناف تحتاج متابعة</p>
-            <p className="mt-3 text-2xl font-black text-rose-600">
-              {products.filter((product) => Number(product.stock_quantity || 0) <= 5).length}
-            </p>
-          </div>
-          )}
           <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
             <p className="text-xs font-black text-slate-400">داخل الخزنة</p>
             <p className="mt-3 text-2xl font-black text-emerald-600">{money(cashSummary.in)} ج</p>
@@ -460,9 +471,15 @@ export default function OperationsPage() {
             <p className="text-xs font-black text-slate-400">خارج الخزنة</p>
             <p className="mt-3 text-2xl font-black text-orange-600">{money(cashSummary.out)} ج</p>
           </div>
+          {!isCashier && (
+          <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+            <p className="text-xs font-black text-slate-400">حركات مخزون أخيرة</p>
+            <p className="mt-3 text-2xl font-black text-indigo-600">{movements.length.toLocaleString("ar-EG")}</p>
+          </div>
+          )}
         </section>
 
-        <section className={`grid gap-4 ${isCashier ? "lg:grid-cols-2" : "lg:grid-cols-3"}`}>
+        <section className="grid gap-4 lg:grid-cols-2">
           <button
             type="button"
             onClick={() => setActiveOperationsPanel("actions")}
@@ -486,18 +503,6 @@ export default function OperationsPage() {
             </span>
             <span className="mt-4 inline-flex rounded-2xl bg-slate-950 px-4 py-2 text-xs font-black text-white">فتح السجل</span>
           </button>
-
-          {!isCashier && (
-            <button
-              type="button"
-              onClick={() => setActiveOperationsPanel("activity")}
-              className="rounded-3xl border border-slate-200 bg-white p-5 text-right shadow-sm transition hover:-translate-y-1 hover:border-emerald-200 hover:shadow-xl"
-            >
-              <span className="block text-lg font-black text-slate-950">نشاط الموظفين</span>
-              <span className="mt-2 block text-xs font-bold leading-6 text-slate-500">مين عمل إيه وإمتى، للتدقيق والمتابعة.</span>
-              <span className="mt-4 inline-flex rounded-2xl bg-slate-950 px-4 py-2 text-xs font-black text-white">فتح النشاط</span>
-            </button>
-          )}
         </section>
 
         {activeOperationsPanel === "actions" && (
@@ -635,10 +640,46 @@ export default function OperationsPage() {
                   </div>
                   <BadgeCheck className="h-9 w-9 text-emerald-600" />
                 </div>
+                <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                  <label className="block">
+                    <span className="mb-1 block text-xs font-black text-emerald-800">الرصيد الفعلي المعدود</span>
+                    <input
+                      type="number"
+                      min="0"
+                      step="any"
+                      value={closeForm.closingBalance}
+                      onChange={(event) => setCloseForm({ ...closeForm, closingBalance: event.target.value })}
+                      placeholder="الرصيد الفعلي"
+                      className="h-12 w-full rounded-2xl border border-emerald-200 bg-white px-4 text-sm font-bold outline-none focus:border-emerald-500"
+                    />
+                    <span className="mt-1 block text-[11px] font-bold leading-5 text-emerald-800/70">
+                      اكتب المبلغ الموجود فعليًا في درج الكاشير بعد العد.
+                    </span>
+                  </label>
+
+                  <label className="block">
+                    <span className="mb-1 block text-xs font-black text-emerald-800">ملاحظة القفل</span>
+                    <input
+                      value={closeForm.note}
+                      onChange={(event) => setCloseForm({ ...closeForm, note: event.target.value })}
+                      placeholder="مثال: فرق فكة أو مصروف غير مسجل"
+                      className="h-12 w-full rounded-2xl border border-emerald-200 bg-white px-4 text-sm font-bold outline-none focus:border-emerald-500"
+                    />
+                    <span className="mt-1 block text-[11px] font-bold leading-5 text-emerald-800/70">
+                      تظهر في تقرير الورديات عند مراجعة فرق العهدة.
+                    </span>
+                  </label>
+                </div>
+
+                <div className={`mt-3 rounded-2xl p-3 text-sm font-black ${
+                  Math.abs(closingVariance) > 0 ? "bg-amber-100 text-amber-800" : "bg-white/80 text-emerald-800"
+                }`}>
+                  فرق العهدة: {money(closingVariance)} ج
+                </div>
                 <button
                   type="button"
                   onClick={closeSession}
-                  disabled={saving}
+                  disabled={saving || !closeForm.closingBalance.trim()}
                   className="mt-4 h-11 w-full rounded-2xl bg-slate-950 text-sm font-black text-white hover:bg-emerald-600 disabled:opacity-60"
                 >
                   قفل الوردية
@@ -679,6 +720,12 @@ export default function OperationsPage() {
                 >
                   فتح وردية
                 </button>
+              </div>
+            )}
+
+            {!activeSession && (
+              <div className="mt-5 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-xs font-black leading-6 text-amber-800">
+                افتح وردية خزنة الأول قبل تسجيل أي دخل أو مصروف يدوي، عشان كل حركة تبقى مرتبطة بورديتها وتظهر في تقرير الخزنة.
               </div>
             )}
 
@@ -746,7 +793,7 @@ export default function OperationsPage() {
               <button
                 type="button"
                 onClick={saveCashEntry}
-                disabled={saving}
+                disabled={saving || !activeSession}
                 className="inline-flex h-12 items-center justify-center gap-2 rounded-2xl bg-slate-950 text-sm font-black text-white hover:bg-emerald-600 disabled:opacity-60 sm:col-span-2"
               >
                 <Save className="h-5 w-5" />
@@ -828,54 +875,6 @@ export default function OperationsPage() {
         </UiModal>
         )}
 
-        {activeOperationsPanel === "activity" && !isCashier && (
-        <UiModal title="آخر نشاطات الموظفين" description="كل عملية مهمة باسم الموظف ووقت التنفيذ." onClose={() => setActiveOperationsPanel(null)}>
-        {!isCashier && (
-        <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
-          <div className="mb-4 flex items-center gap-3">
-            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-slate-950 text-white">
-              <ClipboardList className="h-5 w-5" />
-            </div>
-            <div>
-              <h2 className="text-xl font-black text-slate-950">آخر نشاطات الموظفين</h2>
-              <p className="text-xs font-bold text-slate-500">كل عملية مهمة هتظهر هنا باسم الموظف والدور ووقت التنفيذ.</p>
-            </div>
-          </div>
-
-          {activities.length === 0 ? (
-            <div className="rounded-2xl bg-slate-50 p-5 text-center text-sm font-black text-slate-400">
-              لا توجد نشاطات مسجلة بعد.
-            </div>
-          ) : (
-            <div className="grid gap-3 lg:grid-cols-2">
-              {activities.map((activity) => (
-                <div key={activity.id} className="rounded-2xl border border-slate-100 p-4">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-black text-slate-950">{activity.action}</p>
-                      <p className="mt-1 text-xs font-bold text-slate-400">
-                        {activity.staff_name || "غير مسجل"}
-                        {activity.staff_role ? ` - ${activity.staff_role}` : ""}
-                      </p>
-                    </div>
-                    <span className="shrink-0 rounded-xl bg-slate-50 px-3 py-1 text-[10px] font-black text-slate-500">
-                      {new Date(activity.created_at).toLocaleString("ar-EG", { hour: "2-digit", minute: "2-digit", day: "numeric", month: "short" })}
-                    </span>
-                  </div>
-                  {activity.note && (
-                    <p className="mt-3 rounded-2xl bg-slate-50 p-3 text-xs font-bold leading-6 text-slate-600">
-                      {activity.note}
-                    </p>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
-        </section>
-        )}
-        </UiModal>
-        )}
-
         <section className="rounded-3xl border border-slate-200 bg-slate-950 p-5 text-white shadow-sm sm:p-6">
           <div className="grid gap-6 lg:grid-cols-[1fr_auto] lg:items-start">
             <div>
@@ -902,10 +901,10 @@ export default function OperationsPage() {
               </div>
             </div>
             <Link
-              href="/settings/reports"
+              href="/reports"
               className="inline-flex h-12 items-center justify-center rounded-2xl bg-white px-5 text-sm font-black text-slate-950 hover:bg-emerald-50"
             >
-              فتح الإعدادات
+              فتح التقارير
             </Link>
           </div>
         </section>

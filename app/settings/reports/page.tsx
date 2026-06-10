@@ -203,7 +203,7 @@ export default function ReportSettingsPage() {
 
         <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-5">
           {[
-            { key: "business" as const, title: "إعدادات النشاط", description: "نوع المحل، الضريبة، الفاتورة، وطريقة الدفع." },
+            { key: "business" as const, title: "إعدادات النشاط", description: "نوع المحل، الضريبة، وطريقة الدفع." },
             { key: "staff" as const, title: "الموظفين والأدوار", description: "إضافة موظفين وتحديد دور وكود دخول." },
             { key: "categories" as const, title: "الأقسام النشطة", description: "اختيار الأقسام التي تظهر في التكويد والفواتير." },
             { key: "hardware" as const, title: "الهاردوير والباركود", description: "السكانر، الطابعة، ومقاسات الليبل." },
@@ -362,7 +362,7 @@ export default function ReportSettingsPage() {
         )}
 
         {activeSettingsPanel === "business" && (
-          <UiModal title="إعدادات النشاط" description="نوع المحل، الضريبة، الفاتورة، وطريقة الدفع." onClose={() => setActiveSettingsPanel(null)}>
+          <UiModal title="إعدادات النشاط" description="نوع المحل، الضريبة، وطريقة الدفع." onClose={() => setActiveSettingsPanel(null)}>
             <BusinessSettingsPanel />
           </UiModal>
         )}
