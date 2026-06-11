@@ -9,17 +9,22 @@ import { recordStaffActivity } from "@/app/staff-activity";
 import { useStaffSession } from "@/app/staff-session";
 import { requireOpenShiftForCash } from "@/app/cash-session";
 import { calculateInvoiceTax, paperSizeCss, useBusinessSettings } from "@/app/business-settings";
+import { conversionFactorForUnit, hasKnownConversion, manualConversionHint, productUnitConversions, relatedStandardUnits, unitsForCategory } from "@/lib/category-settings";
 
 interface Product {
   id: string; name: string; unit: string;
   sale_price: number; purchase_price: number; stock_quantity: number;
   barcode?: string | null;
   product_category?: ProductCategory | string | null;
+  product_attributes?: Record<string, unknown> | null;
 }
 interface CartItem extends Product {
   qty: number | string;
   price: number | string;
   cost: number;
+  invoiceUnit: string;
+  unitFactor: number;
+  manualUnitFactor?: boolean;
 }
 
 interface Customer {
@@ -55,7 +60,7 @@ export default function CustomerInvoicePage() {
   const loadData = useCallback(async () => {
     const [{ data: cust }, { data: prods }] = await Promise.all([
       supabase.from("customers").select("*").eq("id", id).single(),
-      supabase.from("products").select("id,name,unit,sale_price,purchase_price,stock_quantity,barcode,product_category").order("name"),
+      supabase.from("products").select("id,name,unit,sale_price,purchase_price,stock_quantity,barcode,product_category,product_attributes").order("name"),
     ]);
     setCustomer(cust);
     setProducts(prods || []);
@@ -80,7 +85,7 @@ export default function CustomerInvoicePage() {
   const addToCart = (p: Product) => {
     if (p.stock_quantity <= 0) return alert("الصنف ده خلص!");
     if (cart.find(i => i.id === p.id)) return;
-    setCart(prev => [...prev, { ...p, qty: 1, price: p.sale_price, cost: p.purchase_price }]);
+    setCart(prev => [...prev, { ...p, qty: 1, price: p.sale_price, cost: p.purchase_price, invoiceUnit: p.unit, unitFactor: 1, manualUnitFactor: false }]);
   };
 
   const handleBarcodeEntry = (value: string) => {
@@ -157,6 +162,45 @@ export default function CustomerInvoicePage() {
   const updateCart = (id: string, field: "qty" | "price", val: string) =>
     setCart(prev => prev.map(i => i.id === id ? { ...i, [field]: val } : i));
 
+  const updateCartUnit = (id: string, unit: string) =>
+    setCart(prev => prev.map((item) => {
+      if (item.id !== id) return item;
+      const productConversions = productUnitConversions(item.product_attributes);
+      const factor = conversionFactorForUnit(item.product_category, unit, item.unit, undefined, productConversions);
+      const manualUnitFactor = !hasKnownConversion(item.product_category, unit, item.unit, undefined, productConversions);
+      return {
+        ...item,
+        invoiceUnit: unit,
+        unitFactor: factor,
+        manualUnitFactor,
+        price: Number(item.sale_price || 0) * factor,
+        cost: Number(item.purchase_price || 0) * factor,
+      };
+    }));
+
+  const updateCartUnitFactor = (id: string, factorValue: string) =>
+    setCart(prev => prev.map((item) => {
+      if (item.id !== id) return item;
+      const factor = Math.max(Number(factorValue) || 1, 0.001);
+      return {
+        ...item,
+        unitFactor: factor,
+        manualUnitFactor: true,
+        price: Number(item.sale_price || 0) * factor,
+        cost: Number(item.purchase_price || 0) * factor,
+      };
+    }));
+
+  const invoiceUnitOptions = (item: CartItem) => [
+    ...new Set([
+      item.unit,
+      ...relatedStandardUnits(item.unit),
+      ...productUnitConversions(item.product_attributes).flatMap((conversion) => [conversion.fromUnit, conversion.toUnit]),
+      ...unitsForCategory(item.product_category),
+      item.invoiceUnit,
+    ]),
+  ].filter(Boolean);
+
   // ── Totals ──
   const subtotal   = cart.reduce((s, i) => s + Number(i.qty || 0) * Number(i.price || 0), 0);
   const totalCost  = cart.reduce((s, i) => s + Number(i.qty || 0) * Number(i.cost || 0), 0);
@@ -185,7 +229,9 @@ export default function CustomerInvoicePage() {
 
       const itemsToSave = cart.map(i => ({
         id: i.id, name: i.name, unit: i.unit,
-        qty: Number(i.qty), price: Number(i.price), cost: Number(i.cost),
+        invoice_unit: i.invoiceUnit,
+        unit_factor: Number(i.unitFactor || 1),
+        qty: Number(i.qty), stock_qty: Number(i.qty) * Number(i.unitFactor || 1), price: Number(i.price), cost: Number(i.cost),
         product_category: normalizeProductCategory(i.product_category),
       }));
 
@@ -219,12 +265,12 @@ export default function CustomerInvoicePage() {
         .eq("id", id);
 
       for (const item of cart)
-        await supabase.rpc("decrement_stock", { row_id: item.id, amount: Number(item.qty) });
+        await supabase.rpc("decrement_stock", { row_id: item.id, amount: Number(item.qty) * Number(item.unitFactor || 1) });
 
       await supabase.from("inventory_movements").insert(
         cart.map((item) => {
           const before = Number(item.stock_quantity || 0);
-          const quantity = -Math.abs(Number(item.qty || 0));
+          const quantity = -Math.abs(Number(item.qty || 0) * Number(item.unitFactor || 1));
           return {
             product_id: item.id,
             movement_type: "sale",
@@ -368,6 +414,7 @@ export default function CustomerInvoicePage() {
                   <tr>
                     <th className="p-4">الصنف</th>
                     <th className="p-4 text-center">الكمية</th>
+                    <th className="p-4 text-center">الوحدة</th>
                     <th className="p-4 text-center">السعر <span className="text-indigo-400 normal-case font-normal">(قابل للتعديل)</span></th>
                     <th className="p-4 text-center">الربح</th>
                     <th className="p-4 text-left">الإجمالي</th>
@@ -393,6 +440,37 @@ export default function CustomerInvoicePage() {
                             onChange={e => updateCart(item.id, "qty", e.target.value)}
                             className="w-20 p-2 border border-slate-200 rounded-xl text-center font-black bg-slate-50 outline-none focus:border-indigo-400 transition-all"
                           />
+                        </td>
+                        <td className="p-4 text-center">
+                          <select
+                            value={item.invoiceUnit || item.unit}
+                            onChange={(event) => updateCartUnit(item.id, event.target.value)}
+                            className="w-24 rounded-xl border border-slate-200 bg-slate-50 p-2 text-center text-xs font-black outline-none focus:border-indigo-400"
+                          >
+                            {invoiceUnitOptions(item).map((unit) => (
+                              <option key={unit} value={unit}>{unit}</option>
+                            ))}
+                          </select>
+                          {item.manualUnitFactor && (
+                            <label className="mt-2 block">
+                              <span className="mb-1 block text-[9px] font-black text-indigo-600">
+                                {manualConversionHint(item.invoiceUnit, item.unit)}
+                              </span>
+                              <input
+                                type="number"
+                                min={0.001}
+                                step="any"
+                                value={item.unitFactor}
+                                onChange={(event) => updateCartUnitFactor(item.id, event.target.value)}
+                                className="w-24 rounded-xl border border-indigo-200 bg-indigo-50 p-2 text-center text-xs font-black text-indigo-700 outline-none focus:border-indigo-400"
+                              />
+                            </label>
+                          )}
+                          {Number(item.unitFactor || 1) !== 1 && (
+                            <p className="mt-1 text-[9px] font-bold text-slate-400">
+                              = {(Number(item.qty || 0) * Number(item.unitFactor || 1)).toLocaleString("ar-EG")} {item.unit}
+                            </p>
+                          )}
                         </td>
                         <td className="p-4 text-center">
                           <input
@@ -533,8 +611,11 @@ export default function CustomerInvoicePage() {
               {cart.map(item => (
                 <tr key={item.id}>
                   <td>{item.name}</td>
-                  <td>{item.unit}</td>
-                  <td>{Number(item.qty || 0).toLocaleString("ar-EG")}</td>
+                  <td>{item.invoiceUnit || item.unit}</td>
+                  <td>
+                    {Number(item.qty || 0).toLocaleString("ar-EG")}
+                    {Number(item.unitFactor || 1) !== 1 ? ` = ${(Number(item.qty || 0) * Number(item.unitFactor || 1)).toLocaleString("ar-EG")} ${item.unit}` : ""}
+                  </td>
                   <td>{Number(item.price || 0).toLocaleString("ar-EG")} ج</td>
                   <td>{(Number(item.qty || 0) * Number(item.price || 0)).toLocaleString("ar-EG")} ج</td>
                 </tr>

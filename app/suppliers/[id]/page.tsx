@@ -1,16 +1,18 @@
-"use client";
+﻿"use client";
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { supabase } from "@/lib/supabase";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { ProductCategory, normalizeProductCategory, productCategoryLabel } from "@/lib/product-category";
 import { barcodeValidationMessage, cleanBarcode, generateInternalBarcode, isPrintableBarcode } from "@/lib/barcode";
-import { CategorySelect } from "@/app/category-select";
+import { CategorySelect, useCategoryUnits } from "@/app/category-select";
 import { ProductAttributes, ProductCategoryFields, cleanProductAttributes } from "@/app/product-category-fields";
 import { recordStaffActivity } from "@/app/staff-activity";
 import { useStaffSession } from "@/app/staff-session";
 import { requireOpenShiftForCash } from "@/app/cash-session";
 import { calculateInvoiceTax, paperSizeCss, useBusinessSettings } from "@/app/business-settings";
+import { conversionFactorForUnit, hasKnownConversion, manualConversionHint, productUnitConversions, relatedStandardUnits, unitsForCategory, withProductUnitConversion } from "@/lib/category-settings";
+import { formatPriceInput, priceFromPurchase, purchaseFromPrice } from "@/lib/pricing";
 
 interface Product {
   id: string; name: string; unit: string;
@@ -22,6 +24,9 @@ interface Product {
 interface CartItem extends Product {
   qty: number | string;
   p_price: number | string;
+  invoiceUnit: string;
+  unitFactor: number;
+  manualUnitFactor?: boolean;
 }
 
 interface Supplier {
@@ -29,12 +34,6 @@ interface Supplier {
   name: string;
   balance?: number;
 }
-
-const UNITS = ["قطعة", "علبة", "كرتونة", "كيلو", "جرام", "لتر", "متر", "زوج", "طقم", "عبوة", "شريط", "خدمة"];
-
-const INVOICE_UNITS = ["قطعة", "علبة", "كرتونة", "كيلو", "جرام", "لتر", "متر", "زوج", "طقم", "عبوة", "شريط", "خدمة"];
-
-void UNITS;
 
 export default function SupplierInvoicePage() {
   const { id } = useParams();
@@ -53,7 +52,8 @@ export default function SupplierInvoicePage() {
   const [isSaving, setIsSaving]     = useState(false);
   const [note, setNote]             = useState("");
   const [showAddModal, setShowAddModal] = useState(false);
-  const [newProd, setNewProd]       = useState({ name: "", unit: "قطعة", purchase_price: "", sale_price: "", product_category: "general" as ProductCategory, product_attributes: {} as ProductAttributes });
+  const [newProd, setNewProd]       = useState({ name: "", unit: "قطعة", purchase_price: "", sale_price: "", profit_margin: "25", product_category: "general" as ProductCategory, product_attributes: {} as ProductAttributes });
+  const newProdUnits = useCategoryUnits(newProd.product_category);
   const [addingSaving, setAddingSaving] = useState(false);
   const [newProdBarcode, setNewProdBarcode] = useState("");
   const [scannerOpen, setScannerOpen] = useState(false);
@@ -89,7 +89,7 @@ export default function SupplierInvoicePage() {
 
   const addToCart = (p: Product) => {
     if (cart.find(i => i.id === p.id)) return;
-    setCart(prev => [...prev, { ...p, qty: 1, p_price: p.purchase_price }]);
+    setCart(prev => [...prev, { ...p, qty: 1, p_price: p.purchase_price, invoiceUnit: p.unit, unitFactor: 1, manualUnitFactor: false }]);
   };
 
   const handleBarcodeEntry = (value: string) => {
@@ -109,6 +109,7 @@ export default function SupplierInvoicePage() {
     }
 
     setNewProdBarcode(barcode);
+    setNewProd((current) => ({ ...current, product_category: activeCategory, product_attributes: {} }));
     setShowAddModal(true);
   };
 
@@ -163,10 +164,81 @@ export default function SupplierInvoicePage() {
     searchInputRef.current?.focus();
   }, []);
 
+  useEffect(() => {
+    if (newProdUnits.length > 0 && !newProdUnits.includes(newProd.unit)) {
+      setNewProd((current) => ({ ...current, unit: newProdUnits[0] }));
+    }
+  }, [newProd.product_category, newProd.unit, newProdUnits]);
+
   const removeFromCart = (pid: string) => setCart(prev => prev.filter(i => i.id !== pid));
 
   const updateCart = (pid: string, field: "qty" | "p_price", val: string) =>
     setCart(prev => prev.map(i => i.id === pid ? { ...i, [field]: val } : i));
+
+  const updateCartUnit = (pid: string, unit: string) =>
+    setCart(prev => prev.map((item) => {
+      if (item.id !== pid) return item;
+      const productConversions = productUnitConversions(item.product_attributes);
+      const factor = conversionFactorForUnit(item.product_category, unit, item.unit, undefined, productConversions);
+      const manualUnitFactor = !hasKnownConversion(item.product_category, unit, item.unit, undefined, productConversions);
+      return {
+        ...item,
+        invoiceUnit: unit,
+        unitFactor: factor,
+        manualUnitFactor,
+        p_price: Number(item.purchase_price || 0) * factor,
+      };
+    }));
+
+  const updateCartUnitFactor = (pid: string, factorValue: string) =>
+    setCart(prev => prev.map((item) => {
+      if (item.id !== pid) return item;
+      const factor = Math.max(Number(factorValue) || 1, 0.001);
+      return { ...item, unitFactor: factor, manualUnitFactor: true };
+    }));
+
+  const invoiceUnitOptions = (item: CartItem) => [
+    ...new Set([
+      item.unit,
+      ...relatedStandardUnits(item.unit),
+      ...productUnitConversions(item.product_attributes).flatMap((conversion) => [conversion.fromUnit, conversion.toUnit]),
+      ...unitsForCategory(item.product_category),
+      item.invoiceUnit,
+    ]),
+  ].filter(Boolean);
+
+  const updateNewProdPurchasePrice = (value: string) => {
+    setNewProd((current) => ({
+      ...current,
+      purchase_price: value,
+      sale_price: current.profit_margin !== ""
+        ? formatPriceInput(priceFromPurchase(value, current.profit_margin))
+        : current.sale_price,
+    }));
+  };
+
+  const updateNewProdSalePrice = (value: string) => {
+    setNewProd((current) => ({
+      ...current,
+      sale_price: value,
+      purchase_price: current.profit_margin !== ""
+        ? formatPriceInput(purchaseFromPrice(value, current.profit_margin))
+        : current.purchase_price,
+    }));
+  };
+
+  const updateNewProdProfitMargin = (value: string) => {
+    setNewProd((current) => ({
+      ...current,
+      profit_margin: value,
+      sale_price: current.purchase_price
+        ? formatPriceInput(priceFromPurchase(current.purchase_price, value))
+        : current.sale_price,
+      purchase_price: (!current.purchase_price && current.sale_price)
+        ? formatPriceInput(purchaseFromPrice(current.sale_price, value))
+        : current.purchase_price,
+    }));
+  };
 
   const subtotalInvoice = cart.reduce((s, i) => s + Number(i.qty || 0) * Number(i.p_price || 0), 0);
   const discountRate = Math.min(Math.max(Number(discountPercent) || 0, 0), 100);
@@ -208,7 +280,7 @@ export default function SupplierInvoicePage() {
       addToCart(data);
       setShowAddModal(false);
       setNewProdBarcode("");
-      setNewProd({ name: "", unit: "قطعة", purchase_price: "", sale_price: "", product_category: activeCategory, product_attributes: {} });
+      setNewProd({ name: "", unit: "قطعة", purchase_price: "", sale_price: "", profit_margin: "25", product_category: activeCategory, product_attributes: {} });
     }
     setAddingSaving(false);
   }
@@ -232,7 +304,10 @@ export default function SupplierInvoicePage() {
           id: i.id,
           name: i.name,
           unit: i.unit,
+          invoice_unit: i.invoiceUnit,
+          unit_factor: Number(i.unitFactor || 1),
           qty: Number(i.qty),
+          stock_qty: Number(i.qty) * Number(i.unitFactor || 1),
           price: Number(i.p_price),
           net_price: Number((Number(i.p_price || 0) * purchasePriceFactor).toFixed(2)),
           product_category: normalizeProductCategory(i.product_category),
@@ -264,24 +339,33 @@ export default function SupplierInvoicePage() {
         .eq("id", id);
 
       for (const item of cart) {
-        await supabase.rpc("increment_stock", { row_id: item.id, amount: Number(item.qty) });
+        const basePurchasePrice = Number(((Number(item.p_price || 0) * purchasePriceFactor) / Number(item.unitFactor || 1)).toFixed(2));
+        const nextAttributes = item.manualUnitFactor && item.invoiceUnit !== item.unit
+          ? withProductUnitConversion(item.product_attributes, {
+              fromUnit: item.invoiceUnit,
+              toUnit: item.unit,
+              factor: Number(item.unitFactor || 1),
+            })
+          : item.product_attributes;
+
+        await supabase.rpc("increment_stock", { row_id: item.id, amount: Number(item.qty) * Number(item.unitFactor || 1) });
         await supabase
           .from("products")
-          .update({ purchase_price: Number((Number(item.p_price || 0) * purchasePriceFactor).toFixed(2)) })
+          .update({ purchase_price: basePurchasePrice, product_attributes: nextAttributes || {} })
           .eq("id", item.id);
       }
 
       await supabase.from("inventory_movements").insert(
         cart.map((item) => {
           const before = Number(item.stock_quantity || 0);
-          const quantity = Math.abs(Number(item.qty || 0));
+          const quantity = Math.abs(Number(item.qty || 0) * Number(item.unitFactor || 1));
           return {
             product_id: item.id,
             movement_type: "purchase",
             quantity,
             quantity_before: before,
             quantity_after: before + quantity,
-            unit_cost: Number((Number(item.p_price || 0) * purchasePriceFactor).toFixed(2)),
+            unit_cost: Number(((Number(item.p_price || 0) * purchasePriceFactor) / Number(item.unitFactor || 1)).toFixed(2)),
             source_type: "supplier_invoice",
             source_id: invoice?.id?.toString(),
             note: `فاتورة توريد - ${supplier.name}`,
@@ -428,6 +512,7 @@ export default function SupplierInvoicePage() {
                   <tr>
                     <th className="p-4">الصنف</th>
                     <th className="p-4 text-center">الكمية</th>
+                    <th className="p-4 text-center">الوحدة</th>
                     <th className="p-4 text-center">سعر الشراء <span className="text-amber-400 normal-case font-normal">(قابل للتعديل)</span></th>
                     <th className="p-4 text-left">الإجمالي</th>
                     <th className="p-4 w-8"></th>
@@ -449,6 +534,42 @@ export default function SupplierInvoicePage() {
                             onChange={e => updateCart(item.id, "qty", e.target.value)}
                             className="w-20 p-2 border border-slate-200 rounded-xl text-center font-black bg-slate-50 outline-none focus:border-amber-400 transition-all"
                           />
+                        </td>
+                        <td className="p-4 text-center">
+                          <select
+                            value={item.invoiceUnit || item.unit}
+                            onChange={(event) => updateCartUnit(item.id, event.target.value)}
+                            className="w-24 rounded-xl border border-slate-200 bg-slate-50 p-2 text-center text-xs font-black outline-none focus:border-amber-400"
+                          >
+                            {invoiceUnitOptions(item).map((unit) => (
+                              <option key={unit} value={unit}>{unit}</option>
+                            ))}
+                          </select>
+                          {item.manualUnitFactor && (
+                            <label className="mt-2 block">
+                              <span className="mb-1 block text-[9px] font-black text-amber-600">
+                                {manualConversionHint(item.invoiceUnit, item.unit)}
+                              </span>
+                              <input
+                                type="number"
+                                min={0.001}
+                                step="any"
+                                value={item.unitFactor}
+                                onChange={(event) => updateCartUnitFactor(item.id, event.target.value)}
+                                className="w-24 rounded-xl border border-amber-200 bg-amber-50 p-2 text-center text-xs font-black text-amber-700 outline-none focus:border-amber-400"
+                              />
+                            </label>
+                          )}
+                          {Number(item.unitFactor || 1) !== 1 && (
+                            <p className="mt-1 text-[9px] font-bold text-slate-400">
+                              = {(Number(item.qty || 0) * Number(item.unitFactor || 1)).toLocaleString("ar-EG")} {item.unit}
+                            </p>
+                          )}
+                          {Number(item.unitFactor || 1) > 0 && (
+                            <p className="mt-1 text-[9px] font-bold text-emerald-600">
+                              تكلفة {item.unit}: {(Number(item.p_price || 0) / Number(item.unitFactor || 1)).toLocaleString("ar-EG", { maximumFractionDigits: 2 })} ج
+                            </p>
+                          )}
                         </td>
                         <td className="p-4 text-center">
                           <input
@@ -577,8 +698,11 @@ export default function SupplierInvoicePage() {
               {cart.map(item => (
                 <tr key={item.id}>
                   <td>{item.name}</td>
-                  <td>{item.unit}</td>
-                  <td>{Number(item.qty || 0).toLocaleString("ar-EG")}</td>
+                  <td>{item.invoiceUnit || item.unit}</td>
+                  <td>
+                    {Number(item.qty || 0).toLocaleString("ar-EG")}
+                    {Number(item.unitFactor || 1) !== 1 ? ` = ${(Number(item.qty || 0) * Number(item.unitFactor || 1)).toLocaleString("ar-EG")} ${item.unit}` : ""}
+                  </td>
                   <td>{Number(item.p_price || 0).toLocaleString("ar-EG")} ج</td>
                   <td>{(Number(item.qty || 0) * Number(item.p_price || 0)).toLocaleString("ar-EG")} ج</td>
                 </tr>
@@ -620,13 +744,14 @@ export default function SupplierInvoicePage() {
               </div>
               <CategorySelect
                 value={normalizeProductCategory(newProd.product_category)}
-                onChange={(category) => setNewProd({...newProd, product_category: category, product_attributes: {}})}
+                onChange={(category) => setNewProd({...newProd, product_category: category, product_attributes: {}, unit: newProdUnits[0] || newProd.unit})}
               />
               <ProductCategoryFields
                 category={normalizeProductCategory(newProd.product_category)}
                 value={newProd.product_attributes}
                 onChange={(attributes) => setNewProd({...newProd, product_attributes: attributes})}
                 className="lg:col-span-3"
+                includeDefaultFields={false}
               />
               <div>
                 <label className="text-xs font-black text-slate-400 mb-1 block">الباركود</label>
@@ -644,7 +769,7 @@ export default function SupplierInvoicePage() {
                   value={newProd.unit}
                   onChange={e => setNewProd({...newProd, unit: e.target.value})}
                 >
-                  {INVOICE_UNITS.map(u => <option key={u} value={u}>{u}</option>)}
+                  {[...new Set([...(newProdUnits || []), newProd.unit])].filter(Boolean).map(u => <option key={u} value={u}>{u}</option>)}
                 </select>
               </div>
               <div className="grid grid-cols-2 gap-3 lg:col-span-2">
@@ -655,7 +780,7 @@ export default function SupplierInvoicePage() {
                     className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-rose-600 outline-none focus:border-amber-400 transition-all"
                     placeholder="0"
                     value={newProd.purchase_price}
-                    onChange={e => setNewProd({...newProd, purchase_price: e.target.value})}
+                    onChange={e => updateNewProdPurchasePrice(e.target.value)}
                   />
                 </div>
                 <div>
@@ -665,9 +790,21 @@ export default function SupplierInvoicePage() {
                     className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-emerald-600 outline-none focus:border-amber-400 transition-all"
                     placeholder="0"
                     value={newProd.sale_price}
-                    onChange={e => setNewProd({...newProd, sale_price: e.target.value})}
+                    onChange={e => updateNewProdSalePrice(e.target.value)}
                   />
                 </div>
+                <label className="col-span-2 flex items-center gap-2 rounded-2xl bg-emerald-50 px-4 py-3">
+                  <span className="text-xs font-black text-emerald-700">نسبة المكسب</span>
+                  <input
+                    type="number"
+                    step="any"
+                    value={newProd.profit_margin}
+                    onChange={e => updateNewProdProfitMargin(e.target.value)}
+                    className="min-w-0 flex-1 bg-transparent text-center text-sm font-black text-emerald-700 outline-none"
+                    placeholder="%"
+                  />
+                  <span className="text-xs font-black text-emerald-700">%</span>
+                </label>
               </div>
             </div>
             <div className="flex flex-col gap-3 pt-2 sm:flex-row">

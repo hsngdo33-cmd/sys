@@ -8,6 +8,8 @@ import { barcodeValidationMessage, cleanBarcode, generateInternalBarcode, isPrin
 import { CategorySelect, useCategoryUnits } from "@/app/category-select";
 import { ProductAttributes, ProductCategoryFields, cleanProductAttributes, productAttributesSummary } from "@/app/product-category-fields";
 import { useBarcodeHardwareSettings } from "@/app/barcode-hardware-settings";
+import { formatPriceInput, priceFromPurchase, profitPercentFromPrices, purchaseFromPrice } from "@/lib/pricing";
+import { productUnitConversions, UnitConversion } from "@/lib/category-settings";
 
 type Product = {
   id: string;
@@ -22,6 +24,7 @@ type Product = {
   barcode?: string | null;
   product_category?: ProductCategory | string | null;
   product_attributes?: ProductAttributes | null;
+  profit_margin?: number | string;
 };
 
 type Supplier = {
@@ -29,6 +32,17 @@ type Supplier = {
   name: string;
   phone?: string | null;
 };
+
+const DEFAULT_PRODUCT_UNIT_CONVERSIONS: UnitConversion[] = [
+  { id: "default-carton-piece", fromUnit: "كرتونة", toUnit: "قطعة", factor: 12 },
+  { id: "default-dozen-piece", fromUnit: "دستة", toUnit: "قطعة", factor: 12 },
+  { id: "default-box-piece", fromUnit: "علبة", toUnit: "قطعة", factor: 1 },
+  { id: "default-pack-piece", fromUnit: "عبوة", toUnit: "قطعة", factor: 1 },
+  { id: "default-kg-gram", fromUnit: "كيلو", toUnit: "جرام", factor: 1000 },
+  { id: "default-liter-ml", fromUnit: "لتر", toUnit: "مللي", factor: 1000 },
+  { id: "default-meter-cm", fromUnit: "متر", toUnit: "سنتي", factor: 100 },
+  { id: "default-meter-millimeter", fromUnit: "متر", toUnit: "مللي متر", factor: 1000 },
+];
 
 type ScannerControls = {
   reset?: () => void;
@@ -60,6 +74,7 @@ export default function InventoryPage() {
   // تعديل
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<Partial<Product>>({});
+  const [showNewUnitConversions, setShowNewUnitConversions] = useState(false);
 
   // منتج جديد
   const [newProduct, setNewProduct] = useState({
@@ -67,6 +82,7 @@ export default function InventoryPage() {
     unit: "قطعة",
     purchase_price: "",
     sale_price: "",
+    profit_margin: "25",
     stock_quantity: "",
     reorder_point: "5",
     reorder_target: "10",
@@ -354,6 +370,7 @@ export default function InventoryPage() {
         barcode: barcodeValue,
       }));
 
+      setShowNewUnitConversions(false);
       setIsModalOpen(true);
     }
 
@@ -470,8 +487,75 @@ export default function InventoryPage() {
     setEditForm({
   ...product,
   barcode: product.barcode || "",
+  profit_margin: profitPercentFromPrices(product.purchase_price, product.sale_price),
   product_attributes: product.product_attributes || {},
 });
+  };
+
+  const updateEditPurchasePrice = (value: string) => {
+    setEditForm((current) => ({
+      ...current,
+      purchase_price: value,
+      sale_price: current.profit_margin !== "" && current.profit_margin !== undefined
+        ? formatPriceInput(priceFromPurchase(value, current.profit_margin))
+        : current.sale_price,
+    }));
+  };
+
+  const updateEditSalePrice = (value: string) => {
+    setEditForm((current) => ({
+      ...current,
+      sale_price: value,
+      purchase_price: current.profit_margin !== "" && current.profit_margin !== undefined
+        ? formatPriceInput(purchaseFromPrice(value, current.profit_margin))
+        : current.purchase_price,
+    }));
+  };
+
+  const updateEditProfitMargin = (value: string) => {
+    setEditForm((current) => ({
+      ...current,
+      profit_margin: value,
+      sale_price: current.purchase_price !== "" && current.purchase_price !== undefined
+        ? formatPriceInput(priceFromPurchase(current.purchase_price, value))
+        : current.sale_price,
+      purchase_price: (!current.purchase_price && current.sale_price)
+        ? formatPriceInput(purchaseFromPrice(current.sale_price, value))
+        : current.purchase_price,
+    }));
+  };
+
+  const updateNewPurchasePrice = (value: string) => {
+    setNewProduct((current) => ({
+      ...current,
+      purchase_price: value,
+      sale_price: current.profit_margin !== ""
+        ? formatPriceInput(priceFromPurchase(value, current.profit_margin))
+        : current.sale_price,
+    }));
+  };
+
+  const updateNewSalePrice = (value: string) => {
+    setNewProduct((current) => ({
+      ...current,
+      sale_price: value,
+      purchase_price: current.profit_margin !== ""
+        ? formatPriceInput(purchaseFromPrice(value, current.profit_margin))
+        : current.purchase_price,
+    }));
+  };
+
+  const updateNewProfitMargin = (value: string) => {
+    setNewProduct((current) => ({
+      ...current,
+      profit_margin: value,
+      sale_price: current.purchase_price
+        ? formatPriceInput(priceFromPurchase(current.purchase_price, value))
+        : current.sale_price,
+      purchase_price: (!current.purchase_price && current.sale_price)
+        ? formatPriceInput(purchaseFromPrice(current.sale_price, value))
+        : current.purchase_price,
+    }));
   };
 
   const saveEdit = async () => {
@@ -509,7 +593,10 @@ export default function InventoryPage() {
         supplier_id: editForm.supplier_id || null,
         barcode: barcodeValue,
         product_category: normalizeProductCategory(editForm.product_category),
-        product_attributes: cleanProductAttributes(editForm.product_category, editForm.product_attributes),
+        product_attributes: cleanProductAttributes(
+          editForm.product_category,
+          attributesWithDefaultConversions(editForm.product_attributes),
+        ),
       })
       .eq("id", editingId);
 
@@ -575,7 +662,10 @@ export default function InventoryPage() {
           supplier_id: newProduct.supplier_id || null,
           barcode: barcodeValue,
           product_category: normalizeProductCategory(newProduct.product_category),
-          product_attributes: cleanProductAttributes(newProduct.product_category, newProduct.product_attributes),
+          product_attributes: cleanProductAttributes(
+            newProduct.product_category,
+            attributesWithDefaultConversions(newProduct.product_attributes),
+          ),
         },
       ]);
 
@@ -583,6 +673,7 @@ export default function InventoryPage() {
 
       alert("تمت الإضافة بنجاح ✅");
 
+      setShowNewUnitConversions(false);
       setIsModalOpen(false);
 
       setNewProduct({
@@ -590,6 +681,7 @@ export default function InventoryPage() {
         unit: "قطعة",
         purchase_price: "",
         sale_price: "",
+        profit_margin: "25",
         stock_quantity: "",
         reorder_point: "5",
         reorder_target: "10",
@@ -642,6 +734,187 @@ export default function InventoryPage() {
   const getSupplierName = (supplierId?: string | null) =>
     supplierId ? supplierMap.get(supplierId)?.name || "مورد غير مسجل" : "بدون مورد";
 
+  const conversionKey = (conversion: Pick<UnitConversion, "fromUnit" | "toUnit">) =>
+    `${conversion.fromUnit.trim()}__${conversion.toUnit.trim()}`;
+
+  const unitMatches = (left: unknown, right: unknown) =>
+    typeof left === "string" &&
+    typeof right === "string" &&
+    left.trim() === right.trim();
+
+  const conversionIsRelatedToUnit = (conversion: UnitConversion, unit: unknown) =>
+    unitMatches(conversion.fromUnit, unit) || unitMatches(conversion.toUnit, unit);
+
+  const defaultUnitConversions = (unit?: unknown) =>
+    unit
+      ? DEFAULT_PRODUCT_UNIT_CONVERSIONS.filter((conversion) => conversionIsRelatedToUnit(conversion, unit))
+      : DEFAULT_PRODUCT_UNIT_CONVERSIONS;
+
+  const mergedProductConversions = (
+    attributes: ProductAttributes | null | undefined,
+  ) => {
+    const saved = productUnitConversions(attributes);
+    const savedKeys = new Set(saved.map(conversionKey));
+    return [
+      ...saved,
+      ...defaultUnitConversions().filter((conversion) => !savedKeys.has(conversionKey(conversion))),
+    ];
+  };
+
+  const attributesWithDefaultConversions = (
+    attributes: ProductAttributes | null | undefined,
+  ): ProductAttributes => {
+    const source = attributes && typeof attributes === "object" ? attributes : {};
+    return {
+      ...source,
+      unit_conversions: mergedProductConversions(source),
+    };
+  };
+
+  const renderUnitConversionsSummary = (
+    attributes: ProductAttributes | null | undefined,
+    baseUnit: unknown,
+    onToggle: () => void,
+    open: boolean,
+  ) => {
+    const conversions = mergedProductConversions(attributes)
+      .filter((conversion) => conversionIsRelatedToUnit(conversion, baseUnit))
+      .slice(0, 4);
+
+    return (
+      <div className="rounded-xl border border-slate-200 bg-slate-50 p-2.5">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-xs font-black text-slate-900">تحويلات الوحدات</p>
+            <div className="mt-1.5 flex flex-wrap gap-1">
+              {conversions.map((conversion) => (
+                <span key={`unit-summary-${conversion.id}`} className="rounded-full bg-white px-2 py-0.5 text-[10px] font-black text-slate-600 shadow-sm">
+                  {conversion.fromUnit} = {conversion.factor} {conversion.toUnit}
+                </span>
+              ))}
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onToggle}
+            className="h-9 shrink-0 rounded-xl bg-slate-900 px-3 text-xs font-black text-white hover:bg-slate-700"
+          >
+            {open ? "إخفاء التفاصيل" : "تعديل التحويلات"}
+          </button>
+        </div>
+      </div>
+    );
+  };
+
+  const renderUnitConversionsEditor = (
+    attributes: ProductAttributes | null | undefined,
+    baseUnit: unknown,
+    _unitOptions: string[],
+    onChange: (next: ProductAttributes) => void,
+    mode: "modal" | "table" = "modal",
+  ) => {
+    const source = attributes && typeof attributes === "object" ? attributes : {};
+    const allConversions = mergedProductConversions(source);
+    const base = typeof baseUnit === "string" && baseUnit.trim() ? baseUnit.trim() : "قطعة";
+    const relatedConversions = allConversions.filter((conversion) => conversionIsRelatedToUnit(conversion, base));
+    const hiddenConversions = allConversions.filter((conversion) => !conversionIsRelatedToUnit(conversion, base));
+    const options = [...new Set([base, ...defaultUnitConversions(base).flatMap((item) => [item.fromUnit, item.toUnit]), ...relatedConversions.flatMap((item) => [item.fromUnit, item.toUnit])])].filter(Boolean);
+    const updateConversions = (nextRelatedConversions: UnitConversion[]) => onChange({ ...source, unit_conversions: [...hiddenConversions, ...nextRelatedConversions] });
+    const defaultRelatedConversion = defaultUnitConversions(base)[0];
+    const preferredManualUnit = ["كرتونة", "علبة", "عبوة"].find((unit) => options.includes(unit));
+    const defaultFromUnit = defaultRelatedConversion?.fromUnit || preferredManualUnit || options.find((unit) => unit !== base) || "كرتونة";
+    const defaultToUnit = defaultRelatedConversion?.toUnit || base;
+    const defaultFactor = defaultRelatedConversion?.factor || (defaultFromUnit === "كرتونة" ? 12 : 1);
+    const compact = mode === "table";
+    const visibleConversions = compact ? relatedConversions.slice(0, 3) : relatedConversions;
+    const remainingConversions = Math.max(relatedConversions.length - visibleConversions.length, 0);
+
+    return (
+      <div className={`${compact ? "mt-2" : "lg:col-span-3"} rounded-2xl border border-slate-100 bg-slate-50 p-3`}>
+        <div className="mb-2 flex items-center justify-between gap-2">
+          <div>
+            <p className="text-xs font-black text-slate-900">قواعد التحويل</p>
+            <p className="mt-0.5 text-[10px] font-bold text-slate-400">كل وحدة كبيرة تساوي عدد من وحدة أصغر.</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-black text-slate-600">
+              {relatedConversions.length} تحويل
+            </span>
+            <button
+              type="button"
+              onClick={() => updateConversions([...relatedConversions, { id: `conversion-${Date.now()}`, fromUnit: defaultFromUnit, toUnit: defaultToUnit, factor: defaultFactor }])}
+              className="rounded-full bg-slate-900 px-3 py-1.5 text-[10px] font-black text-white hover:bg-slate-700"
+            >
+              + تحويل
+            </button>
+          </div>
+        </div>
+        <div className={`${compact ? "max-h-44" : "max-h-52"} space-y-2 overflow-y-auto pr-1`}>
+          {visibleConversions.map((conversion, index) => (
+            <div key={conversion.id || index} className="grid items-center gap-2 rounded-xl border border-slate-100 bg-white p-2 sm:grid-cols-[auto_1fr_auto_86px_1fr_auto]">
+              <span className="hidden text-[10px] font-black text-slate-400 sm:inline">كل</span>
+              <label className="block">
+                <span className="sr-only">الوحدة الكبيرة</span>
+                <select
+                  value={conversion.fromUnit}
+                  onChange={(event) => {
+                    const next = [...relatedConversions];
+                    next[index] = { ...conversion, fromUnit: event.target.value };
+                    updateConversions(next);
+                  }}
+                  className="mt-1 h-9 w-full rounded-lg border border-slate-200 bg-white px-2 text-xs font-bold text-slate-900 outline-none focus:border-slate-400"
+                >
+                  {options.map((unit) => <option key={unit} value={unit}>{unit}</option>)}
+                </select>
+              </label>
+              <span className="hidden text-center text-sm font-black text-slate-400 sm:inline">=</span>
+              <label className="block">
+                <span className="sr-only">قيمة التحويل</span>
+                <input
+                  type="number"
+                  min={0.001}
+                  step="any"
+                  value={conversion.factor}
+                  onChange={(event) => {
+                    const next = [...relatedConversions];
+                    next[index] = { ...conversion, factor: Math.max(Number(event.target.value) || 1, 0.001) };
+                    updateConversions(next);
+                  }}
+                  className="mt-1 h-9 w-full rounded-lg border border-slate-200 px-2 text-center text-xs font-black text-slate-900 outline-none focus:border-slate-400"
+                />
+              </label>
+              <label className="block">
+                <span className="sr-only">الوحدة الصغيرة</span>
+                <select
+                  value={conversion.toUnit}
+                  onChange={(event) => {
+                    const next = [...relatedConversions];
+                    next[index] = { ...conversion, toUnit: event.target.value };
+                    updateConversions(next);
+                  }}
+                  className="mt-1 h-9 w-full rounded-lg border border-slate-200 bg-white px-2 text-xs font-bold text-slate-900 outline-none focus:border-slate-400"
+                >
+                  {options.map((unit) => <option key={unit} value={unit}>{unit}</option>)}
+                </select>
+              </label>
+              <button
+                type="button"
+                onClick={() => updateConversions(relatedConversions.filter((_, currentIndex) => currentIndex !== index))}
+                className="h-9 rounded-lg bg-rose-50 px-3 text-xs font-black text-rose-600 hover:bg-rose-100"
+              >
+                حذف
+              </button>
+            </div>
+          ))}
+          {compact && remainingConversions > 0 && (
+            <div className="rounded-xl bg-slate-100 px-3 py-2 text-center text-[10px] font-black text-slate-500">
+              + {remainingConversions} تحويل آخر
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  };
   // =========================
   // UI
   // =========================
@@ -706,6 +979,7 @@ export default function InventoryPage() {
             <button
               onClick={() => {
                 setNewProduct((prev) => ({ ...prev, product_category: activeCategory }));
+                setShowNewUnitConversions(false);
                 setIsModalOpen(true);
               }}
               className="bg-emerald-600 text-white px-5 py-3 rounded-2xl font-bold"
@@ -782,202 +1056,6 @@ export default function InventoryPage() {
                   className="border-b hover:bg-slate-50"
                 >
 
-                  {editingId === p.id ? (
-
-                    <>
-
-                      <td className="p-2">
-                        <input
-                          value={editForm.name}
-                          onChange={(e) =>
-                            setEditForm({
-                              ...editForm,
-                              name: e.target.value,
-                            })
-                          }
-                          className="w-full border p-2 rounded"
-                        />
-                      </td>
-
-                      <td className="p-2">
-                        <CategorySelect
-                          value={normalizeProductCategory(editForm.product_category)}
-                          onChange={(category) =>
-                            setEditForm({
-                              ...editForm,
-                              product_category: category,
-                              product_attributes: {},
-                            })
-                          }
-                        />
-                        <div className="mt-2">
-                          <ProductCategoryFields
-                            category={normalizeProductCategory(editForm.product_category)}
-                            value={(editForm.product_attributes as ProductAttributes) || {}}
-                            onChange={(attributes) =>
-                              setEditForm({ ...editForm, product_attributes: attributes })
-                            }
-                          />
-                        </div>
-                        <select
-                          value={editForm.supplier_id || ""}
-                          onChange={(e) =>
-                            setEditForm({
-                              ...editForm,
-                              supplier_id: e.target.value || null,
-                            })
-                          }
-                          className="mt-2 w-full border p-2 rounded bg-white text-xs font-bold"
-                        >
-                          <option value="">بدون مورد</option>
-                          {suppliers.map((supplier) => (
-                            <option key={supplier.id} value={supplier.id}>
-                              {supplier.name}
-                            </option>
-                          ))}
-                        </select>
-                      </td>
-
-                      <td className="p-2">
-
-                        <select
-                          value={editForm.unit}
-                          onChange={(e) =>
-                            setEditForm({
-                              ...editForm,
-                              unit: e.target.value,
-                            })
-                          }
-                          className="w-full border p-2 rounded"
-                        >
-                          {[...new Set([...(editFormUnits || []), editForm.unit?.toString() || ""])].filter(Boolean).map((unit) => (
-                            <option key={unit} value={unit}>{unit}</option>
-                          ))}
-                        </select>
-
-                      </td>
-
-                      <td className="p-2">
-                        <div className="grid gap-2">
-                          <input
-                            type="number"
-                            value={editForm.stock_quantity}
-                            onChange={(e) =>
-                              setEditForm({
-                                ...editForm,
-                                stock_quantity:
-                                  e.target.value,
-                              })
-                            }
-                            className="w-full border p-2 rounded"
-                          />
-                          <div className="grid grid-cols-2 gap-2">
-                            <input
-                              type="number"
-                              min="0"
-                              title="حد إعادة الطلب"
-                              value={editForm.reorder_point ?? ""}
-                              onChange={(e) =>
-                                setEditForm({
-                                  ...editForm,
-                                  reorder_point: e.target.value,
-                                })
-                              }
-                              className="w-full border p-2 rounded text-xs"
-                              placeholder="حد الطلب"
-                            />
-                            <input
-                              type="number"
-                              min="0"
-                              title="الكمية المستهدفة"
-                              value={editForm.reorder_target ?? ""}
-                              onChange={(e) =>
-                                setEditForm({
-                                  ...editForm,
-                                  reorder_target: e.target.value,
-                                })
-                              }
-                              className="w-full border p-2 rounded text-xs"
-                              placeholder="الهدف"
-                            />
-                          </div>
-                        </div>
-                      </td>
-
-                      <td className="p-2">
-                        <input
-                          type="number"
-                          value={editForm.purchase_price}
-                          onChange={(e) =>
-                            setEditForm({
-                              ...editForm,
-                              purchase_price:
-                                e.target.value,
-                            })
-                          }
-                          className="w-full border p-2 rounded"
-                        />
-                      </td>
-
-                      <td className="p-2">
-                        <input
-                          type="number"
-                          value={editForm.sale_price}
-                          onChange={(e) =>
-                            setEditForm({
-                              ...editForm,
-                              sale_price:
-                                e.target.value,
-                            })
-                          }
-                          className="w-full border p-2 rounded"
-                        />
-                      </td>
-
-                      <td className="p-2">
-
-                        <input
-                          value={editForm.barcode || ""}
-                          onChange={(e) =>
-                            setEditForm({
-                              ...editForm,
-                              barcode:
-                                e.target.value,
-                            })
-                          }
-                          className="w-full border p-2 rounded font-mono"
-                        />
-
-                      </td>
-
-                      <td className="p-2">
-
-                        <div className="flex gap-2 justify-center">
-
-                          <button
-                            onClick={saveEdit}
-                            className="bg-emerald-500 text-white px-3 py-1 rounded-lg"
-                          >
-                            حفظ
-                          </button>
-
-                          <button
-                            onClick={() =>
-                              setEditingId(null)
-                            }
-                            className="bg-slate-300 px-3 py-1 rounded-lg"
-                          >
-                            إلغاء
-                          </button>
-
-                        </div>
-
-                      </td>
-
-                    </>
-
-                  ) : (
-
                     <>
 
                       <td className="p-4 font-bold">
@@ -1025,6 +1103,11 @@ export default function InventoryPage() {
 
                       <td className="p-4">
                         {p.sale_price}
+                        {profitPercentFromPrices(p.purchase_price, p.sale_price) !== "" && (
+                          <div className="mt-1 text-[10px] font-black text-emerald-600">
+                            مكسب {profitPercentFromPrices(p.purchase_price, p.sale_price)}%
+                          </div>
+                        )}
                       </td>
 
                       <td className="p-4">
@@ -1059,8 +1142,6 @@ export default function InventoryPage() {
 
                     </>
 
-                  )}
-
                 </tr>
 
               ))}
@@ -1073,21 +1154,223 @@ export default function InventoryPage() {
 
       </div>
 
+      {/* مودال تعديل */}
+
+      {editingId && (
+
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-3 sm:p-6">
+
+          <div className="flex max-h-[calc(100vh-2rem)] w-full max-w-7xl flex-col overflow-hidden rounded-3xl bg-white shadow-2xl">
+
+            <div className="flex items-center justify-between gap-3 border-b border-slate-100 px-5 py-4 sm:px-7">
+              <div>
+                <p className="text-xs font-black text-slate-400">تعديل صنف</p>
+                <h2 className="text-xl font-black text-slate-900 sm:text-2xl">
+                  {editForm.name || "صنف بدون اسم"}
+                </h2>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditingId(null)}
+                className="rounded-2xl bg-slate-100 px-4 py-2 text-sm font-black text-slate-700 hover:bg-slate-200"
+              >
+                إغلاق
+              </button>
+            </div>
+
+            <div className="grid flex-1 gap-4 overflow-y-auto p-5 sm:p-7 lg:grid-cols-[1.1fr_0.9fr]">
+
+              <div className="space-y-4">
+                <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                  <p className="mb-3 text-sm font-black text-slate-900">البيانات الأساسية</p>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <label className="text-xs font-black text-slate-500">
+                      اسم الصنف
+                      <input
+                        value={editForm.name || ""}
+                        onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                        className="mt-1 w-full rounded-2xl border border-slate-200 p-3 font-bold outline-none focus:border-slate-400"
+                      />
+                    </label>
+                    <label className="text-xs font-black text-slate-500">
+                      الباركود
+                      <input
+                        value={editForm.barcode || ""}
+                        onChange={(e) => setEditForm({ ...editForm, barcode: e.target.value })}
+                        className="mt-1 w-full rounded-2xl border border-slate-200 p-3 font-mono font-bold outline-none focus:border-slate-400"
+                      />
+                    </label>
+                    <div>
+                      <CategorySelect
+                        value={normalizeProductCategory(editForm.product_category)}
+                        onChange={(category) => setEditForm({ ...editForm, product_category: category, product_attributes: {} })}
+                      />
+                    </div>
+                    <label className="text-xs font-black text-slate-500">
+                      المورد
+                      <select
+                        value={editForm.supplier_id || ""}
+                        onChange={(e) => setEditForm({ ...editForm, supplier_id: e.target.value || null })}
+                        className="mt-1 w-full rounded-2xl border border-slate-200 bg-white p-3 font-bold outline-none focus:border-slate-400"
+                      >
+                        <option value="">بدون مورد</option>
+                        {suppliers.map((supplier) => (
+                          <option key={supplier.id} value={supplier.id}>
+                            {supplier.name}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  </div>
+                  <ProductCategoryFields
+                    category={normalizeProductCategory(editForm.product_category)}
+                    value={(editForm.product_attributes as ProductAttributes) || {}}
+                    onChange={(attributes) => setEditForm({ ...editForm, product_attributes: attributes })}
+                    className="mt-4"
+                  />
+                </div>
+
+                <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                  <div className="mb-3 flex items-center justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-black text-slate-900">تحويل الوحدات</p>
+                      <p className="mt-1 text-[11px] font-bold text-slate-400">كل تحويل عبارة عن وحدة كبيرة وقيمتها من وحدة أصغر.</p>
+                    </div>
+                  </div>
+                  {renderUnitConversionsEditor(
+                    (editForm.product_attributes as ProductAttributes) || {},
+                    editForm.unit,
+                    editFormUnits || [],
+                    (attributes) => setEditForm({ ...editForm, product_attributes: attributes }),
+                  )}
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                  <p className="mb-3 text-sm font-black text-slate-900">المخزون والوحدة</p>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <label className="text-xs font-black text-slate-500">
+                      وحدة المخزون
+                      <select
+                        value={editForm.unit || ""}
+                        onChange={(e) => setEditForm({ ...editForm, unit: e.target.value })}
+                        className="mt-1 w-full rounded-2xl border border-slate-200 bg-white p-3 font-bold outline-none focus:border-slate-400"
+                      >
+                        {[...new Set([...(editFormUnits || []), editForm.unit?.toString() || ""])].filter(Boolean).map((unit) => (
+                          <option key={unit} value={unit}>{unit}</option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="text-xs font-black text-slate-500">
+                      الكمية الحالية
+                      <input
+                        type="number"
+                        value={editForm.stock_quantity || ""}
+                        onChange={(e) => setEditForm({ ...editForm, stock_quantity: e.target.value })}
+                        className="mt-1 w-full rounded-2xl border border-slate-200 p-3 font-bold outline-none focus:border-slate-400"
+                      />
+                    </label>
+                    <label className="text-xs font-black text-slate-500">
+                      حد إعادة الطلب
+                      <input
+                        type="number"
+                        min="0"
+                        value={editForm.reorder_point ?? ""}
+                        onChange={(e) => setEditForm({ ...editForm, reorder_point: e.target.value })}
+                        className="mt-1 w-full rounded-2xl border border-slate-200 p-3 font-bold outline-none focus:border-slate-400"
+                      />
+                    </label>
+                    <label className="text-xs font-black text-slate-500">
+                      الكمية المستهدفة
+                      <input
+                        type="number"
+                        min="0"
+                        value={editForm.reorder_target ?? ""}
+                        onChange={(e) => setEditForm({ ...editForm, reorder_target: e.target.value })}
+                        className="mt-1 w-full rounded-2xl border border-slate-200 p-3 font-bold outline-none focus:border-slate-400"
+                      />
+                    </label>
+                  </div>
+                </div>
+
+                <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                  <p className="mb-3 text-sm font-black text-slate-900">الأسعار</p>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <label className="text-xs font-black text-slate-500">
+                      سعر الشراء
+                      <input
+                        type="number"
+                        value={editForm.purchase_price || ""}
+                        onChange={(e) => updateEditPurchasePrice(e.target.value)}
+                        className="mt-1 w-full rounded-2xl border border-slate-200 p-3 font-bold outline-none focus:border-slate-400"
+                      />
+                    </label>
+                    <label className="text-xs font-black text-slate-500">
+                      سعر البيع
+                      <input
+                        type="number"
+                        value={editForm.sale_price || ""}
+                        onChange={(e) => updateEditSalePrice(e.target.value)}
+                        className="mt-1 w-full rounded-2xl border border-slate-200 p-3 font-bold outline-none focus:border-slate-400"
+                      />
+                    </label>
+                    <label className="sm:col-span-2 flex items-center gap-2 rounded-2xl bg-emerald-50 px-4 py-3">
+                      <span className="text-xs font-black text-emerald-700">نسبة المكسب</span>
+                      <input
+                        type="number"
+                        step="any"
+                        value={editForm.profit_margin ?? ""}
+                        onChange={(e) => updateEditProfitMargin(e.target.value)}
+                        className="min-w-0 flex-1 bg-transparent text-center text-sm font-black text-emerald-700 outline-none"
+                        placeholder="%"
+                      />
+                      <span className="text-xs font-black text-emerald-700">%</span>
+                    </label>
+                  </div>
+                </div>
+              </div>
+
+            </div>
+
+            <div className="flex flex-col gap-3 border-t border-slate-100 px-5 py-4 sm:flex-row sm:justify-end sm:px-7">
+              <button
+                type="button"
+                onClick={() => setEditingId(null)}
+                className="rounded-2xl bg-slate-100 px-6 py-3 font-black text-slate-700 hover:bg-slate-200"
+              >
+                إلغاء
+              </button>
+              <button
+                type="button"
+                onClick={saveEdit}
+                className="rounded-2xl bg-emerald-600 px-8 py-3 font-black text-white hover:bg-emerald-500"
+              >
+                حفظ التعديلات
+              </button>
+            </div>
+
+          </div>
+
+        </div>
+
+      )}
+
       {/* مودال إضافة */}
 
       {isModalOpen && (
 
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-3 sm:p-6 z-50">
 
-          <div className="flex max-h-[calc(100vh-2rem)] w-full max-w-6xl flex-col overflow-hidden rounded-3xl bg-white shadow-2xl">
+          <div className="flex max-h-[calc(100vh-2rem)] w-full max-w-5xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
 
-            <div className="border-b border-slate-100 px-5 py-4 sm:px-7">
-              <h2 className="text-xl font-black text-slate-900 sm:text-2xl">
+            <div className="border-b border-slate-100 px-4 py-3 sm:px-5">
+              <h2 className="text-lg font-black text-slate-900 sm:text-xl">
               إضافة صنف {productCategoryLabel(newProduct.product_category)}
               </h2>
             </div>
 
-            <div className="grid flex-1 gap-4 overflow-y-auto p-5 sm:p-7 lg:grid-cols-3">
+            <div className="grid flex-1 gap-3 overflow-y-auto p-4 text-sm sm:p-5 lg:grid-cols-3">
 
               <input
                 placeholder="اسم الصنف"
@@ -1098,7 +1381,7 @@ export default function InventoryPage() {
                     name: e.target.value,
                   })
                 }
-                className="w-full border p-4 rounded-2xl lg:col-span-2"
+                className="h-11 w-full rounded-xl border border-slate-200 px-3 text-sm font-bold outline-none focus:border-slate-400 lg:col-span-2"
               />
 
               {newProductNameSuggestions.length > 0 && (
@@ -1112,6 +1395,7 @@ export default function InventoryPage() {
                         onClick={() => {
                           setSearchTerm(product.name);
                           setActiveCategory(normalizeProductCategory(product.product_category));
+                          setShowNewUnitConversions(false);
                           setIsModalOpen(false);
                         }}
                         className="w-full rounded-xl bg-white px-3 py-2 text-right text-xs font-black text-slate-700 hover:bg-amber-100"
@@ -1147,7 +1431,7 @@ export default function InventoryPage() {
                       supplier_id: e.target.value,
                     })
                   }
-                  className="w-full border p-4 rounded-2xl bg-white font-bold"
+                  className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm font-bold outline-none focus:border-slate-400"
                 >
                   <option value="">بدون مورد افتراضي</option>
                   {suppliers.map((supplier) => (
@@ -1156,7 +1440,7 @@ export default function InventoryPage() {
                     </option>
                   ))}
                 </select>
-                <span className="mt-1 block px-1 text-[11px] font-bold text-slate-400">
+                <span className="mt-1 block px-1 text-[10px] font-bold text-slate-400">
                   اختيار المورد هنا يخلي تقرير إعادة التوريد يجمع الأصناف المطلوبة حسب المورد.
                 </span>
               </label>
@@ -1169,12 +1453,26 @@ export default function InventoryPage() {
                     unit: e.target.value,
                   })
                 }
-                className="w-full border p-4 rounded-2xl bg-white font-bold"
+                className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm font-bold outline-none focus:border-slate-400"
               >
                 {[...new Set([...(newProductUnits || []), newProduct.unit])].filter(Boolean).map((unit) => (
                   <option key={unit} value={unit}>{unit}</option>
                 ))}
               </select>
+              <div className="lg:col-span-3">
+                {renderUnitConversionsSummary(
+                  newProduct.product_attributes,
+                  newProduct.unit,
+                  () => setShowNewUnitConversions((current) => !current),
+                  showNewUnitConversions,
+                )}
+                {showNewUnitConversions && renderUnitConversionsEditor(
+                  newProduct.product_attributes,
+                  newProduct.unit,
+                  newProductUnits || [],
+                  (attributes) => setNewProduct({ ...newProduct, product_attributes: attributes }),
+                )}
+              </div>
 
               <input
                 type="number"
@@ -1187,7 +1485,7 @@ export default function InventoryPage() {
                       e.target.value,
                   })
                 }
-                className="w-full border p-4 rounded-2xl"
+                className="h-11 w-full rounded-xl border border-slate-200 px-3 text-sm font-bold outline-none focus:border-slate-400"
               />
 
               <label className="block">
@@ -1202,9 +1500,9 @@ export default function InventoryPage() {
                       reorder_point: e.target.value,
                     })
                   }
-                  className="w-full border p-4 rounded-2xl"
+                  className="h-11 w-full rounded-xl border border-slate-200 px-3 text-sm font-bold outline-none focus:border-slate-400"
                 />
-                <span className="mt-1 block px-1 text-[11px] font-bold text-slate-400">
+                <span className="mt-1 block px-1 text-[10px] font-bold text-slate-400">
                   لما الكمية توصل للرقم ده الصنف يظهر في تقرير إعادة التوريد.
                 </span>
               </label>
@@ -1221,9 +1519,9 @@ export default function InventoryPage() {
                       reorder_target: e.target.value,
                     })
                   }
-                  className="w-full border p-4 rounded-2xl"
+                  className="h-11 w-full rounded-xl border border-slate-200 px-3 text-sm font-bold outline-none focus:border-slate-400"
                 />
-                <span className="mt-1 block px-1 text-[11px] font-bold text-slate-400">
+                <span className="mt-1 block px-1 text-[10px] font-bold text-slate-400">
                   التقرير هيقترح شراء الكمية الناقصة لحد ما الصنف يوصل للهدف ده.
                 </span>
               </label>
@@ -1237,49 +1535,51 @@ export default function InventoryPage() {
                     barcode: e.target.value,
                   })
                 }
-                className="w-full border p-4 rounded-2xl font-mono"
+                className="h-11 w-full rounded-xl border border-slate-200 px-3 text-sm font-bold font-mono outline-none focus:border-slate-400"
               />
 
               <input
                 type="number"
                 placeholder="سعر الشراء"
                 value={newProduct.purchase_price}
-                onChange={(e) =>
-                  setNewProduct({
-                    ...newProduct,
-                    purchase_price:
-                      e.target.value,
-                  })
-                }
-                className="w-full border p-4 rounded-2xl"
+                onChange={(e) => updateNewPurchasePrice(e.target.value)}
+                className="h-11 w-full rounded-xl border border-slate-200 px-3 text-sm font-bold outline-none focus:border-slate-400"
               />
 
               <input
                 type="number"
                 placeholder="سعر البيع"
                 value={newProduct.sale_price}
-                onChange={(e) =>
-                  setNewProduct({
-                    ...newProduct,
-                    sale_price:
-                      e.target.value,
-                  })
-                }
-                className="w-full border p-4 rounded-2xl"
+                onChange={(e) => updateNewSalePrice(e.target.value)}
+                className="h-11 w-full rounded-xl border border-slate-200 px-3 text-sm font-bold outline-none focus:border-slate-400"
               />
+
+              <label className="flex h-11 items-center gap-2 rounded-xl bg-emerald-50 px-3">
+                <span className="text-xs font-black text-emerald-700">نسبة المكسب</span>
+                <input
+                  type="number"
+                  step="any"
+                  value={newProduct.profit_margin}
+                  onChange={(e) => updateNewProfitMargin(e.target.value)}
+                  className="min-w-0 flex-1 bg-transparent text-center text-sm font-black text-emerald-700 outline-none"
+                  placeholder="%"
+                />
+                <span className="text-xs font-black text-emerald-700">%</span>
+              </label>
 
               <button
                 onClick={handleAddProduct}
-                className="w-full bg-emerald-600 text-white py-4 rounded-2xl font-bold lg:col-span-2"
+                className="h-11 w-full rounded-xl bg-emerald-600 text-sm font-black text-white hover:bg-emerald-500 lg:col-span-2"
               >
                 حفظ الصنف ✅
               </button>
 
               <button
-                onClick={() =>
-                  setIsModalOpen(false)
-                }
-                className="w-full bg-slate-200 py-4 rounded-2xl font-bold"
+                onClick={() => {
+                  setShowNewUnitConversions(false);
+                  setIsModalOpen(false);
+                }}
+                className="h-11 w-full rounded-xl bg-slate-200 text-sm font-black text-slate-700 hover:bg-slate-300"
               >
                 إلغاء
               </button>

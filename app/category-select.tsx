@@ -13,6 +13,7 @@ import {
   slugifyCategory,
 } from "@/lib/category-settings";
 import { ProductCategory, productCategoryLabel } from "@/lib/product-category";
+import { supabase } from "@/lib/supabase";
 
 const ACTIVE_CATEGORIES_STORAGE_KEY = "activeProductCategories";
 
@@ -46,6 +47,22 @@ function useCategorySettings() {
   useEffect(() => {
     const refresh = () => setSettings(settingsWithLegacyActiveFlags());
     refresh();
+    async function loadRemoteSettings() {
+      try {
+        const { data } = await supabase
+          .from("business_settings")
+          .select("category_settings")
+          .eq("id", "main")
+          .maybeSingle();
+        if (data?.category_settings) {
+          saveCategorySettings(data.category_settings as CategoryConfig[]);
+          setSettings(readCategorySettings());
+        }
+      } catch {
+        // Local settings remain available when the database is not upgraded yet.
+      }
+    }
+    void loadRemoteSettings();
     window.addEventListener(CATEGORY_SETTINGS_EVENT, refresh);
     window.addEventListener("storage", refresh);
     return () => {
@@ -123,12 +140,22 @@ function newCategory(existing: CategoryConfig[]): CategoryConfig {
     shortLabel: `قسم ${nextNumber}`,
     active: true,
     units: ["قطعة"],
+    unitConversions: [],
     fields: [],
   };
 }
 
 function emptyField(): CustomCategoryField {
   return { key: `field-${Date.now()}`, label: "", type: "text", placeholder: "", required: false };
+}
+
+function emptyConversion(selected: CategoryConfig) {
+  return {
+    id: `conversion-${Date.now()}`,
+    fromUnit: selected.units[1] || selected.units[0] || "كرتونة",
+    toUnit: selected.units[0] || "قطعة",
+    factor: 1,
+  };
 }
 
 export function CategorySettingsPanel() {
@@ -149,17 +176,35 @@ export function CategorySettingsPanel() {
     );
   };
 
-  const save = () => {
+  const save = async () => {
     const normalized = draft.map((category) => ({
       ...category,
       key: slugifyCategory(category.key || category.label),
       shortLabel: category.shortLabel || category.label,
       units: category.units.length > 0 ? category.units : ["قطعة"],
+      unitConversions: category.unitConversions.filter((conversion) => conversion.fromUnit && conversion.toUnit && Number(conversion.factor) > 0),
       fields: category.fields.filter((field) => field.label.trim()),
     }));
     saveCategorySettings(normalized);
     window.localStorage.removeItem(ACTIVE_CATEGORIES_STORAGE_KEY);
     setDraft(readCategorySettings());
+
+    try {
+      await supabase
+        .from("business_settings")
+        .upsert(
+          {
+            id: "main",
+            category_settings: normalized,
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: "id" },
+        )
+        .select("id")
+        .single();
+    } catch {
+      // The local copy is already saved; remote sync waits until the database is upgraded.
+    }
   };
 
   return (
@@ -301,6 +346,76 @@ export function CategorySettingsPanel() {
                       onClick={() => updateSelected({ units: selected.units.filter((_, currentIndex) => currentIndex !== index) })}
                       className="h-11 w-11 rounded-xl bg-white text-rose-600 shadow-sm"
                       title="حذف الوحدة"
+                    >
+                      <Trash2 className="mx-auto h-4 w-4" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="rounded-2xl bg-slate-50 p-4">
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <div>
+                  <h3 className="font-black text-slate-950">تحويلات الوحدات</h3>
+                  <p className="text-xs font-bold text-slate-500">مثال: كرتونة = 12 قطعة. المخزون يتحرك بالوحدة الأساسية.</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => updateSelected({ unitConversions: [...(selected.unitConversions || []), emptyConversion(selected)] })}
+                  className="rounded-xl bg-white px-3 py-2 text-xs font-black text-indigo-700 shadow-sm"
+                >
+                  إضافة تحويل
+                </button>
+              </div>
+
+              <div className="space-y-2">
+                {(selected.unitConversions || []).length === 0 && (
+                  <div className="rounded-xl bg-white p-5 text-center text-xs font-black text-slate-400">
+                    لا توجد تحويلات وحدات لهذا القسم.
+                  </div>
+                )}
+                {(selected.unitConversions || []).map((conversion, index) => (
+                  <div key={conversion.id || index} className="grid gap-2 rounded-2xl border border-slate-200 bg-white p-3 md:grid-cols-[1fr_120px_1fr_44px]">
+                    <select
+                      value={conversion.fromUnit}
+                      onChange={(event) => {
+                        const unitConversions = [...(selected.unitConversions || [])];
+                        unitConversions[index] = { ...conversion, fromUnit: event.target.value };
+                        updateSelected({ unitConversions });
+                      }}
+                      className="h-11 rounded-xl border border-slate-200 bg-white px-3 text-sm font-bold outline-none focus:border-indigo-400"
+                    >
+                      {selected.units.map((unit) => <option key={unit} value={unit}>{unit}</option>)}
+                    </select>
+                    <input
+                      type="number"
+                      min={0.001}
+                      step="any"
+                      value={conversion.factor}
+                      onChange={(event) => {
+                        const unitConversions = [...(selected.unitConversions || [])];
+                        unitConversions[index] = { ...conversion, factor: Number(event.target.value) || 1 };
+                        updateSelected({ unitConversions });
+                      }}
+                      className="h-11 rounded-xl border border-slate-200 px-3 text-center text-sm font-bold outline-none focus:border-indigo-400"
+                    />
+                    <select
+                      value={conversion.toUnit}
+                      onChange={(event) => {
+                        const unitConversions = [...(selected.unitConversions || [])];
+                        unitConversions[index] = { ...conversion, toUnit: event.target.value };
+                        updateSelected({ unitConversions });
+                      }}
+                      className="h-11 rounded-xl border border-slate-200 bg-white px-3 text-sm font-bold outline-none focus:border-indigo-400"
+                    >
+                      {selected.units.map((unit) => <option key={unit} value={unit}>{unit}</option>)}
+                    </select>
+                    <button
+                      type="button"
+                      onClick={() => updateSelected({ unitConversions: (selected.unitConversions || []).filter((_, currentIndex) => currentIndex !== index) })}
+                      className="h-11 rounded-xl bg-rose-50 text-rose-600"
+                      title="حذف التحويل"
                     >
                       <Trash2 className="mx-auto h-4 w-4" />
                     </button>

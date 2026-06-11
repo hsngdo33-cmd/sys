@@ -3,7 +3,8 @@
 import { useEffect, useState } from "react";
 import { KeyRound, ShieldCheck, UserPlus } from "lucide-react";
 import { supabase } from "@/lib/supabase";
-import { normalizeStaffRole, roleLabels } from "@/lib/permissions";
+import { normalizeStaffRole, permissionLabels, roleLabels, rolePermissions, staffTemplatesForActivity } from "@/lib/permissions";
+import { useBusinessSettings } from "@/app/business-settings";
 
 type StaffMember = {
   id: string;
@@ -29,12 +30,15 @@ function errorMessage(error: unknown) {
 }
 
 export function StaffSettingsPanel() {
+  const { settings: businessSettings } = useBusinessSettings();
   const [members, setMembers] = useState<StaffMember[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [form, setForm] = useState({ name: "", phone: "", role: "cashier", pinCode: "" });
+  const roleTemplates = staffTemplatesForActivity(businessSettings.activity_type);
+  const selectedRole = normalizeStaffRole(form.role);
 
   async function loadMembers() {
     setLoading(true);
@@ -138,6 +142,39 @@ export function StaffSettingsPanel() {
       )}
 
       <div className="grid gap-3">
+        <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+          <div className="mb-3">
+            <h3 className="text-sm font-black text-slate-950">قوالب صلاحيات حسب النشاط</h3>
+            <p className="mt-1 text-xs font-bold text-slate-500">
+              اختار قالب مناسب لطبيعة الموظف، والسيستم هيحدد الدور والصلاحيات الأساسية.
+            </p>
+          </div>
+          <div className="grid gap-2 md:grid-cols-2">
+            {roleTemplates.map((template) => (
+              <button
+                key={template.key}
+                type="button"
+                onClick={() => setForm({ ...form, role: template.role })}
+                className={`rounded-2xl border p-3 text-right transition ${
+                  selectedRole === template.role
+                    ? "border-emerald-200 bg-white text-emerald-700 shadow-sm"
+                    : "border-transparent bg-white/70 text-slate-600 hover:bg-white"
+                }`}
+              >
+                <span className="block text-sm font-black">{template.title}</span>
+                <span className="mt-1 block text-[11px] font-bold leading-5 text-slate-500">{template.description}</span>
+              </button>
+            ))}
+          </div>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {rolePermissions[selectedRole].map((permission) => (
+              <span key={permission} className="rounded-full bg-white px-3 py-1 text-[11px] font-black text-slate-600">
+                {permissionLabels[permission]}
+              </span>
+            ))}
+          </div>
+        </div>
+
         <label className="block">
           <span className="mb-1 block text-xs font-black text-slate-500">اسم الموظف</span>
           <input

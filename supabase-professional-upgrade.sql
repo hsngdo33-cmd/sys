@@ -21,6 +21,7 @@ alter table public.business_settings
   add column if not exists allow_negative_stock boolean not null default false,
   add column if not exists require_shift_close boolean not null default true,
   add column if not exists default_payment_method text not null default 'cash',
+  add column if not exists category_settings jsonb not null default '[]'::jsonb,
   add column if not exists updated_at timestamptz not null default now();
 
 create table if not exists public.branches (

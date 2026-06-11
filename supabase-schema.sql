@@ -93,6 +93,7 @@ create table if not exists public.business_settings (
   allow_negative_stock boolean not null default false,
   require_shift_close boolean not null default true,
   default_payment_method text not null default 'cash',
+  category_settings jsonb not null default '[]'::jsonb,
   updated_at timestamptz not null default now(),
   constraint business_settings_pkey primary key (id)
 );
