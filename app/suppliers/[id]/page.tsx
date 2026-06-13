@@ -212,7 +212,12 @@ export default function SupplierInvoicePage() {
     setCart(prev => prev.map((item) => {
       if (item.id !== pid) return item;
       const factor = Math.max(Number(factorValue) || 1, 0.001);
-      return { ...item, unitFactor: factor, manualUnitFactor: true };
+      return {
+        ...item,
+        unitFactor: factor,
+        manualUnitFactor: true,
+        p_price: Number(item.purchase_price || 0) * factor,
+      };
     }));
 
   const invoiceUnitOptions = (item: CartItem) =>

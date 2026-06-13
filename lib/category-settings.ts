@@ -348,7 +348,7 @@ export function withProductUnitConversion(attributes: unknown, conversion: Omit<
 function conversionEdges(category: unknown, configs = readCategorySettings(), customConversions: UnitConversion[] = []) {
   const key = typeof category === "string" ? category : "general";
   const categoryConfig = configs.find((item) => item.key === key);
-  const customEdges = [...(categoryConfig?.unitConversions || []), ...customConversions].flatMap((conversion) => {
+  const customEdges = [...customConversions, ...(categoryConfig?.unitConversions || [])].flatMap((conversion) => {
     const fromUnit = canonicalUnit(conversion.fromUnit);
     const toUnit = canonicalUnit(conversion.toUnit);
     const factor = Number(conversion.factor);
@@ -444,8 +444,8 @@ export function unitConversionsForBaseUnit(category: unknown, baseUnit: unknown,
 
   return [
     ...productUnitConversions(attributes),
-    ...COMMON_UNIT_CONVERSIONS,
     ...categoryConversions,
+    ...COMMON_UNIT_CONVERSIONS,
   ]
     .filter((conversion) => displayConversionRelatedToUnit(conversion, base))
     .filter((conversion) => {

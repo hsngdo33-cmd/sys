@@ -76,6 +76,7 @@ export default function InventoryPage() {
   // تعديل
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<Partial<Product>>({});
+  const [editUnitConversions, setEditUnitConversions] = useState<UnitConversion[] | null>(null);
   const [showNewUnitConversions, setShowNewUnitConversions] = useState(false);
 
   // منتج جديد
@@ -496,14 +497,27 @@ export default function InventoryPage() {
   // EDIT
   // =========================
 
-  const startEdit = (product: Product) => {
-    setEditingId(product.id);
+  const startEdit = async (product: Product) => {
+    const { data } = await supabase
+      .from("products")
+      .select("*")
+      .eq("id", product.id)
+      .maybeSingle();
+    const freshProduct = ((data as Product | null) || product) as Product;
+
+    setEditingId(freshProduct.id);
+    const freshAttributes = normalizedAttributes(freshProduct.product_attributes);
+    const freshConversions = storedProductConversions(freshAttributes);
+    setEditUnitConversions(freshConversions.length > 0 ? freshConversions : null);
     setEditForm({
-  ...product,
-  barcode: product.barcode || "",
-  profit_margin: profitPercentFromPrices(product.purchase_price, product.sale_price),
-  product_attributes: product.product_attributes || {},
-});
+      ...freshProduct,
+      barcode: freshProduct.barcode || "",
+      profit_margin: profitPercentFromPrices(freshProduct.purchase_price, freshProduct.sale_price),
+      product_attributes: {
+        ...freshAttributes,
+        ...(freshConversions.length > 0 ? { unit_conversions: freshConversions } : {}),
+      },
+    });
   };
 
   const updateEditPurchasePrice = (value: string) => {
@@ -594,37 +608,49 @@ export default function InventoryPage() {
     const reorderPoint = Number(editForm.reorder_point || 0);
     const reorderTarget = Math.max(Number(editForm.reorder_target || 0), reorderPoint);
 
-    const { error } = await supabase
+    const savedProductAttributes = cleanProductAttributes(editForm.product_category, {
+      ...normalizedAttributes(editForm.product_attributes),
+      ...(editUnitConversions !== null ? { unit_conversions: editUnitConversions } : {}),
+    });
+    const updatePayload = {
+      name: editForm.name,
+      unit: editForm.unit,
+      purchase_price: Number(editForm.purchase_price),
+      sale_price: Number(editForm.sale_price),
+      stock_quantity: Number(editForm.stock_quantity),
+      reorder_point: reorderPoint,
+      reorder_target: reorderTarget,
+      supplier_id: editForm.supplier_id || null,
+      barcode: barcodeValue,
+      product_category: normalizeProductCategory(editForm.product_category),
+      product_attributes: savedProductAttributes,
+    };
+
+    const { data: savedProduct, error } = await supabase
       .from("products")
-      .update({
-        name: editForm.name,
-        unit: editForm.unit,
-        purchase_price: Number(editForm.purchase_price),
-        sale_price: Number(editForm.sale_price),
-        stock_quantity: Number(editForm.stock_quantity),
-        reorder_point: reorderPoint,
-        reorder_target: reorderTarget,
-        supplier_id: editForm.supplier_id || null,
-        barcode: barcodeValue,
-        product_category: normalizeProductCategory(editForm.product_category),
-        product_attributes: cleanProductAttributes(
-          editForm.product_category,
-          attributesWithDefaultConversions(
-            editForm.product_attributes,
-            editForm.product_category,
-            editForm.unit,
-          ),
-        ),
-      })
-      .eq("id", editingId);
+      .update(updatePayload)
+      .eq("id", editingId)
+      .select("*")
+      .maybeSingle();
 
     if (!error) {
 
       alert("تم التعديل بنجاح ✅");
 
-      setEditingId(null);
+      if (editingId) {
+        setProducts((current) =>
+          current.map((product) =>
+            product.id === editingId
+              ? ({ ...product, ...updatePayload, ...(savedProduct || {}), product_attributes: savedProduct?.product_attributes || savedProductAttributes } as Product)
+              : product,
+          ),
+        );
+      }
 
-      fetchProducts();
+      setEditingId(null);
+      setEditUnitConversions(null);
+
+      await fetchProducts();
 
     } else {
 
@@ -759,6 +785,41 @@ export default function InventoryPage() {
   const conversionKey = (conversion: Pick<UnitConversion, "fromUnit" | "toUnit">) =>
     `${conversion.fromUnit.trim()}__${conversion.toUnit.trim()}`;
 
+  const normalizedAttributes = (attributes: ProductAttributes | string | null | undefined): ProductAttributes => {
+    let source: unknown = attributes;
+    if (typeof source === "string") {
+      try {
+        source = JSON.parse(source) as ProductAttributes;
+      } catch {
+        source = {};
+      }
+    }
+    return source && typeof source === "object" ? (source as ProductAttributes) : {};
+  };
+
+  const storedProductConversions = (attributes: ProductAttributes | string | null | undefined): UnitConversion[] => {
+    const source = normalizedAttributes(attributes);
+    const rawConversions = (source as { unit_conversions?: unknown }).unit_conversions;
+    if (!Array.isArray(rawConversions)) return [];
+
+    return rawConversions
+      .map((item, index) => {
+        if (!item || typeof item !== "object") return null;
+        const conversion = item as Partial<UnitConversion>;
+        const fromUnit = typeof conversion.fromUnit === "string" ? conversion.fromUnit.trim() : "";
+        const toUnit = typeof conversion.toUnit === "string" ? conversion.toUnit.trim() : "";
+        const factor = Number(conversion.factor);
+        if (!fromUnit || !toUnit || !Number.isFinite(factor) || factor <= 0) return null;
+        return {
+          id: typeof conversion.id === "string" && conversion.id.trim() ? conversion.id : `stored-conversion-${index}`,
+          fromUnit,
+          toUnit,
+          factor,
+        };
+      })
+      .filter((conversion): conversion is UnitConversion => Boolean(conversion));
+  };
+
   const unitMatches = (left: unknown, right: unknown) =>
     typeof left === "string" &&
     typeof right === "string" &&
@@ -777,13 +838,16 @@ export default function InventoryPage() {
     category: unknown,
     baseUnit?: unknown,
   ) => {
-    const source = attributes && typeof attributes === "object" ? attributes : {};
+    const source = normalizedAttributes(attributes);
     const configured = baseUnit
       ? unitConversionsForBaseUnit(category, baseUnit, source)
       : productUnitConversions(source);
     const conversions = [...configured, ...defaultUnitConversions(baseUnit)];
     const unique = new Map<string, UnitConversion>();
-    conversions.forEach((conversion) => unique.set(conversionKey(conversion), conversion));
+    conversions.forEach((conversion) => {
+      const key = conversionKey(conversion);
+      if (!unique.has(key)) unique.set(key, conversion);
+    });
     return Array.from(unique.values());
   };
 
@@ -793,9 +857,12 @@ export default function InventoryPage() {
     baseUnit: unknown,
   ): ProductAttributes => {
     const source = attributes && typeof attributes === "object" ? attributes : {};
+    const hasExplicitConversions = Array.isArray((source as { unit_conversions?: unknown }).unit_conversions);
     return {
       ...source,
-      unit_conversions: mergedProductConversions(source, category, baseUnit),
+      unit_conversions: hasExplicitConversions
+        ? productUnitConversions(source)
+        : mergedProductConversions(source, category, baseUnit),
     };
   };
 
@@ -839,30 +906,57 @@ export default function InventoryPage() {
     attributes: ProductAttributes | null | undefined,
     category: unknown,
     baseUnit: unknown,
-    _unitOptions: string[],
+    unitOptions: string[],
     onChange: (next: ProductAttributes) => void,
     mode: "modal" | "table" = "modal",
   ) => {
     const source = attributes && typeof attributes === "object" ? attributes : {};
-    const allConversions = mergedProductConversions(source, category, baseUnit);
     const base = typeof baseUnit === "string" && baseUnit.trim() ? baseUnit.trim() : "قطعة";
     const compact = mode === "table";
-    const relatedConversions = allConversions.filter((conversion) => conversionIsRelatedToUnit(conversion, base));
-    const preferredConversions = relatedConversions.filter((conversion) => unitMatches(conversion.fromUnit, base));
-    const scopedConversions = preferredConversions.length > 0
-      ? preferredConversions
-      : relatedConversions.slice(0, compact ? 2 : 3);
-    const scopedKeys = new Set(scopedConversions.map(conversionKey));
-    const hiddenConversions = allConversions.filter((conversion) => !scopedKeys.has(conversionKey(conversion)));
-    const options = [...new Set([base, ...scopedConversions.flatMap((item) => [item.fromUnit, item.toUnit]), ...defaultUnitConversions(base).flatMap((item) => [item.fromUnit, item.toUnit])])].filter(Boolean);
-    const updateConversions = (nextScopedConversions: UnitConversion[]) => onChange({ ...source, unit_conversions: [...hiddenConversions, ...nextScopedConversions] });
-    const defaultRelatedConversion = scopedConversions[0] || relatedConversions[0] || defaultUnitConversions(base)[0];
-    const preferredManualUnit = ["كرتونة", "علبة", "عبوة"].find((unit) => options.includes(unit));
-    const defaultFromUnit = defaultRelatedConversion?.fromUnit || preferredManualUnit || options.find((unit) => unit !== base) || "كرتونة";
-    const defaultToUnit = defaultRelatedConversion?.toUnit || base;
-    const defaultFactor = defaultRelatedConversion?.factor || (defaultFromUnit === "كرتونة" ? 12 : 1);
-    const visibleConversions = compact ? scopedConversions.slice(0, 3) : scopedConversions;
-    const remainingConversions = Math.max(relatedConversions.length - visibleConversions.length, 0);
+    const productConversions = storedProductConversions(source);
+    const hasExplicitConversionList = Array.isArray((source as { unit_conversions?: unknown }).unit_conversions);
+    const relatedProductConversions = productConversions.filter((conversion) => conversionIsRelatedToUnit(conversion, base));
+    const suggestedConversions = mergedProductConversions({}, category, base)
+      .filter((conversion) => conversionIsRelatedToUnit(conversion, base));
+    const editableConversions = relatedProductConversions.length > 0
+      ? relatedProductConversions
+      : hasExplicitConversionList
+      ? []
+      : suggestedConversions.slice(0, compact ? 2 : 3).map((conversion) => ({
+          ...conversion,
+          id: `draft-${conversion.id || `${conversion.fromUnit}-${conversion.toUnit}`}`,
+        }));
+    const editableKeys = new Set(editableConversions.map(conversionKey));
+    const hiddenProductConversions = productConversions.filter((conversion) => !editableKeys.has(conversionKey(conversion)));
+    const options = [
+      ...new Set([
+        base,
+        ...unitOptions,
+        ...editableConversions.flatMap((item) => [item.fromUnit, item.toUnit]),
+        ...suggestedConversions.flatMap((item) => [item.fromUnit, item.toUnit]),
+        ...defaultUnitConversions(base).flatMap((item) => [item.fromUnit, item.toUnit]),
+      ]),
+    ].filter(Boolean);
+    const sanitizeConversions = (items: UnitConversion[]) =>
+      items
+        .map((conversion, index) => ({
+          id: conversion.id || `product-conversion-${Date.now()}-${index}`,
+          fromUnit: conversion.fromUnit?.trim(),
+          toUnit: conversion.toUnit?.trim(),
+          factor: Number(conversion.factor),
+        }))
+        .filter((conversion): conversion is UnitConversion =>
+          Boolean(conversion.fromUnit && conversion.toUnit && conversion.fromUnit !== conversion.toUnit && Number.isFinite(conversion.factor) && conversion.factor > 0),
+        );
+    const updateConversions = (nextEditableConversions: UnitConversion[]) =>
+      onChange({ ...source, unit_conversions: [...hiddenProductConversions, ...sanitizeConversions(nextEditableConversions)] });
+    const preferredSmallUnit = ["قطعة", "جرام", "مللي", "سنتي", "علبة", "عبوة"]
+      .find((unit) => !unitMatches(unit, base) && options.includes(unit));
+    const defaultToUnit = preferredSmallUnit || options.find((unit) => !unitMatches(unit, base)) || "قطعة";
+    const suggestedDefault = suggestedConversions.find((conversion) => unitMatches(conversion.fromUnit, base) && unitMatches(conversion.toUnit, defaultToUnit));
+    const defaultFactor = suggestedDefault?.factor || (unitMatches(base, "كرتونة") || unitMatches(base, "دستة") ? 12 : 1);
+    const visibleConversions = compact ? editableConversions.slice(0, 3) : editableConversions;
+    const remainingConversions = Math.max(editableConversions.length - visibleConversions.length, 0);
 
     return (
       <div className={`${compact ? "mt-2" : "lg:col-span-3"} rounded-2xl border border-slate-100 bg-slate-50 p-3`}>
@@ -877,7 +971,7 @@ export default function InventoryPage() {
             </span>
             <button
               type="button"
-              onClick={() => updateConversions([...scopedConversions, { id: `conversion-${Date.now()}`, fromUnit: defaultFromUnit, toUnit: defaultToUnit, factor: defaultFactor }])}
+              onClick={() => updateConversions([...editableConversions, { id: `conversion-${Date.now()}`, fromUnit: base, toUnit: defaultToUnit, factor: defaultFactor }])}
               className="rounded-full bg-slate-900 px-3 py-1.5 text-[10px] font-black text-white hover:bg-slate-700"
             >
               + تحويل
@@ -885,6 +979,11 @@ export default function InventoryPage() {
           </div>
         </div>
         <div className={`${compact ? "max-h-44" : "max-h-52"} space-y-2 overflow-y-auto pr-1`}>
+          {visibleConversions.length === 0 && (
+            <div className="rounded-xl border border-dashed border-slate-200 bg-white p-3 text-center text-xs font-black text-slate-400">
+              اضغط + تحويل لإضافة قاعدة جديدة للصنف.
+            </div>
+          )}
           {visibleConversions.map((conversion, index) => (
             <div key={conversion.id || index} className="grid items-center gap-2 rounded-xl border border-slate-100 bg-white p-2 sm:grid-cols-[auto_1fr_auto_86px_1fr_auto]">
               <span className="hidden text-[10px] font-black text-slate-400 sm:inline">كل</span>
@@ -893,7 +992,7 @@ export default function InventoryPage() {
                 <select
                   value={conversion.fromUnit}
                   onChange={(event) => {
-                    const next = [...scopedConversions];
+                    const next = [...editableConversions];
                     next[index] = { ...conversion, fromUnit: event.target.value };
                     updateConversions(next);
                   }}
@@ -911,8 +1010,8 @@ export default function InventoryPage() {
                   step="any"
                   value={conversion.factor}
                   onChange={(event) => {
-                    const next = [...scopedConversions];
-                    next[index] = { ...conversion, factor: Math.max(Number(event.target.value) || 1, 0.001) };
+                    const next = [...editableConversions];
+                    next[index] = { ...conversion, factor: Number(event.target.value) };
                     updateConversions(next);
                   }}
                   className="mt-1 h-9 w-full rounded-lg border border-slate-200 px-2 text-center text-xs font-black text-slate-900 outline-none focus:border-slate-400"
@@ -923,7 +1022,7 @@ export default function InventoryPage() {
                 <select
                   value={conversion.toUnit}
                   onChange={(event) => {
-                    const next = [...scopedConversions];
+                    const next = [...editableConversions];
                     next[index] = { ...conversion, toUnit: event.target.value };
                     updateConversions(next);
                   }}
@@ -934,7 +1033,7 @@ export default function InventoryPage() {
               </label>
               <button
                 type="button"
-                onClick={() => updateConversions(scopedConversions.filter((_, currentIndex) => currentIndex !== index))}
+                onClick={() => updateConversions(editableConversions.filter((_, currentIndex) => currentIndex !== index))}
                 className="h-9 rounded-lg bg-rose-50 px-3 text-xs font-black text-rose-600 hover:bg-rose-100"
               >
                 حذف
@@ -1207,7 +1306,10 @@ export default function InventoryPage() {
               </div>
               <button
                 type="button"
-                onClick={() => setEditingId(null)}
+                onClick={() => {
+                  setEditingId(null);
+                  setEditUnitConversions(null);
+                }}
                 className="rounded-2xl bg-slate-100 px-4 py-2 text-sm font-black text-slate-700 hover:bg-slate-200"
               >
                 إغلاق
@@ -1261,7 +1363,7 @@ export default function InventoryPage() {
                   <ProductCategoryFields
                     category={normalizeProductCategory(editForm.product_category)}
                     value={(editForm.product_attributes as ProductAttributes) || {}}
-                    onChange={(attributes) => setEditForm({ ...editForm, product_attributes: attributes })}
+                    onChange={(attributes) => setEditForm((current) => ({ ...current, product_attributes: attributes }))}
                     className="mt-4"
                   />
                 </div>
@@ -1274,11 +1376,17 @@ export default function InventoryPage() {
                     </div>
                   </div>
                   {renderUnitConversionsEditor(
-                    (editForm.product_attributes as ProductAttributes) || {},
+                    {
+                      ...normalizedAttributes(editForm.product_attributes),
+                      ...(editUnitConversions !== null ? { unit_conversions: editUnitConversions } : {}),
+                    },
                     editForm.product_category,
                     editForm.unit,
                     editFormUnits || [],
-                    (attributes) => setEditForm({ ...editForm, product_attributes: attributes }),
+                    (attributes) => {
+                      setEditUnitConversions(storedProductConversions(attributes));
+                      setEditForm((current) => ({ ...current, product_attributes: attributes }));
+                    },
                   )}
                 </div>
               </div>
@@ -1373,7 +1481,10 @@ export default function InventoryPage() {
             <div className="flex flex-col gap-3 border-t border-slate-100 px-5 py-4 sm:flex-row sm:justify-end sm:px-7">
               <button
                 type="button"
-                onClick={() => setEditingId(null)}
+                onClick={() => {
+                  setEditingId(null);
+                  setEditUnitConversions(null);
+                }}
                 className="rounded-2xl bg-slate-100 px-6 py-3 font-black text-slate-700 hover:bg-slate-200"
               >
                 إلغاء
@@ -1509,7 +1620,7 @@ export default function InventoryPage() {
                   newProduct.product_category,
                   newProduct.unit,
                   newProductUnits || [],
-                  (attributes) => setNewProduct({ ...newProduct, product_attributes: attributes }),
+                  (attributes) => setNewProduct((current) => ({ ...current, product_attributes: attributes })),
                 )}
               </div>
 
