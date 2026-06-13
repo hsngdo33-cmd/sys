@@ -7,6 +7,7 @@ import {
   ClipboardCheck,
   Filter,
   PackageSearch,
+  ReceiptText,
   ShieldCheck,
   Truck,
   UsersRound,
@@ -20,7 +21,8 @@ const reportGroups = [
     icon: BarChart3,
     tone: "bg-emerald-600",
     links: [
-      { href: "/reports/customers", title: "تقرير العملاء", description: "مبيعات، تحصيل، أرباح، ديون، وآخر حركة." },
+      { href: "/reports/invoices", title: "كل فواتير اليوم", description: "فواتير البيع والشراء في يوم محدد مع بحث وإجماليات واضحة." },
+      { href: "/reports/customers", title: "تقرير العملاء", description: "مبيعات، تحصيل، أرباح، ديون، وآخر حركة لكل عميل." },
       { href: "/reports/suppliers", title: "تقرير الموردين", description: "توريدات، سداد، متبقيات، ورصيد كل مورد." },
       { href: "/reports/filter", title: "التصفية العامة", description: "مقارنة يومية أو شهرية أو سنوية بين البيع والتوريد." },
     ],
@@ -49,12 +51,13 @@ const reportGroups = [
     icon: ShieldCheck,
     tone: "bg-rose-600",
     links: [
-      { href: "/reports/staff-activity", title: "نشاط الموظفين", description: "تسجيل الدخول والفواتير والمرتجعات وحركات الخزنة والتسويات." },
+      { href: "/reports/staff-activity", title: "نشاط الموظفين", description: "الدخول والفواتير والمرتجعات وحركات الخزنة والتسويات." },
     ],
   },
 ];
 
 const quickReports = [
+  { href: "/reports/invoices", label: "الفواتير", icon: ReceiptText },
   { href: "/reports/customers", label: "العملاء", icon: UsersRound },
   { href: "/reports/suppliers", label: "الموردين", icon: Truck },
   { href: "/reports/filter", label: "تصفية عامة", icon: Filter },
@@ -73,7 +76,7 @@ export default function ReportsHomePage() {
             <div>
               <h1 className="text-3xl font-black text-slate-950">اختار التقرير حسب نوع القرار</h1>
               <p className="mt-2 max-w-2xl text-sm font-bold leading-7 text-slate-500">
-                التقارير هنا للمراجعة والتحليل فقط. تنفيذ التسويات، الورديات، وحركات الخزنة موجود في تبويب العمليات.
+                التقارير هنا للمراجعة والتحليل فقط. تنفيذ التسويات والورديات وحركات الخزنة موجود في الأماكن المخصصة له.
               </p>
             </div>
             <div className="flex flex-wrap gap-2">

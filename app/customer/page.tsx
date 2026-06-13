@@ -2,6 +2,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { supabase } from "@/lib/supabase";
 import Link from "next/link";
+import { requireOpenShiftForCash } from "@/app/cash-session";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface Customer {
@@ -171,12 +172,32 @@ export default function CustomersListPage() {
     }
     setSaving(true);
     try {
-      await supabase.from("customer_transactions").insert([{
+      const shiftCheck = await requireOpenShiftForCash(payAmount);
+      if (!shiftCheck.ok) {
+        alert(shiftCheck.message);
+        return;
+      }
+
+      const { data: transaction, error: transactionError } = await supabase.from("customer_transactions").insert([{
         customer_id: selectedCustomer.id,
         amount: payAmount,
         type: "تحصيل نقدي",
         description: payNote || "تحصيل نقدي من العميل",
+      }]).select("id").single();
+      if (transactionError) throw transactionError;
+
+      const { error: cashError } = await supabase.from("cash_entries").insert([{
+        session_id: shiftCheck.sessionId,
+        entry_type: "customer_collection",
+        direction: "in",
+        payment_method: "cash",
+        amount: payAmount,
+        source_type: "customer_collection",
+        source_id: transaction?.id?.toString(),
+        note: payNote || `تحصيل نقدي من العميل - ${selectedCustomer.name}`,
       }]);
+      if (cashError) throw cashError;
+
       await supabase.from("customers")
         .update({ balance: (selectedCustomer.balance || 0) - payAmount })
         .eq("id", selectedCustomer.id);
@@ -425,14 +446,18 @@ export default function CustomersListPage() {
                           <div className="absolute left-0 top-10 z-30 w-44 rounded-2xl border border-slate-200 bg-white p-2 shadow-xl">
                             <Link href={`/customer/${c.id}`} className="block rounded-xl px-3 py-2 text-xs font-black text-slate-700 hover:bg-slate-50">فاتورة بيع</Link>
                             <Link href={`/customer/${c.id}/return`} className="block rounded-xl px-3 py-2 text-xs font-black text-amber-700 hover:bg-amber-50">مرتجع</Link>
-                            {c.balance > 0 && (
-                              <button
-                                onClick={() => { setSelectedCustomer(c); setPayAmount(0); setPayNote(""); setShowPayModal(true); }}
-                                className="block w-full rounded-xl px-3 py-2 text-right text-xs font-black text-emerald-700 hover:bg-emerald-50"
-                              >
-                                تحصيل
-                              </button>
-                            )}
+                            <button
+                              onClick={() => { if (c.balance > 0) { setSelectedCustomer(c); setPayAmount(0); setPayNote(""); setShowPayModal(true); } }}
+                              disabled={c.balance <= 0}
+                              title={c.balance > 0 ? "تحصيل من مديونية العميل" : "لا توجد مديونية للتحصيل"}
+                              className={`block w-full rounded-xl px-3 py-2 text-right text-xs font-black ${
+                                c.balance > 0
+                                  ? "text-emerald-700 hover:bg-emerald-50"
+                                  : "cursor-not-allowed text-slate-300"
+                              }`}
+                            >
+                              تحصيل
+                            </button>
                             <button
                               onClick={() => { setSelectedCustomer(c); setShowEditModal(true); }}
                               className="block w-full rounded-xl px-3 py-2 text-right text-xs font-black text-blue-700 hover:bg-blue-50"

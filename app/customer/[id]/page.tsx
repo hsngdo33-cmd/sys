@@ -4,12 +4,12 @@ import { supabase } from "@/lib/supabase";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { ProductCategory, normalizeProductCategory, productCategoryLabel } from "@/lib/product-category";
-import { CategorySelect } from "@/app/category-select";
+import { CategorySelect, useEnabledCategories } from "@/app/category-select";
 import { recordStaffActivity } from "@/app/staff-activity";
 import { useStaffSession } from "@/app/staff-session";
 import { requireOpenShiftForCash } from "@/app/cash-session";
 import { calculateInvoiceTax, paperSizeCss, useBusinessSettings } from "@/app/business-settings";
-import { conversionFactorForUnit, hasKnownConversion, manualConversionHint, productUnitConversions, relatedStandardUnits, unitsForCategory } from "@/lib/category-settings";
+import { conversionFactorForUnit, hasKnownConversion, invoiceUnitsForBaseUnit, manualConversionHint, productUnitConversions } from "@/lib/category-settings";
 
 interface Product {
   id: string; name: string; unit: string;
@@ -45,6 +45,8 @@ export default function CustomerInvoicePage() {
   const [customer, setCustomer]       = useState<Customer | null>(null);
   const [products, setProducts]       = useState<Product[]>([]);
   const [activeCategory, setActiveCategory] = useState<ProductCategory>("general");
+  const enabledCategories = useEnabledCategories();
+  const defaultActiveCategory = enabledCategories[0] || "general";
   const [searchTerm, setSearchTerm]   = useState("");
   const [cart, setCart]               = useState<CartItem[]>([]);
   const [cashPaid, setCashPaid]       = useState<number | string>(0);
@@ -72,6 +74,14 @@ export default function CustomerInvoicePage() {
       loadData();
     }
   }, [id, loadData]);
+
+  useEffect(() => {
+    if (enabledCategories.length > 0 && !enabledCategories.includes(activeCategory)) {
+      setActiveCategory(defaultActiveCategory);
+      setCart([]);
+      setSearchTerm("");
+    }
+  }, [activeCategory, defaultActiveCategory, enabledCategories]);
 
   const filteredProducts = useMemo(() =>
     products.filter(p =>
@@ -191,15 +201,8 @@ export default function CustomerInvoicePage() {
       };
     }));
 
-  const invoiceUnitOptions = (item: CartItem) => [
-    ...new Set([
-      item.unit,
-      ...relatedStandardUnits(item.unit),
-      ...productUnitConversions(item.product_attributes).flatMap((conversion) => [conversion.fromUnit, conversion.toUnit]),
-      ...unitsForCategory(item.product_category),
-      item.invoiceUnit,
-    ]),
-  ].filter(Boolean);
+  const invoiceUnitOptions = (item: CartItem) =>
+    invoiceUnitsForBaseUnit(item.product_category, item.unit, item.product_attributes, item.invoiceUnit);
 
   // ── Totals ──
   const subtotal   = cart.reduce((s, i) => s + Number(i.qty || 0) * Number(i.price || 0), 0);
@@ -312,7 +315,7 @@ export default function CustomerInvoicePage() {
         <div className="flex items-center gap-4">
           <Link href="/customer" className="bg-white/10 hover:bg-white/20 px-4 py-2 rounded-xl text-xs font-black transition-all">⬅️ رجوع</Link>
           <div>
-            <h1 className="text-lg font-black">فاتورة بيع {productCategoryLabel(activeCategory)}: {customer?.name}</h1>
+            <h1 className="text-lg font-black">فاتورة بيع {productCategoryLabel(activeCategory)}: {customer?.name || "جاري تحميل العميل"}</h1>
             <p className="text-[10px] text-slate-400 font-bold">{new Date().toLocaleDateString("ar-EG", { weekday:"long", day:"numeric", month:"long" })}</p>
           </div>
         </div>
@@ -321,7 +324,7 @@ export default function CustomerInvoicePage() {
             <span className="bg-indigo-600 px-3 py-1 rounded-lg text-[10px] font-black">{cart.length} صنف</span>
           )}
           <div className={`px-4 py-1.5 rounded-lg text-[10px] font-black ${(customer?.balance || 0) > 0 ? "bg-rose-600" : "bg-emerald-600"}`}>
-            مديونية: {customer?.balance?.toLocaleString("ar-EG")} ج.م
+            مديونية: {customer ? customer.balance?.toLocaleString("ar-EG") : "..."} ج.م
           </div>
         </div>
       </header>
@@ -335,6 +338,7 @@ export default function CustomerInvoicePage() {
             <CategorySelect
               value={activeCategory}
               label="قسم البيع"
+              variant="cards"
               onChange={(category) => {
                 setActiveCategory(category);
                 setCart([]);

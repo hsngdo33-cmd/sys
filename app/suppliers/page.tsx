@@ -173,12 +173,14 @@ export default function SuppliersPage() {
     }
     setSaving(true);
     try {
-      await supabase.from("transactions").insert([{
+      const { error: transactionError } = await supabase.from("transactions").insert([{
         supplier_id: selectedSupp.id,
         amount: payAmount,
-        type: "تحصيل نقدي",
-        description: payNote || "تحصيل بدون فاتورة",
+        type: "سداد نقدي",
+        description: payNote || "سداد مورد بدون فاتورة",
       }]);
+      if (transactionError) throw transactionError;
+
       await supabase.from("suppliers")
         .update({ balance: (selectedSupp.balance || 0) - payAmount })
         .eq("id", selectedSupp.id);
@@ -437,14 +439,18 @@ export default function SuppliersPage() {
                           <div className="absolute left-0 top-10 z-30 w-48 rounded-2xl border border-slate-200 bg-white p-2 shadow-xl">
                             <Link href={`/suppliers/${s.id}`} className="block rounded-xl px-3 py-2 text-xs font-black text-slate-700 hover:bg-slate-50">فاتورة توريد</Link>
                             <Link href={`/suppliers/${s.id}/return`} className="block rounded-xl px-3 py-2 text-xs font-black text-amber-700 hover:bg-amber-50">مرتجع</Link>
-                            {s.balance > 0 && (
-                              <button
-                                onClick={() => { setSelectedSupp(s); setPayAmount(0); setPayNote(""); setShowPayModal(true); }}
-                                className="block w-full rounded-xl px-3 py-2 text-right text-xs font-black text-emerald-700 hover:bg-emerald-50"
-                              >
-                                تحصيل بدون فاتورة
-                              </button>
-                            )}
+                            <button
+                              onClick={() => { if (s.balance > 0) { setSelectedSupp(s); setPayAmount(0); setPayNote(""); setShowPayModal(true); } }}
+                              disabled={s.balance <= 0}
+                              title={s.balance > 0 ? "سداد من مديونية المورد" : "لا توجد مديونية للسداد"}
+                              className={`block w-full rounded-xl px-3 py-2 text-right text-xs font-black ${
+                                s.balance > 0
+                                  ? "text-emerald-700 hover:bg-emerald-50"
+                                  : "cursor-not-allowed text-slate-300"
+                              }`}
+                            >
+                              سداد مورد
+                            </button>
                             <button
                               onClick={() => { setSelectedSupp(s); setShowEditModal(true); }}
                               className="block w-full rounded-xl px-3 py-2 text-right text-xs font-black text-blue-700 hover:bg-blue-50"
@@ -471,11 +477,11 @@ export default function SuppliersPage() {
 
       </main>
 
-      {/* ══ Modal: تحصيل بدون فاتورة ══ */}
+      {/* ══ Modal: سداد مورد ══ */}
       {showPayModal && selectedSupp && (
         <Modal onClose={() => setShowPayModal(false)}>
           <div className="border-r-4 border-emerald-500 pr-3 mb-6">
-            <h3 className="text-xl font-black text-slate-900">تحصيل بدون فاتورة لـ: {selectedSupp.name}</h3>
+            <h3 className="text-xl font-black text-slate-900">سداد مورد: {selectedSupp.name}</h3>
             <p className="text-xs text-slate-400 font-bold mt-1">
               المديونية الحالية: <span className="text-rose-600 font-black">{selectedSupp.balance.toLocaleString("ar-EG")} ج.م</span>
             </p>
@@ -493,7 +499,7 @@ export default function SuppliersPage() {
               />
               {payAmount > 0 && (
                 <p className="text-xs text-slate-400 font-bold mt-2">
-                  المتبقي بعد التحصيل:{" "}
+                  المتبقي بعد السداد:{" "}
                   <span className={`font-black ${selectedSupp.balance - payAmount > 0 ? "text-rose-500" : "text-emerald-600"}`}>
                     {(selectedSupp.balance - payAmount).toLocaleString("ar-EG")} ج.م
                   </span>
@@ -515,7 +521,7 @@ export default function SuppliersPage() {
                 disabled={saving || payAmount <= 0}
                 className="flex-1 bg-emerald-500 hover:bg-emerald-400 text-white py-4 rounded-2xl font-black text-lg transition-all active:scale-95 disabled:opacity-50"
               >
-                {saving ? "جاري التحصيل..." : "تأكيد التحصيل ✅"}
+                {saving ? "جاري السداد..." : "تأكيد السداد ✅"}
               </button>
               <button onClick={() => setShowPayModal(false)} className="px-6 py-4 bg-slate-100 text-slate-500 rounded-2xl font-black hover:bg-slate-200 transition-all">إلغاء</button>
             </div>

@@ -284,6 +284,16 @@ const STANDARD_UNIT_CONVERSIONS = [
   { fromUnit: "m", toUnit: "cm", factor: 100 },
 ];
 
+const COMMON_UNIT_CONVERSIONS: UnitConversion[] = [
+  { id: "common-carton-piece", fromUnit: "كرتونة", toUnit: "قطعة", factor: 12 },
+  { id: "common-dozen-piece", fromUnit: "دستة", toUnit: "قطعة", factor: 12 },
+  { id: "common-box-piece", fromUnit: "علبة", toUnit: "قطعة", factor: 1 },
+  { id: "common-pack-piece", fromUnit: "عبوة", toUnit: "قطعة", factor: 1 },
+  { id: "common-kg-gram", fromUnit: "كيلو", toUnit: "جرام", factor: 1000 },
+  { id: "common-liter-ml", fromUnit: "لتر", toUnit: "مللي", factor: 1000 },
+  { id: "common-meter-cm", fromUnit: "متر", toUnit: "سنتي", factor: 100 },
+];
+
 function canonicalUnit(value: unknown) {
   const normalized = normalizeUnitName(value);
   return STANDARD_UNIT_ALIASES[normalized] || normalized;
@@ -410,6 +420,54 @@ export function relatedStandardUnits(unit: unknown) {
   };
 
   return [...new Set(related.map((item) => displayNames[item] || item))];
+}
+
+function sameDisplayUnit(left: unknown, right: unknown) {
+  return typeof left === "string" &&
+    typeof right === "string" &&
+    left.trim() === right.trim();
+}
+
+function displayConversionRelatedToUnit(conversion: UnitConversion, unit: unknown) {
+  return sameDisplayUnit(conversion.fromUnit, unit) || sameDisplayUnit(conversion.toUnit, unit);
+}
+
+function conversionDisplayKey(conversion: Pick<UnitConversion, "fromUnit" | "toUnit">) {
+  return `${conversion.fromUnit.trim()}__${conversion.toUnit.trim()}`;
+}
+
+export function unitConversionsForBaseUnit(category: unknown, baseUnit: unknown, attributes: unknown, configs = readCategorySettings()) {
+  const base = typeof baseUnit === "string" && baseUnit.trim() ? baseUnit.trim() : "";
+  const categoryKey = typeof category === "string" ? category : "general";
+  const categoryConversions = configs.find((item) => item.key === categoryKey)?.unitConversions || [];
+  const seen = new Set<string>();
+
+  return [
+    ...productUnitConversions(attributes),
+    ...COMMON_UNIT_CONVERSIONS,
+    ...categoryConversions,
+  ]
+    .filter((conversion) => displayConversionRelatedToUnit(conversion, base))
+    .filter((conversion) => {
+      const key = conversionDisplayKey(conversion);
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+}
+
+export function invoiceUnitsForBaseUnit(category: unknown, baseUnit: unknown, attributes: unknown, currentUnit?: unknown, configs = readCategorySettings()) {
+  const base = typeof baseUnit === "string" && baseUnit.trim() ? baseUnit.trim() : "";
+  const relatedConversions = unitConversionsForBaseUnit(category, baseUnit, attributes, configs);
+
+  return [
+    ...new Set([
+      base,
+      ...relatedStandardUnits(base),
+      ...relatedConversions.flatMap((conversion) => [conversion.fromUnit, conversion.toUnit]),
+      typeof currentUnit === "string" ? currentUnit.trim() : "",
+    ]),
+  ].filter(Boolean);
 }
 
 export function manualConversionHint(fromUnit: unknown, baseUnit: unknown) {

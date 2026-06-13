@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { ProductCategory, normalizeProductCategory, productCategoryLabel } from "@/lib/product-category";
 import { barcodeValidationMessage, cleanBarcode, generateInternalBarcode, isPrintableBarcode } from "@/lib/barcode";
-import { CategorySelect, useCategoryUnits } from "@/app/category-select";
+import { CategorySelect, useCategoryUnits, useEnabledCategories } from "@/app/category-select";
 import { ProductAttributes, ProductCategoryFields, cleanProductAttributes } from "@/app/product-category-fields";
 import { formatPriceInput, priceFromPurchase, profitPercentFromPrices, purchaseFromPrice } from "@/lib/pricing";
 
@@ -31,6 +31,8 @@ function generateCode() {
 // â”€â”€â”€ Component â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export default function AddProductPage() {
   const router = useRouter();
+  const enabledCategories = useEnabledCategories();
+  const defaultActiveCategory = enabledCategories[0] || "general";
 
   const [form, setForm] = useState({
     barcode:        "",
@@ -76,6 +78,12 @@ export default function AddProductPage() {
       setForm((current) => ({ ...current, unit: formUnits[0] }));
     }
   }, [form.product_category, form.unit, formUnits]);
+
+  useEffect(() => {
+    if (enabledCategories.length > 0 && !enabledCategories.includes(form.product_category)) {
+      setForm((current) => ({ ...current, product_category: defaultActiveCategory, product_attributes: {} }));
+    }
+  }, [defaultActiveCategory, enabledCategories, form.product_category]);
 
   const updatePurchasePrice = (value: string) => {
     setForm((current) => ({

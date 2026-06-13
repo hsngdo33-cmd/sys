@@ -46,6 +46,45 @@ type CashEntry = {
   created_at: string;
 };
 
+type CustomerTransaction = {
+  id: string;
+  amount: number | string | null;
+  type: string | null;
+  created_at: string;
+};
+
+type SupplierTransaction = {
+  id: string;
+  amount: number | string | null;
+  type: string | null;
+  description: string | null;
+  created_at: string;
+};
+
+const CUSTOMER_SALE_TYPES = new Set(["sale", "بيع"]);
+const CUSTOMER_PAYMENT_TYPES = new Set(["payment", "تحصيل نقدي", "تحصيل", "دفع"]);
+
+function isCustomerSale(type: unknown) {
+  return CUSTOMER_SALE_TYPES.has(String(type || ""));
+}
+
+function isCustomerPayment(type: unknown) {
+  const safeType = String(type || "");
+  return CUSTOMER_PAYMENT_TYPES.has(safeType) || safeType.includes("تحصيل") || safeType.includes("دفع");
+}
+
+function isSupplierPayment(tx: SupplierTransaction) {
+  const type = String(tx.type || "");
+  const description = String(tx.description || "");
+  return (
+    type.includes("سداد") ||
+    type.includes("دفع") ||
+    type.includes("تحصيل") ||
+    description.includes("بدون فاتورة") ||
+    description.includes("دفعة")
+  );
+}
+
 const statusLabels: Record<string, string> = {
   all: "كل الورديات",
   open: "مفتوحة",
@@ -53,6 +92,8 @@ const statusLabels: Record<string, string> = {
 };
 
 const entryTypeLabels: Record<string, string> = {
+  sale_payment: "تحصيل من فاتورة بيع",
+  customer_collection: "تحصيل عميل",
   sale_cash: "تحصيل بيع",
   supplier_payment: "سداد مورد",
   income: "دخل إضافي",
@@ -145,6 +186,8 @@ function buildSummaries(sessions: CashSession[], entries: CashEntry[]) {
 export default function CashSessionsReportPage() {
   const [sessions, setSessions] = useState<CashSession[]>([]);
   const [entries, setEntries] = useState<CashEntry[]>([]);
+  const [customerTransactions, setCustomerTransactions] = useState<CustomerTransaction[]>([]);
+  const [supplierTransactions, setSupplierTransactions] = useState<SupplierTransaction[]>([]);
   const [fromDate, setFromDate] = useState(defaultFromDate());
   const [toDate, setToDate] = useState(todayInput());
   const [status, setStatus] = useState("all");
@@ -167,7 +210,7 @@ export default function CashSessionsReportPage() {
       if (fromDate) sessionsQuery = sessionsQuery.gte("opened_at", startOfDay(fromDate));
       if (toDate) sessionsQuery = sessionsQuery.lte("opened_at", endOfDay(toDate));
 
-      const [sessionsResult, entriesResult] = await Promise.all([
+      const [sessionsResult, entriesResult, customerTxResult, supplierTxResult] = await Promise.all([
         sessionsQuery,
         supabase
           .from("cash_entries")
@@ -176,16 +219,36 @@ export default function CashSessionsReportPage() {
           .lte("created_at", endOfDay(toDate))
           .order("created_at", { ascending: false })
           .limit(1000),
+        supabase
+          .from("customer_transactions")
+          .select("id,amount,type,created_at")
+          .gte("created_at", startOfDay(fromDate))
+          .lte("created_at", endOfDay(toDate))
+          .order("created_at", { ascending: false })
+          .limit(2000),
+        supabase
+          .from("transactions")
+          .select("id,amount,type,description,created_at")
+          .gte("created_at", startOfDay(fromDate))
+          .lte("created_at", endOfDay(toDate))
+          .order("created_at", { ascending: false })
+          .limit(2000),
       ]);
 
       if (sessionsResult.error) throw sessionsResult.error;
       if (entriesResult.error) throw entriesResult.error;
+      if (customerTxResult.error) throw customerTxResult.error;
+      if (supplierTxResult.error) throw supplierTxResult.error;
 
       setSessions((sessionsResult.data || []) as CashSession[]);
       setEntries((entriesResult.data || []) as CashEntry[]);
+      setCustomerTransactions((customerTxResult.data || []) as CustomerTransaction[]);
+      setSupplierTransactions((supplierTxResult.data || []) as SupplierTransaction[]);
     } catch (loadError) {
       setSessions([]);
       setEntries([]);
+      setCustomerTransactions([]);
+      setSupplierTransactions([]);
       setError(
         loadError instanceof Error
           ? `${loadError.message}. تواصل مع مسؤول النظام لتفعيل تقارير الورديات والخزنة.`
@@ -220,6 +283,34 @@ export default function CashSessionsReportPage() {
       { in: 0, out: 0, open: 0, closed: 0, variance: 0, entries: 0 },
     );
   }, [summaries]);
+
+  const periodFinancials = useMemo(() => {
+    const salesTotal = customerTransactions
+      .filter((tx) => isCustomerSale(tx.type))
+      .reduce((sum, tx) => sum + num(tx.amount), 0);
+    const customerCollected = customerTransactions
+      .filter((tx) => isCustomerPayment(tx.type))
+      .reduce((sum, tx) => sum + num(tx.amount), 0);
+    const supplierPaid = supplierTransactions
+      .filter((tx) => isSupplierPayment(tx))
+      .reduce((sum, tx) => sum + num(tx.amount), 0);
+    const cashDrawerIn = entries
+      .filter((entry) => entry.direction === "in")
+      .reduce((sum, entry) => sum + num(entry.amount), 0);
+    const cashDrawerOut = entries
+      .filter((entry) => entry.direction === "out")
+      .reduce((sum, entry) => sum + num(entry.amount), 0);
+
+    return {
+      salesTotal,
+      customerCollected,
+      supplierPaid,
+      cashDrawerIn,
+      cashDrawerOut,
+      totalSpent: supplierPaid + cashDrawerOut,
+      cashDrawerNet: cashDrawerIn - cashDrawerOut,
+    };
+  }, [customerTransactions, entries, supplierTransactions]);
 
   const chartData = useMemo(() => {
     return summaries
@@ -318,6 +409,23 @@ export default function CashSessionsReportPage() {
             {error}
           </div>
         )}
+
+        <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="mb-4">
+            <h2 className="text-lg font-black text-slate-950">ملخص مالي للفترة</h2>
+            <p className="mt-1 text-xs font-bold text-slate-500">
+              البيع والتحصيل وسداد الموردين هنا أرقام مراجعة عامة، أما المتوقع في الوردية فهو خاص بدرج الكاشير.
+            </p>
+          </div>
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-6">
+            <SummaryCard title="إجمالي البيع" value={`${money(periodFinancials.salesTotal)} ج`} tone="blue" />
+            <SummaryCard title="تحصيل العملاء" value={`${money(periodFinancials.customerCollected)} ج`} tone="emerald" />
+            <SummaryCard title="داخل درج الكاشير" value={`${money(periodFinancials.cashDrawerIn)} ج`} tone="emerald" />
+            <SummaryCard title="خارج درج الكاشير" value={`${money(periodFinancials.cashDrawerOut)} ج`} tone="rose" />
+            <SummaryCard title="سداد الموردين" value={`${money(periodFinancials.supplierPaid)} ج`} tone="amber" />
+            <SummaryCard title="إجمالي المصروف" value={`${money(periodFinancials.totalSpent)} ج`} tone="rose" />
+          </div>
+        </section>
 
         <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
           <div className="mb-4">

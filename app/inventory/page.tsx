@@ -5,11 +5,11 @@ import { supabase } from "@/lib/supabase";
 import Link from "next/link";
 import { ProductCategory, normalizeProductCategory, productCategoryLabel } from "@/lib/product-category";
 import { barcodeValidationMessage, cleanBarcode, generateInternalBarcode, isPrintableBarcode, isUuidLike } from "@/lib/barcode";
-import { CategorySelect, useCategoryUnits } from "@/app/category-select";
+import { CategorySelect, useCategoryUnits, useEnabledCategories } from "@/app/category-select";
 import { ProductAttributes, ProductCategoryFields, cleanProductAttributes, productAttributesSummary } from "@/app/product-category-fields";
 import { useBarcodeHardwareSettings } from "@/app/barcode-hardware-settings";
 import { formatPriceInput, priceFromPurchase, profitPercentFromPrices, purchaseFromPrice } from "@/lib/pricing";
-import { productUnitConversions, UnitConversion } from "@/lib/category-settings";
+import { productUnitConversions, unitConversionsForBaseUnit, UnitConversion } from "@/lib/category-settings";
 
 type Product = {
   id: string;
@@ -59,6 +59,8 @@ export default function InventoryPage() {
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [activeCategory, setActiveCategory] = useState<ProductCategory>("general");
+  const enabledCategories = useEnabledCategories();
+  const defaultActiveCategory = enabledCategories[0] || "general";
   const [loading, setLoading] = useState(true);
 
   // مودالات
@@ -93,6 +95,18 @@ export default function InventoryPage() {
   });
   const newProductUnits = useCategoryUnits(newProduct.product_category);
   const editFormUnits = useCategoryUnits(editForm.product_category);
+
+  useEffect(() => {
+    if (enabledCategories.length > 0 && !enabledCategories.includes(activeCategory)) {
+      setActiveCategory(defaultActiveCategory);
+    }
+  }, [activeCategory, defaultActiveCategory, enabledCategories]);
+
+  useEffect(() => {
+    if (enabledCategories.length > 0 && !enabledCategories.includes(newProduct.product_category)) {
+      setNewProduct((current) => ({ ...current, product_category: defaultActiveCategory, product_attributes: {} }));
+    }
+  }, [defaultActiveCategory, enabledCategories, newProduct.product_category]);
 
   useEffect(() => {
     if (newProductUnits.length > 0 && !newProductUnits.includes(newProduct.unit)) {
@@ -595,7 +609,11 @@ export default function InventoryPage() {
         product_category: normalizeProductCategory(editForm.product_category),
         product_attributes: cleanProductAttributes(
           editForm.product_category,
-          attributesWithDefaultConversions(editForm.product_attributes),
+          attributesWithDefaultConversions(
+            editForm.product_attributes,
+            editForm.product_category,
+            editForm.unit,
+          ),
         ),
       })
       .eq("id", editingId);
@@ -664,7 +682,11 @@ export default function InventoryPage() {
           product_category: normalizeProductCategory(newProduct.product_category),
           product_attributes: cleanProductAttributes(
             newProduct.product_category,
-            attributesWithDefaultConversions(newProduct.product_attributes),
+            attributesWithDefaultConversions(
+              newProduct.product_attributes,
+              newProduct.product_category,
+              newProduct.unit,
+            ),
           ),
         },
       ]);
@@ -752,32 +774,39 @@ export default function InventoryPage() {
 
   const mergedProductConversions = (
     attributes: ProductAttributes | null | undefined,
+    category: unknown,
+    baseUnit?: unknown,
   ) => {
-    const saved = productUnitConversions(attributes);
-    const savedKeys = new Set(saved.map(conversionKey));
-    return [
-      ...saved,
-      ...defaultUnitConversions().filter((conversion) => !savedKeys.has(conversionKey(conversion))),
-    ];
+    const source = attributes && typeof attributes === "object" ? attributes : {};
+    const configured = baseUnit
+      ? unitConversionsForBaseUnit(category, baseUnit, source)
+      : productUnitConversions(source);
+    const conversions = [...configured, ...defaultUnitConversions(baseUnit)];
+    const unique = new Map<string, UnitConversion>();
+    conversions.forEach((conversion) => unique.set(conversionKey(conversion), conversion));
+    return Array.from(unique.values());
   };
 
   const attributesWithDefaultConversions = (
     attributes: ProductAttributes | null | undefined,
+    category: unknown,
+    baseUnit: unknown,
   ): ProductAttributes => {
     const source = attributes && typeof attributes === "object" ? attributes : {};
     return {
       ...source,
-      unit_conversions: mergedProductConversions(source),
+      unit_conversions: mergedProductConversions(source, category, baseUnit),
     };
   };
 
   const renderUnitConversionsSummary = (
     attributes: ProductAttributes | null | undefined,
+    category: unknown,
     baseUnit: unknown,
     onToggle: () => void,
     open: boolean,
   ) => {
-    const conversions = mergedProductConversions(attributes)
+    const conversions = mergedProductConversions(attributes, category, baseUnit)
       .filter((conversion) => conversionIsRelatedToUnit(conversion, baseUnit))
       .slice(0, 4);
 
@@ -808,25 +837,31 @@ export default function InventoryPage() {
 
   const renderUnitConversionsEditor = (
     attributes: ProductAttributes | null | undefined,
+    category: unknown,
     baseUnit: unknown,
     _unitOptions: string[],
     onChange: (next: ProductAttributes) => void,
     mode: "modal" | "table" = "modal",
   ) => {
     const source = attributes && typeof attributes === "object" ? attributes : {};
-    const allConversions = mergedProductConversions(source);
+    const allConversions = mergedProductConversions(source, category, baseUnit);
     const base = typeof baseUnit === "string" && baseUnit.trim() ? baseUnit.trim() : "قطعة";
+    const compact = mode === "table";
     const relatedConversions = allConversions.filter((conversion) => conversionIsRelatedToUnit(conversion, base));
-    const hiddenConversions = allConversions.filter((conversion) => !conversionIsRelatedToUnit(conversion, base));
-    const options = [...new Set([base, ...defaultUnitConversions(base).flatMap((item) => [item.fromUnit, item.toUnit]), ...relatedConversions.flatMap((item) => [item.fromUnit, item.toUnit])])].filter(Boolean);
-    const updateConversions = (nextRelatedConversions: UnitConversion[]) => onChange({ ...source, unit_conversions: [...hiddenConversions, ...nextRelatedConversions] });
-    const defaultRelatedConversion = defaultUnitConversions(base)[0];
+    const preferredConversions = relatedConversions.filter((conversion) => unitMatches(conversion.fromUnit, base));
+    const scopedConversions = preferredConversions.length > 0
+      ? preferredConversions
+      : relatedConversions.slice(0, compact ? 2 : 3);
+    const scopedKeys = new Set(scopedConversions.map(conversionKey));
+    const hiddenConversions = allConversions.filter((conversion) => !scopedKeys.has(conversionKey(conversion)));
+    const options = [...new Set([base, ...scopedConversions.flatMap((item) => [item.fromUnit, item.toUnit]), ...defaultUnitConversions(base).flatMap((item) => [item.fromUnit, item.toUnit])])].filter(Boolean);
+    const updateConversions = (nextScopedConversions: UnitConversion[]) => onChange({ ...source, unit_conversions: [...hiddenConversions, ...nextScopedConversions] });
+    const defaultRelatedConversion = scopedConversions[0] || relatedConversions[0] || defaultUnitConversions(base)[0];
     const preferredManualUnit = ["كرتونة", "علبة", "عبوة"].find((unit) => options.includes(unit));
     const defaultFromUnit = defaultRelatedConversion?.fromUnit || preferredManualUnit || options.find((unit) => unit !== base) || "كرتونة";
     const defaultToUnit = defaultRelatedConversion?.toUnit || base;
     const defaultFactor = defaultRelatedConversion?.factor || (defaultFromUnit === "كرتونة" ? 12 : 1);
-    const compact = mode === "table";
-    const visibleConversions = compact ? relatedConversions.slice(0, 3) : relatedConversions;
+    const visibleConversions = compact ? scopedConversions.slice(0, 3) : scopedConversions;
     const remainingConversions = Math.max(relatedConversions.length - visibleConversions.length, 0);
 
     return (
@@ -838,11 +873,11 @@ export default function InventoryPage() {
           </div>
           <div className="flex items-center gap-2">
             <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-black text-slate-600">
-              {relatedConversions.length} تحويل
+              {visibleConversions.length} تحويل
             </span>
             <button
               type="button"
-              onClick={() => updateConversions([...relatedConversions, { id: `conversion-${Date.now()}`, fromUnit: defaultFromUnit, toUnit: defaultToUnit, factor: defaultFactor }])}
+              onClick={() => updateConversions([...scopedConversions, { id: `conversion-${Date.now()}`, fromUnit: defaultFromUnit, toUnit: defaultToUnit, factor: defaultFactor }])}
               className="rounded-full bg-slate-900 px-3 py-1.5 text-[10px] font-black text-white hover:bg-slate-700"
             >
               + تحويل
@@ -858,7 +893,7 @@ export default function InventoryPage() {
                 <select
                   value={conversion.fromUnit}
                   onChange={(event) => {
-                    const next = [...relatedConversions];
+                    const next = [...scopedConversions];
                     next[index] = { ...conversion, fromUnit: event.target.value };
                     updateConversions(next);
                   }}
@@ -876,7 +911,7 @@ export default function InventoryPage() {
                   step="any"
                   value={conversion.factor}
                   onChange={(event) => {
-                    const next = [...relatedConversions];
+                    const next = [...scopedConversions];
                     next[index] = { ...conversion, factor: Math.max(Number(event.target.value) || 1, 0.001) };
                     updateConversions(next);
                   }}
@@ -888,7 +923,7 @@ export default function InventoryPage() {
                 <select
                   value={conversion.toUnit}
                   onChange={(event) => {
-                    const next = [...relatedConversions];
+                    const next = [...scopedConversions];
                     next[index] = { ...conversion, toUnit: event.target.value };
                     updateConversions(next);
                   }}
@@ -899,7 +934,7 @@ export default function InventoryPage() {
               </label>
               <button
                 type="button"
-                onClick={() => updateConversions(relatedConversions.filter((_, currentIndex) => currentIndex !== index))}
+                onClick={() => updateConversions(scopedConversions.filter((_, currentIndex) => currentIndex !== index))}
                 className="h-9 rounded-lg bg-rose-50 px-3 text-xs font-black text-rose-600 hover:bg-rose-100"
               >
                 حذف
@@ -999,6 +1034,7 @@ export default function InventoryPage() {
             onChange={setActiveCategory}
             label="فلترة حسب القسم"
             counts={categoryCounts}
+            variant="cards"
           />
 
           <input
@@ -1239,6 +1275,7 @@ export default function InventoryPage() {
                   </div>
                   {renderUnitConversionsEditor(
                     (editForm.product_attributes as ProductAttributes) || {},
+                    editForm.product_category,
                     editForm.unit,
                     editFormUnits || [],
                     (attributes) => setEditForm({ ...editForm, product_attributes: attributes }),
@@ -1462,12 +1499,14 @@ export default function InventoryPage() {
               <div className="lg:col-span-3">
                 {renderUnitConversionsSummary(
                   newProduct.product_attributes,
+                  newProduct.product_category,
                   newProduct.unit,
                   () => setShowNewUnitConversions((current) => !current),
                   showNewUnitConversions,
                 )}
                 {showNewUnitConversions && renderUnitConversionsEditor(
                   newProduct.product_attributes,
+                  newProduct.product_category,
                   newProduct.unit,
                   newProductUnits || [],
                   (attributes) => setNewProduct({ ...newProduct, product_attributes: attributes }),

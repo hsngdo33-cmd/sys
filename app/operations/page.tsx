@@ -5,7 +5,6 @@ import Link from "next/link";
 import {
   ArrowDownCircle,
   ArrowUpCircle,
-  BadgeCheck,
   Boxes,
   ClipboardList,
   Loader2,
@@ -20,7 +19,7 @@ import { supabase } from "@/lib/supabase";
 import { recordStaffActivity } from "@/app/staff-activity";
 import { useStaffSession } from "@/app/staff-session";
 import { UiModal } from "@/app/ui-modal";
-import { getActiveCashSession, requireOpenShiftForCash } from "@/app/cash-session";
+import { requireOpenShiftForCash } from "@/app/cash-session";
 
 type Product = {
   id: string;
@@ -108,16 +107,6 @@ export default function OperationsPage() {
     note: "",
   });
 
-  const [sessionForm, setSessionForm] = useState({
-    openedBy: "المدير",
-    openingBalance: "",
-  });
-
-  const [closeForm, setCloseForm] = useState({
-    closingBalance: "",
-    note: "",
-  });
-
   const [cashForm, setCashForm] = useState({
     type: "expense",
     amount: "",
@@ -142,10 +131,6 @@ export default function OperationsPage() {
     );
   }, [cashEntries]);
 
-  const expectedCash =
-    Number(activeSession?.opening_balance || 0) + cashSummary.in - cashSummary.out;
-  const actualClosingBalance = Number(closeForm.closingBalance || 0);
-  const closingVariance = closeForm.closingBalance ? actualClosingBalance - expectedCash : 0;
   const operatorName = staff?.name || "غير مسجل";
   const isCashier = staff?.role === "cashier";
 
@@ -214,17 +199,6 @@ export default function OperationsPage() {
     return () => window.clearTimeout(timer);
   }, []);
 
-  useEffect(() => {
-    if (!activeSession) {
-      setCloseForm({ closingBalance: "", note: "" });
-      return;
-    }
-
-    setCloseForm((current) => ({
-      ...current,
-      closingBalance: current.closingBalance || String(expectedCash),
-    }));
-  }, [activeSession, expectedCash]);
 
   async function saveMovement() {
     if (!selectedProduct) return setError("اختار الصنف الأول.");
@@ -272,88 +246,6 @@ export default function OperationsPage() {
       await loadData();
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : "فشل حفظ حركة المخزون.");
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  async function openSession() {
-    setSaving(true);
-    setError(null);
-    setMessage(null);
-
-    try {
-      const existingSession = activeSession || (await getActiveCashSession());
-      if (existingSession) {
-        await loadData();
-        throw new Error("توجد وردية مفتوحة بالفعل. اقفل الوردية الحالية قبل فتح وردية جديدة.");
-      }
-
-      const { error: sessionError } = await supabase.from("cash_sessions").insert([
-        {
-          opened_by: sessionForm.openedBy || operatorName,
-          opening_balance: Number(sessionForm.openingBalance || 0),
-          expected_balance: Number(sessionForm.openingBalance || 0),
-          status: "open",
-        },
-      ]);
-      if (sessionError) throw sessionError;
-
-      await recordStaffActivity({
-        staff,
-        action: "cash_session_open",
-        entityType: "cash_session",
-        note: `رصيد افتتاحي ${Number(sessionForm.openingBalance || 0)}`,
-      });
-
-      setMessage("تم فتح وردية الخزنة.");
-      await loadData();
-    } catch (sessionError) {
-      setError(sessionError instanceof Error ? sessionError.message : "فشل فتح الوردية.");
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  async function closeSession() {
-    if (!activeSession) return;
-    if (!closeForm.closingBalance.trim()) return setError("اكتب الرصيد الفعلي الموجود في الخزنة قبل قفل الوردية.");
-
-    const closingBalance = Number(closeForm.closingBalance);
-    if (Number.isNaN(closingBalance) || closingBalance < 0) return setError("الرصيد الفعلي لازم يكون رقم صحيح.");
-
-    const variance = closingBalance - expectedCash;
-    setSaving(true);
-    setError(null);
-    setMessage(null);
-
-    try {
-      const { error: closeError } = await supabase
-        .from("cash_sessions")
-        .update({
-          status: "closed",
-          closed_by: operatorName,
-          closing_balance: closingBalance,
-          expected_balance: expectedCash,
-          closed_at: new Date().toISOString(),
-          note: closeForm.note || `فرق العهدة: ${variance}`,
-        })
-        .eq("id", activeSession.id);
-      if (closeError) throw closeError;
-
-      await recordStaffActivity({
-        staff,
-        action: "cash_session_close",
-        entityType: "cash_session",
-        entityId: activeSession.id,
-        note: `رصيد متوقع ${expectedCash} - فعلي ${closingBalance} - فرق ${variance}`,
-      });
-
-      setCloseForm({ closingBalance: "", note: "" });
-      setMessage("تم قفل وردية الخزنة.");
-      await loadData();
-    } catch (closeError) {
-      setError(closeError instanceof Error ? closeError.message : "فشل قفل الوردية.");
     } finally {
       setSaving(false);
     }
@@ -631,101 +523,9 @@ export default function OperationsPage() {
               </div>
             </div>
 
-            {activeSession ? (
-              <div className="rounded-3xl border border-emerald-200 bg-emerald-50 p-4">
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <p className="text-xs font-black text-emerald-700">وردية مفتوحة</p>
-                    <p className="mt-1 text-2xl font-black text-slate-950">{money(expectedCash)} ج</p>
-                  </div>
-                  <BadgeCheck className="h-9 w-9 text-emerald-600" />
-                </div>
-                <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                  <label className="block">
-                    <span className="mb-1 block text-xs font-black text-emerald-800">الرصيد الفعلي المعدود</span>
-                    <input
-                      type="number"
-                      min="0"
-                      step="any"
-                      value={closeForm.closingBalance}
-                      onChange={(event) => setCloseForm({ ...closeForm, closingBalance: event.target.value })}
-                      placeholder="الرصيد الفعلي"
-                      className="h-12 w-full rounded-2xl border border-emerald-200 bg-white px-4 text-sm font-bold outline-none focus:border-emerald-500"
-                    />
-                    <span className="mt-1 block text-[11px] font-bold leading-5 text-emerald-800/70">
-                      اكتب المبلغ الموجود فعليًا في درج الكاشير بعد العد.
-                    </span>
-                  </label>
-
-                  <label className="block">
-                    <span className="mb-1 block text-xs font-black text-emerald-800">ملاحظة القفل</span>
-                    <input
-                      value={closeForm.note}
-                      onChange={(event) => setCloseForm({ ...closeForm, note: event.target.value })}
-                      placeholder="مثال: فرق فكة أو مصروف غير مسجل"
-                      className="h-12 w-full rounded-2xl border border-emerald-200 bg-white px-4 text-sm font-bold outline-none focus:border-emerald-500"
-                    />
-                    <span className="mt-1 block text-[11px] font-bold leading-5 text-emerald-800/70">
-                      تظهر في تقرير الورديات عند مراجعة فرق العهدة.
-                    </span>
-                  </label>
-                </div>
-
-                <div className={`mt-3 rounded-2xl p-3 text-sm font-black ${
-                  Math.abs(closingVariance) > 0 ? "bg-amber-100 text-amber-800" : "bg-white/80 text-emerald-800"
-                }`}>
-                  فرق العهدة: {money(closingVariance)} ج
-                </div>
-                <button
-                  type="button"
-                  onClick={closeSession}
-                  disabled={saving || !closeForm.closingBalance.trim()}
-                  className="mt-4 h-11 w-full rounded-2xl bg-slate-950 text-sm font-black text-white hover:bg-emerald-600 disabled:opacity-60"
-                >
-                  قفل الوردية
-                </button>
-              </div>
-            ) : (
-              <div className="grid gap-3 sm:grid-cols-2">
-                <label className="block">
-                  <span className="mb-1 block text-xs font-black text-slate-500">اسم الموظف</span>
-                  <input
-                    value={sessionForm.openedBy}
-                    onChange={(event) => setSessionForm({ ...sessionForm, openedBy: event.target.value })}
-                    placeholder="اسم الموظف"
-                    className="h-12 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm font-bold outline-none focus:border-emerald-400"
-                  />
-                  <span className="mt-1 block text-[11px] font-bold leading-5 text-slate-400">
-                    اسم الشخص اللي فتح الوردية عشان يظهر في المراجعة اليومية.
-                  </span>
-                </label>
-                <label className="block">
-                  <span className="mb-1 block text-xs font-black text-slate-500">رصيد افتتاحي</span>
-                  <input
-                    type="number"
-                    value={sessionForm.openingBalance}
-                    onChange={(event) => setSessionForm({ ...sessionForm, openingBalance: event.target.value })}
-                    placeholder="رصيد افتتاحي"
-                    className="h-12 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm font-bold outline-none focus:border-emerald-400"
-                  />
-                  <span className="mt-1 block text-[11px] font-bold leading-5 text-slate-400">
-                    المبلغ الموجود في درج الكاشير قبل بداية البيع أو المصروفات.
-                  </span>
-                </label>
-                <button
-                  type="button"
-                  onClick={openSession}
-                  disabled={saving}
-                  className="h-12 rounded-2xl bg-emerald-600 text-sm font-black text-white hover:bg-emerald-500 disabled:opacity-60 sm:col-span-2"
-                >
-                  فتح وردية
-                </button>
-              </div>
-            )}
-
             {!activeSession && (
-              <div className="mt-5 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-xs font-black leading-6 text-amber-800">
-                افتح وردية خزنة الأول قبل تسجيل أي دخل أو مصروف يدوي، عشان كل حركة تبقى مرتبطة بورديتها وتظهر في تقرير الخزنة.
+              <div className="mb-5 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-xs font-black leading-6 text-amber-800">
+                افتح وردية الخزنة من الصفحة الرئيسية قبل تسجيل أي دخل أو مصروف يدوي، عشان كل حركة تبقى مرتبطة بورديتها وتظهر في تقرير الخزنة.
               </div>
             )}
 

@@ -29,6 +29,7 @@ import {
 } from "recharts";
 import { supabase } from "@/lib/supabase";
 import { normalizeProductCategory, productCategoryLabel } from "@/lib/product-category";
+import { CashShiftWidget } from "@/app/cash-shift-widget";
 
 type RangeDays = 14 | 30 | 90;
 type MetricKey = "sales" | "profit" | "collected";
@@ -74,7 +75,7 @@ function num(value: unknown) {
 }
 
 function money(value: number) {
-  return value.toLocaleString("ar-EG", { maximumFractionDigits: 0 });
+  return value.toLocaleString("ar-EG", { maximumFractionDigits: 2 });
 }
 
 function shortMoney(value: number) {
@@ -329,6 +330,8 @@ export default function Dashboard() {
             {error}
           </div>
         )}
+
+        <CashShiftWidget />
 
         {loading ? (
           <div className="rounded-3xl border border-slate-200 bg-white p-12 text-center text-lg font-black text-slate-400 shadow-sm">

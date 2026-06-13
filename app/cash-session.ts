@@ -42,7 +42,7 @@ export async function requireOpenShiftForCash(amount: number) {
   if (!session) {
     return {
       ok: false as const,
-      message: "لا توجد وردية خزنة مفتوحة. افتح وردية من مركز العمليات قبل حفظ حركة نقدية.",
+      message: "لا توجد وردية خزنة مفتوحة. افتح وردية من الصفحة الرئيسية قبل حفظ أي حركة نقدية.",
     };
   }
 

@@ -22,6 +22,7 @@ type CategorySelectProps = {
   onChange: (category: ProductCategory) => void;
   label?: string;
   counts?: Partial<Record<ProductCategory, number>>;
+  variant?: "select" | "cards";
 };
 
 function settingsWithLegacyActiveFlags() {
@@ -75,9 +76,11 @@ function useCategorySettings() {
 }
 
 export function useEnabledCategories() {
-  return useCategorySettings()
-    .filter((category) => category.active)
-    .map((category) => category.key);
+  const settings = useCategorySettings();
+  return useMemo(
+    () => settings.filter((category) => category.active).map((category) => category.key),
+    [settings],
+  );
 }
 
 export function useCategoryUnits(category: unknown) {
@@ -86,24 +89,58 @@ export function useCategoryUnits(category: unknown) {
   return settings.find((item) => item.key === key)?.units || DEFAULT_UNITS;
 }
 
-export function CategorySelect({ value, onChange, label = "القسم", counts }: CategorySelectProps) {
+export function CategorySelect({ value, onChange, label = "القسم", counts, variant = "select" }: CategorySelectProps) {
   const categories = useCategorySettings();
   const visibleCategories = useMemo(() => {
     const enabled = categories.filter((category) => category.active);
-    const current = categories.find((category) => category.key === value);
-
-    if (current && !enabled.some((category) => category.key === current.key)) {
-      return [current, ...enabled];
-    }
 
     return enabled.length > 0 ? enabled : categories;
-  }, [categories, value]);
+  }, [categories]);
 
   useEffect(() => {
     if (visibleCategories.length > 0 && !visibleCategories.some((category) => category.key === value)) {
       onChange(visibleCategories[0].key);
     }
   }, [onChange, value, visibleCategories]);
+
+  if (variant === "cards") {
+    return (
+      <div className="block">
+        <div className="mb-2 flex items-center justify-between gap-3">
+          <span className="block text-xs font-black text-slate-400">{label}</span>
+          <span className="hidden rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-black text-slate-500 sm:inline-flex">
+            {visibleCategories.length} قسم
+          </span>
+        </div>
+        <div className="flex gap-2 overflow-x-auto pb-1 sm:flex-wrap sm:overflow-visible">
+          {visibleCategories.map((category) => {
+            const selected = category.key === value;
+            const count = counts ? counts[category.key] || 0 : null;
+
+            return (
+              <button
+                key={category.key}
+                type="button"
+                onClick={() => onChange(category.key)}
+                className={`min-h-10 shrink-0 rounded-xl border px-3 py-2 text-right text-xs font-black transition-all ${
+                  selected
+                    ? "border-slate-900 bg-slate-900 text-white shadow-sm"
+                    : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50"
+                }`}
+              >
+                <span className="whitespace-nowrap">{category.label}</span>
+                {counts && (
+                  <span className={`mr-2 inline-flex min-w-5 justify-center rounded-full px-1.5 py-0.5 text-[10px] ${selected ? "bg-white/15 text-white" : "bg-slate-100 text-slate-500"}`}>
+                    ({count})
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <label className="block">
