@@ -8,6 +8,8 @@ import { barcodeValidationMessage, cleanBarcode, generateInternalBarcode, isPrin
 import { CategorySelect, useCategoryUnits, useEnabledCategories } from "@/app/category-select";
 import { ProductAttributes, ProductCategoryFields, cleanProductAttributes } from "@/app/product-category-fields";
 import { formatPriceInput, priceFromPurchase, profitPercentFromPrices, purchaseFromPrice } from "@/lib/pricing";
+import { useStaffSession } from "@/app/staff-session";
+import { canViewProfitControls } from "@/lib/permissions";
 
 // â”€â”€â”€ Types â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 type ScanMode = "camera" | "manual" | null;
@@ -31,6 +33,8 @@ function generateCode() {
 // â”€â”€â”€ Component â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export default function AddProductPage() {
   const router = useRouter();
+  const staff = useStaffSession();
+  const canViewProfit = canViewProfitControls(staff?.role);
   const enabledCategories = useEnabledCategories();
   const defaultActiveCategory = enabledCategories[0] || "general";
 
@@ -469,6 +473,7 @@ export default function AddProductPage() {
           </div>
 
           {/* ظ‡ط§ظ…ط´ ط§ظ„ط±ط¨ط­ live */}
+          {canViewProfit && (
                           <label className="flex items-center gap-2 rounded-2xl bg-emerald-50 px-4 py-3">
                   <span className="text-xs font-black text-emerald-700">نسبة المكسب</span>
                   <input
@@ -481,7 +486,8 @@ export default function AddProductPage() {
                   />
                   <span className="text-xs font-black text-emerald-700">%</span>
                 </label>
-{margin !== null && (
+          )}
+{canViewProfit && margin !== null && (
             <div className={`p-4 rounded-2xl flex items-center gap-3 ${margin >= 15 ? "bg-emerald-50 border border-emerald-200" : margin >= 5 ? "bg-amber-50 border border-amber-200" : "bg-rose-50 border border-rose-200"}`}>
               <span className="text-2xl">{margin >= 15 ? "ًں“ˆ" : margin >= 5 ? "ًں“ٹ" : "âڑ ï¸ڈ"}</span>
               <div>

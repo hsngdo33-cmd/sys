@@ -32,6 +32,16 @@ function shortInvoiceNumber(id: unknown) {
   return cleanId ? `C-${cleanId.slice(0, 8)}` : "-";
 }
 
+function displayInvoiceNumber(transaction: any) {
+  const description = String(transaction?.description || "");
+  const match = description.match(/رقم الفاتورة\s+(C-[A-Z0-9]+)/i);
+  return match?.[1] || shortInvoiceNumber(transaction?.id);
+}
+
+function normalizeInvoiceSearch(value: unknown) {
+  return String(value || "").replace(/[^a-zA-Z0-9]/g, "").toUpperCase();
+}
+
 function csvCell(value: unknown) {
   return `"${String(value ?? "").replace(/"/g, '""')}"`;
 }
@@ -301,7 +311,23 @@ export default function CustomerHistory() {
   const filtered = useMemo(() => {
     let list = [...transactions];
     if (filterType !== "all") list = list.filter(t => t.type === filterType);
-    if (searchTerm) list = list.filter(t => t.description?.includes(searchTerm) || t.amount?.toString().includes(searchTerm));
+    const query = searchTerm.trim();
+    const invoiceQuery = normalizeInvoiceSearch(query);
+    if (query) {
+      list = list.filter(t => {
+        const description = String(t.description || "");
+        const invoiceNumber = displayInvoiceNumber(t);
+        const normalizedInvoiceNumber = normalizeInvoiceSearch(invoiceNumber);
+        const normalizedId = normalizeInvoiceSearch(t.id);
+        return (
+          description.includes(query) ||
+          String(t.amount || "").includes(query) ||
+          invoiceNumber.toLowerCase().includes(query.toLowerCase()) ||
+          (invoiceQuery && normalizedInvoiceNumber.includes(invoiceQuery)) ||
+          (invoiceQuery && normalizedId.includes(invoiceQuery))
+        );
+      });
+    }
     return list;
   }, [transactions, filterType, searchTerm]);
 
@@ -502,7 +528,7 @@ export default function CustomerHistory() {
             ))}
           </div>
           <input
-            placeholder="🔍 ابحث في المعاملات..."
+            placeholder="🔍 ابحث برقم الفاتورة أو الوصف أو المبلغ..."
             className="w-full p-3 bg-slate-50 rounded-xl font-bold text-slate-900 outline-none text-sm"
             value={searchTerm}
             onChange={e => setSearchTerm(e.target.value)}
@@ -537,7 +563,10 @@ export default function CustomerHistory() {
                         {icon}
                       </div>
                       <div>
-                        <p className={`font-black text-sm ${color}`}>{txLabel(t.type)}</p>
+                        <p className={`font-black text-sm ${color}`}>
+                          {txLabel(t.type)}
+                          {isSale && <span className="mr-2 rounded-lg bg-slate-100 px-2 py-0.5 text-[10px] text-slate-500">#{displayInvoiceNumber(t)}</span>}
+                        </p>
                         <p className="text-[10px] font-bold text-slate-400 mt-0.5">
                           {new Date(t.created_at).toLocaleString("ar-EG", { day:"numeric", month:"long", year:"numeric", hour:"2-digit", minute:"2-digit" })}
                         </p>
@@ -868,7 +897,7 @@ export default function CustomerHistory() {
               <div className="print-meta">
                 <p>التاريخ: {new Date(printTransaction.created_at).toLocaleDateString("ar-EG")}</p>
                 <p>العميل: {customer?.name || "-"}</p>
-                <p>رقم الفاتورة: {shortInvoiceNumber(printTransaction.id)}</p>
+                <p>رقم الفاتورة: {displayInvoiceNumber(printTransaction)}</p>
               </div>
             </div>
             <table className="print-table">

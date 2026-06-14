@@ -9,6 +9,23 @@ export type Permission =
   | "reports:view"
   | "settings:manage";
 
+export type RolePermissionMap = Record<StaffRole, Permission[]>;
+
+export const permissionSettingsStorageKey = "sys.role-permissions.v1";
+export const permissionSettingsEvent = "sys-role-permissions-change";
+
+export const roleOrder: StaffRole[] = ["owner", "manager", "cashier", "inventory", "accountant"];
+
+export const allPermissions: Permission[] = [
+  "dashboard:view",
+  "sales:manage",
+  "purchases:manage",
+  "inventory:manage",
+  "operations:manage",
+  "reports:view",
+  "settings:manage",
+];
+
 export const roleLabels: Record<StaffRole, string> = {
   owner: "مالك / مدير",
   manager: "مدير فرع",
@@ -17,7 +34,7 @@ export const roleLabels: Record<StaffRole, string> = {
   accountant: "محاسب",
 };
 
-export const rolePermissions: Record<StaffRole, Permission[]> = {
+export const rolePermissions: RolePermissionMap = {
   owner: ["dashboard:view", "sales:manage", "purchases:manage", "inventory:manage", "operations:manage", "reports:view", "settings:manage"],
   manager: ["dashboard:view", "sales:manage", "purchases:manage", "inventory:manage", "operations:manage", "reports:view"],
   cashier: ["dashboard:view", "sales:manage", "purchases:manage", "operations:manage"],
@@ -86,8 +103,62 @@ export function normalizeStaffRole(role: unknown): StaffRole {
   return "cashier";
 }
 
+export function sanitizeRolePermissions(input: unknown): RolePermissionMap {
+  const source = input && typeof input === "object" ? (input as Partial<Record<StaffRole, unknown>>) : {};
+
+  return roleOrder.reduce((next, role) => {
+    if (role === "owner") {
+      next[role] = allPermissions;
+      return next;
+    }
+
+    const rawPermissions = Array.isArray(source[role]) ? source[role] : rolePermissions[role];
+    const validPermissions = rawPermissions.filter((permission): permission is Permission =>
+      allPermissions.includes(permission as Permission),
+    );
+
+    next[role] = Array.from(new Set(["dashboard:view", ...validPermissions]));
+    return next;
+  }, {} as RolePermissionMap);
+}
+
+export function readRolePermissions(): RolePermissionMap {
+  if (typeof window === "undefined") return rolePermissions;
+
+  try {
+    const stored = window.localStorage.getItem(permissionSettingsStorageKey);
+    if (!stored) return rolePermissions;
+    return sanitizeRolePermissions(JSON.parse(stored));
+  } catch {
+    return rolePermissions;
+  }
+}
+
+export function writeRolePermissions(nextPermissions: RolePermissionMap) {
+  if (typeof window === "undefined") return;
+
+  const sanitized = sanitizeRolePermissions(nextPermissions);
+  window.localStorage.setItem(permissionSettingsStorageKey, JSON.stringify(sanitized));
+  window.dispatchEvent(new Event(permissionSettingsEvent));
+}
+
+export function resetRolePermissions() {
+  if (typeof window === "undefined") return;
+
+  window.localStorage.removeItem(permissionSettingsStorageKey);
+  window.dispatchEvent(new Event(permissionSettingsEvent));
+}
+
+export function hasPermissionWithConfig(role: unknown, permission: Permission, permissions: RolePermissionMap = rolePermissions) {
+  return permissions[normalizeStaffRole(role)].includes(permission);
+}
+
 export function hasPermission(role: unknown, permission: Permission) {
-  return rolePermissions[normalizeStaffRole(role)].includes(permission);
+  return hasPermissionWithConfig(role, permission);
+}
+
+export function canViewProfitControls(role: unknown) {
+  return role === "owner" || role === "manager";
 }
 
 export function permissionForPath(pathname: string): Permission {

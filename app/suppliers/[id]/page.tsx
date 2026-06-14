@@ -12,6 +12,7 @@ import { useStaffSession } from "@/app/staff-session";
 import { calculateInvoiceTax, paperSizeCss, useBusinessSettings } from "@/app/business-settings";
 import { conversionFactorForUnit, hasKnownConversion, invoiceUnitsForBaseUnit, manualConversionHint, productUnitConversions, UnitConversion, unitConversionsForBaseUnit, withProductUnitConversion } from "@/lib/category-settings";
 import { formatPriceInput, priceFromPurchase, profitPercentFromPrices, purchaseFromPrice } from "@/lib/pricing";
+import { canViewProfitControls } from "@/lib/permissions";
 
 interface Product {
   id: string; name: string; unit: string;
@@ -39,6 +40,7 @@ export default function SupplierInvoicePage() {
   const router  = useRouter();
   const staff = useStaffSession();
   const operatorName = staff?.name || "الكاشير";
+  const canViewProfit = canViewProfitControls(staff?.role);
   const { settings: businessSettings } = useBusinessSettings();
 
   const [supplier, setSupplier]     = useState<Supplier | null>(null);
@@ -953,18 +955,20 @@ export default function SupplierInvoicePage() {
                 onChange={e => updateNewProdSalePrice(e.target.value)}
               />
 
-              <label className="flex h-11 items-center gap-2 rounded-xl bg-emerald-50 px-3">
-                <span className="text-xs font-black text-emerald-700">نسبة المكسب</span>
-                <input
-                  type="number"
-                  step="any"
-                  value={newProd.profit_margin}
-                  onChange={e => updateNewProdProfitMargin(e.target.value)}
-                  className="min-w-0 flex-1 bg-transparent text-center text-sm font-black text-emerald-700 outline-none"
-                  placeholder="%"
-                />
-                <span className="text-xs font-black text-emerald-700">%</span>
-              </label>
+              {canViewProfit && (
+                <label className="flex h-11 items-center gap-2 rounded-xl bg-emerald-50 px-3">
+                  <span className="text-xs font-black text-emerald-700">نسبة المكسب</span>
+                  <input
+                    type="number"
+                    step="any"
+                    value={newProd.profit_margin}
+                    onChange={e => updateNewProdProfitMargin(e.target.value)}
+                    className="min-w-0 flex-1 bg-transparent text-center text-sm font-black text-emerald-700 outline-none"
+                    placeholder="%"
+                  />
+                  <span className="text-xs font-black text-emerald-700">%</span>
+                </label>
+              )}
 
               <button
                 onClick={handleAddNewProduct}

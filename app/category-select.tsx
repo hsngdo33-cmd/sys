@@ -8,6 +8,9 @@ import {
   DEFAULT_CATEGORY_CONFIGS,
   DEFAULT_UNITS,
   CustomCategoryField,
+  hasSavedCategorySettings,
+  hasUsableCategorySettings,
+  isGeneratedAllActiveCategorySettings,
   readCategorySettings,
   saveCategorySettings,
   slugifyCategory,
@@ -36,6 +39,9 @@ function settingsWithLegacyActiveFlags() {
   try {
     const enabled = JSON.parse(legacy) as string[];
     if (!Array.isArray(enabled) || enabled.length === 0) return settings;
+    const defaultKeys = new Set(DEFAULT_CATEGORY_CONFIGS.map((category) => category.key));
+    const enabledDefaultKeys = enabled.filter((key) => defaultKeys.has(key));
+    if (enabledDefaultKeys.length >= DEFAULT_CATEGORY_CONFIGS.length) return settings;
     return settings.map((category) => ({ ...category, active: enabled.includes(category.key) }));
   } catch {
     return settings;
@@ -55,9 +61,27 @@ function useCategorySettings() {
           .select("category_settings")
           .eq("id", "main")
           .maybeSingle();
-        if (data?.category_settings) {
-          saveCategorySettings(data.category_settings as CategoryConfig[]);
+        const remoteSettings = (data as { category_settings?: unknown } | null)?.category_settings;
+        if (hasUsableCategorySettings(remoteSettings) && !isGeneratedAllActiveCategorySettings(remoteSettings)) {
+          saveCategorySettings(remoteSettings as CategoryConfig[]);
           setSettings(readCategorySettings());
+          return;
+        }
+
+        if (hasSavedCategorySettings()) {
+          const localSettings = settingsWithLegacyActiveFlags();
+          await supabase
+            .from("business_settings")
+            .upsert(
+              {
+                id: "main",
+                category_settings: localSettings,
+                updated_at: new Date().toISOString(),
+              },
+              { onConflict: "id" },
+            )
+            .select("id")
+            .single();
         }
       } catch {
         // Local settings remain available when the database is not upgraded yet.

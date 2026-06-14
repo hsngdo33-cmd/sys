@@ -10,6 +10,7 @@ import { calculateInvoiceTax, paperSizeCss, useBusinessSettings } from "@/app/bu
 import { requireOpenShiftForCash } from "@/app/cash-session";
 import { recordStaffActivity } from "@/app/staff-activity";
 import { useStaffSession } from "@/app/staff-session";
+import { canViewProfitControls } from "@/lib/permissions";
 import {
   conversionFactorForUnit,
   hasKnownConversion,
@@ -48,8 +49,12 @@ interface CartItem extends Product {
 }
 
 type CustomerTransactionSummary = {
+  id: string;
   customer_id: string | null;
   created_at: string;
+  amount?: number | null;
+  type?: string | null;
+  description?: string | null;
 };
 
 type ActivitySummary = {
@@ -77,8 +82,38 @@ function matchesDirectorySearch(name: string, phone: string | null | undefined, 
   return normalizeText(name).includes(query) || normalizePhone(phone).includes(phoneQuery);
 }
 
+function normalizeInvoiceSearch(value: unknown) {
+  return String(value || "").replace(/[^a-zA-Z0-9]/g, "").toUpperCase();
+}
+
 function csvCell(value: unknown) {
   return `"${String(value ?? "").replace(/"/g, '""')}"`;
+}
+
+function shortInvoiceNumber(id: unknown) {
+  const cleanId = String(id || "").replace(/[^a-zA-Z0-9]/g, "").toUpperCase();
+  return cleanId ? `C-${cleanId.slice(0, 8)}` : "-";
+}
+
+function invoiceNumberFromTransaction(transaction: CustomerTransactionSummary) {
+  const description = String(transaction.description || "");
+  const match = description.match(/رقم الفاتورة\s+(C-[A-Z0-9]+)/i);
+  return match?.[1] || shortInvoiceNumber(transaction.id);
+}
+
+function transactionMatchesCustomerSearch(transaction: CustomerTransactionSummary, search: string) {
+  const query = search.trim();
+  if (!query) return false;
+  const invoiceQuery = normalizeInvoiceSearch(query);
+  const description = String(transaction.description || "");
+  const invoiceNumber = invoiceNumberFromTransaction(transaction);
+  return (
+    description.includes(query) ||
+    String(transaction.amount || "").includes(query) ||
+    invoiceNumber.toLowerCase().includes(query.toLowerCase()) ||
+    normalizeInvoiceSearch(invoiceNumber).includes(invoiceQuery) ||
+    normalizeInvoiceSearch(transaction.id).includes(invoiceQuery)
+  );
 }
 
 function downloadCsv(fileName: string, rows: unknown[][]) {
@@ -95,6 +130,7 @@ function downloadCsv(fileName: string, rows: unknown[][]) {
 export default function CustomersListPage() {
   const staff = useStaffSession();
   const operatorName = staff?.name || "الكاشير";
+  const canViewProfit = canViewProfitControls(staff?.role);
   const { settings: businessSettings } = useBusinessSettings();
 
   const [customers, setCustomers] = useState<Customer[]>([]);
@@ -119,6 +155,8 @@ export default function CustomersListPage() {
   const [note, setNote] = useState("");
   const [invoiceSaving, setInvoiceSaving] = useState(false);
   const [printDateLabel, setPrintDateLabel] = useState("");
+  const [quickPrintInvoiceNumber, setQuickPrintInvoiceNumber] = useState("-");
+  const [directoryOnly, setDirectoryOnly] = useState(false);
   const barcodeInputRef = useRef<HTMLInputElement>(null);
 
   const [showAddModal, setShowAddModal] = useState(false);
@@ -138,7 +176,7 @@ export default function CustomersListPage() {
       supabase.from("customers").select("*").order("name"),
       supabase
         .from("customer_transactions")
-        .select("customer_id,created_at")
+        .select("id,customer_id,created_at,amount,type,description")
         .order("created_at", { ascending: false })
         .limit(2000),
       supabase
@@ -160,6 +198,14 @@ export default function CustomersListPage() {
   useEffect(() => {
     barcodeInputRef.current?.focus();
     setPrintDateLabel(new Date().toLocaleDateString("ar-EG"));
+
+    const syncDirectoryMode = () => {
+      setDirectoryOnly(new URLSearchParams(window.location.search).get("view") === "directory");
+    };
+
+    syncDirectoryMode();
+    window.addEventListener("popstate", syncDirectoryMode);
+    return () => window.removeEventListener("popstate", syncDirectoryMode);
   }, []);
 
   useEffect(() => {
@@ -223,7 +269,22 @@ export default function CustomersListPage() {
 
   const displayed = useMemo(() => {
     let list = [...customers];
-    if (searchTerm) list = list.filter((customer) => matchesDirectorySearch(customer.name, customer.phone, searchTerm));
+    if (searchTerm) {
+      const transactionsByCustomer = new Map<string, CustomerTransactionSummary[]>();
+      transactions.forEach((transaction) => {
+        if (!transaction.customer_id) return;
+        const current = transactionsByCustomer.get(transaction.customer_id) || [];
+        current.push(transaction);
+        transactionsByCustomer.set(transaction.customer_id, current);
+      });
+
+      list = list.filter((customer) => {
+        if (matchesDirectorySearch(customer.name, customer.phone, searchTerm)) return true;
+        return (transactionsByCustomer.get(customer.id) || []).some((transaction) =>
+          transactionMatchesCustomerSearch(transaction, searchTerm),
+        );
+      });
+    }
     if (filter === "debtors") list = list.filter((customer) => customer.balance > 0);
     if (filter === "clear") list = list.filter((customer) => customer.balance <= 0);
     if (filter === "inactive") list = list.filter((customer) => !activityMap.get(customer.id)?.count);
@@ -238,7 +299,7 @@ export default function CustomersListPage() {
       return a.name.localeCompare(b.name, "ar");
     });
     return list;
-  }, [activityMap, customers, filter, searchTerm, sortBy]);
+  }, [activityMap, customers, filter, searchTerm, sortBy, transactions]);
 
   const totalDebt = customers.reduce((sum, customer) => sum + Math.max(customer.balance, 0), 0);
   const debtorCount = customers.filter((customer) => customer.balance > 0).length;
@@ -298,7 +359,6 @@ export default function CustomersListPage() {
     if (product.stock_quantity <= 0) return alert("الصنف ده خلص من المخزون.");
     if (cart.find((item) => item.id === product.id)) return;
     setCart((prev) => [
-      ...prev,
       {
         ...product,
         qty: 1,
@@ -308,6 +368,7 @@ export default function CustomersListPage() {
         unitFactor: 1,
         manualUnitFactor: false,
       },
+      ...prev,
     ]);
   }
 
@@ -422,6 +483,12 @@ export default function CustomersListPage() {
         product_category: normalizeProductCategory(item.product_category),
       }));
 
+      const baseSaleDescription =
+        note ||
+        `بيع ${productCategoryLabel(activeCategory)} لـ ${customer.name}${
+          discountRate > 0 ? ` - خصم ${discountRate}%` : ""
+        }${taxAmount > 0 ? ` - ${taxInfo.label}` : ""}`;
+
       const { data: invoice, error: invoiceError } = await supabase
         .from("customer_transactions")
         .insert([
@@ -431,16 +498,22 @@ export default function CustomersListPage() {
             type: "sale",
             items: itemsToSave,
             profit,
-            description:
-              note ||
-              `بيع ${productCategoryLabel(activeCategory)} لـ ${customer.name}${
-                discountRate > 0 ? ` - خصم ${discountRate}%` : ""
-              }${taxAmount > 0 ? ` - ${taxInfo.label}` : ""}`,
+            description: baseSaleDescription,
           },
         ])
         .select("id")
         .single();
       if (invoiceError) throw invoiceError;
+
+      const invoiceNumber = shortInvoiceNumber(invoice?.id);
+      setQuickPrintInvoiceNumber(invoiceNumber);
+
+      if (invoice?.id) {
+        await supabase
+          .from("customer_transactions")
+          .update({ description: `${baseSaleDescription} - رقم الفاتورة ${invoiceNumber}` })
+          .eq("id", invoice.id);
+      }
 
       if (cash > 0) {
         await supabase.from("customer_transactions").insert([
@@ -448,7 +521,7 @@ export default function CustomersListPage() {
             customer_id: customer.id,
             amount: cash,
             type: "payment",
-            description: `سداد من فاتورة #${invoice?.id}`,
+            description: `سداد من فاتورة ${invoiceNumber} (#${invoice?.id})`,
           },
         ]);
 
@@ -461,7 +534,7 @@ export default function CustomersListPage() {
             amount: cash,
             source_type: "customer_invoice",
             source_id: invoice?.id,
-            note: `تحصيل من فاتورة بيع - ${customer.name}`,
+            note: `تحصيل من فاتورة بيع ${invoiceNumber} - ${customer.name}`,
             created_by: operatorName,
           },
         ]);
@@ -492,7 +565,7 @@ export default function CustomersListPage() {
             unit_cost: Number(item.cost || 0),
             source_type: "customer_invoice",
             source_id: invoice?.id,
-            note: `فاتورة بيع - ${customer.name}`,
+            note: `فاتورة بيع ${invoiceNumber} - ${customer.name}`,
             created_by: operatorName,
           };
         }),
@@ -503,10 +576,13 @@ export default function CustomersListPage() {
         action: "customer_invoice_saved",
         entityType: "customer_invoice",
         entityId: invoice?.id,
-        note: `فاتورة بيع - ${customer.name} - ${total.toLocaleString("ar-EG")} ج`,
+        note: `فاتورة بيع ${invoiceNumber} - ${customer.name} - ${total.toLocaleString("ar-EG")} ج`,
       });
 
-      if (printAfterSave) window.print();
+      if (printAfterSave) {
+        await new Promise((resolve) => window.setTimeout(resolve, 80));
+        window.print();
+      }
 
       setInvoiceCustomerId("");
       setManualCustomerName("");
@@ -657,36 +733,45 @@ export default function CustomersListPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#f1f5f9] pb-6 text-right font-sans text-slate-900" dir="rtl">
-      <header className="sticky top-0 z-40 mb-4 bg-[#0f172a] px-6 py-4 text-white shadow-xl">
-        <div className="mx-auto flex max-w-[1600px] flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <Link href="/" className="rounded-xl bg-white/10 px-4 py-2 text-xs font-black transition hover:bg-white/20">
-              رجوع
-            </Link>
+    <div className="min-h-screen bg-slate-50 pb-6 pt-4 text-right font-sans text-slate-900" dir="rtl">
+      <main className="mx-auto grid max-w-[1500px] gap-4 px-4">
+        {!directoryOnly && (
+          <Link
+            href="/customer?view=directory"
+            onClick={() => setDirectoryOnly(true)}
+            className="group grid gap-3 rounded-2xl border border-slate-200 bg-white p-4 text-right shadow-sm transition hover:border-emerald-300 hover:shadow-md sm:grid-cols-[1fr_auto]"
+          >
             <div>
-              <h1 className="text-xl font-black">العملاء وفاتورة البيع</h1>
-              <p className="mt-0.5 text-[10px] font-bold text-slate-400">
-                فاتورة سريعة بجانب دليل العملاء المسجلين
+              <p className="text-[10px] font-black uppercase tracking-widest text-emerald-600">العملاء المسجلين والفلاتر</p>
+              <h2 className="mt-1 text-base font-black text-slate-950">فتح صفحة العملاء والسجلات</h2>
+              <p className="mt-1 text-xs font-bold text-slate-500">
+                إدارة العملاء، التحصيل، البحث، الفلاتر، والسجل الكامل بعيدًا عن شاشة الفاتورة.
               </p>
             </div>
-          </div>
-          <div className="flex flex-wrap items-center gap-2 text-[10px] font-black">
-            <span className="rounded-lg bg-white/10 px-3 py-1.5">{customers.length.toLocaleString("ar-EG")} عميل</span>
-            <span className="rounded-lg bg-rose-500/20 px-3 py-1.5 text-rose-100">
-              ديون {totalDebt.toLocaleString("ar-EG")} ج
-            </span>
-          </div>
-        </div>
-      </header>
+            <div className="grid grid-cols-3 gap-2 text-center sm:w-80">
+              <div className="rounded-xl bg-slate-50 px-3 py-2">
+                <p className="text-[9px] font-black text-slate-400">العملاء</p>
+                <p className="text-lg font-black text-slate-900">{customers.length.toLocaleString("ar-EG")}</p>
+              </div>
+              <div className="rounded-xl bg-rose-50 px-3 py-2">
+                <p className="text-[9px] font-black text-rose-400">الديون</p>
+                <p className="text-lg font-black text-rose-600">{totalDebt.toLocaleString("ar-EG")}</p>
+              </div>
+              <div className="rounded-xl bg-emerald-50 px-3 py-2">
+                <p className="text-[9px] font-black text-emerald-500">سليم</p>
+                <p className="text-lg font-black text-emerald-700">{clearCount.toLocaleString("ar-EG")}</p>
+              </div>
+            </div>
+          </Link>
+        )}
 
-      <main className="mx-auto grid max-w-[1500px] gap-5 px-4">
-        <section className="min-w-0 overflow-hidden rounded-[1.5rem] border border-slate-200 bg-white shadow-sm ring-1 ring-white">
-          <div className="border-b border-slate-100 bg-white p-5">
+        {!directoryOnly && (
+        <section className="min-w-0 overflow-hidden rounded-[1.25rem] border border-slate-200 bg-white shadow-sm ring-1 ring-white">
+          <div className="border-b border-slate-100 bg-white p-4">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
                 <p className="text-[10px] font-black uppercase tracking-widest text-indigo-500">فاتورة بيع سريعة</p>
-                <h2 className="mt-1 text-lg font-black text-slate-900">
+                <h2 className="mt-1 text-base font-black text-slate-900">
                   {selectedInvoiceCustomer?.name || manualCustomerName || "اختار العميل وابدأ البيع"}
                 </h2>
               </div>
@@ -708,11 +793,10 @@ export default function CustomersListPage() {
               </button>
             </div>
 
-            <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50/70 p-3">
-              <p className="mb-3 text-[10px] font-black uppercase tracking-widest text-slate-400">بيانات العميل</p>
-              <div className="grid gap-3 lg:grid-cols-[1fr_1fr_1fr_160px]">
+            <div className="mt-2 rounded-lg border border-slate-200 bg-slate-50/70 px-2 py-1.5">
+              <div className="grid items-end gap-1.5 lg:grid-cols-[0.9fr_1fr_0.8fr_115px]">
               <label className="block">
-                <span className="mb-1 block text-[10px] font-black text-slate-400">عميل مسجل</span>
+                <span className="mb-0.5 block text-[9px] font-black text-slate-400">عميل مسجل</span>
                 <select
                   value={invoiceCustomerId}
                   onChange={(event) => {
@@ -720,7 +804,7 @@ export default function CustomersListPage() {
                     if (customer) selectInvoiceCustomer(customer);
                     else setInvoiceCustomerId("");
                   }}
-                  className="h-11 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm font-bold outline-none focus:border-indigo-400"
+                  className="h-8 w-full rounded-md border border-slate-200 bg-white px-2 text-[11px] font-bold outline-none focus:border-indigo-400"
                 >
                   <option value="">بيع لعميل جديد / يدوي</option>
                   {customers.map((customer) => (
@@ -731,7 +815,7 @@ export default function CustomersListPage() {
                 </select>
               </label>
               <label className="block">
-                <span className="mb-1 block text-[10px] font-black text-slate-400">اسم العميل</span>
+                <span className="mb-0.5 block text-[9px] font-black text-slate-400">اسم العميل</span>
                 <input
                   value={manualCustomerName}
                   onChange={(event) => {
@@ -739,11 +823,11 @@ export default function CustomersListPage() {
                     setInvoiceCustomerId("");
                   }}
                   placeholder="اكتب اسم العميل أو اختاره من الاقتراحات"
-                  className="h-11 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm font-bold outline-none focus:border-indigo-400"
+                  className="h-8 w-full rounded-md border border-slate-200 bg-white px-2 text-[11px] font-bold outline-none focus:border-indigo-400"
                 />
               </label>
               <label className="block">
-                <span className="mb-1 block text-[10px] font-black text-slate-400">موبايل العميل</span>
+                <span className="mb-0.5 block text-[9px] font-black text-slate-400">موبايل</span>
                 <input
                   value={manualCustomerPhone}
                   onChange={(event) => {
@@ -751,12 +835,12 @@ export default function CustomersListPage() {
                     setInvoiceCustomerId("");
                   }}
                   placeholder="اختياري"
-                  className="h-11 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm font-bold outline-none focus:border-indigo-400"
+                  className="h-8 w-full rounded-md border border-slate-200 bg-white px-2 text-[11px] font-bold outline-none focus:border-indigo-400"
                 />
               </label>
-              <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
-                <p className="text-[10px] font-black text-slate-400">الرصيد الحالي</p>
-                <p className={`mt-1 text-lg font-black ${(selectedInvoiceCustomer?.balance || 0) > 0 ? "text-rose-600" : "text-emerald-600"}`}>
+              <div className="rounded-md border border-slate-200 bg-white px-2 py-1">
+                <p className="text-[9px] font-black text-slate-400">الرصيد</p>
+                <p className={`text-sm font-black ${(selectedInvoiceCustomer?.balance || 0) > 0 ? "text-rose-600" : "text-emerald-600"}`}>
                   {(selectedInvoiceCustomer?.balance || 0).toLocaleString("ar-EG")} ج
                 </p>
               </div>
@@ -780,9 +864,9 @@ export default function CustomersListPage() {
             )}
           </div>
 
-          <div className="grid gap-4 bg-slate-50/60 p-4 xl:grid-cols-[280px_minmax(0,1fr)]">
-            <aside className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
-              <p className="mb-3 text-[10px] font-black uppercase tracking-widest text-slate-400">اختيار الأصناف</p>
+          <div className="grid gap-3 bg-slate-50/60 p-3 xl:grid-cols-[380px_minmax(0,1fr)]">
+            <aside className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
+              <p className="mb-2 text-[10px] font-black uppercase tracking-widest text-slate-400">اختيار الأصناف</p>
               <CategorySelect
                 value={activeCategory}
                 label="قسم البيع"
@@ -804,16 +888,16 @@ export default function CustomersListPage() {
                   }
                 }}
                 placeholder="باركود USB أو بحث"
-                className="mt-3 h-11 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm font-bold outline-none focus:border-indigo-400"
+                className="mt-2 h-9 w-full rounded-lg border border-slate-200 bg-slate-50 px-2.5 text-xs font-bold outline-none focus:border-indigo-400"
               />
               <button
                 type="button"
                 onClick={() => handleBarcodeEntry(invoiceProductSearch)}
-                className="mt-2 h-10 w-full rounded-xl bg-slate-900 text-xs font-black text-white"
+                className="mt-2 h-9 w-full rounded-lg bg-slate-900 text-xs font-black text-white"
               >
                 إضافة بالباركود
               </button>
-              <div className="mt-3 max-h-[360px] space-y-2 overflow-y-auto pr-1">
+              <div className="mt-2 max-h-[460px] space-y-1.5 overflow-y-auto pr-1">
                 {filteredProducts.slice(0, 80).map((product) => {
                   const inCart = !!cart.find((item) => item.id === product.id);
                   return (
@@ -822,7 +906,7 @@ export default function CustomersListPage() {
                       type="button"
                       onClick={() => !inCart && addToCart(product)}
                       disabled={product.stock_quantity <= 0 || inCart}
-                      className={`w-full rounded-xl border p-3 text-right transition ${
+                      className={`w-full rounded-lg border p-2 text-right transition ${
                         product.stock_quantity <= 0
                           ? "cursor-not-allowed border-slate-100 bg-slate-50 opacity-50"
                           : inCart
@@ -830,7 +914,7 @@ export default function CustomersListPage() {
                             : "border-slate-100 hover:border-indigo-300 hover:bg-slate-50"
                       }`}
                     >
-                      <p className="line-clamp-1 text-sm font-black text-slate-900">{product.name}</p>
+                      <p className="line-clamp-1 text-xs font-black text-slate-900">{product.name}</p>
                       <p className="mt-1 text-[10px] font-bold text-slate-400">
                         {Number(product.sale_price || 0).toLocaleString("ar-EG")} ج - مخزون{" "}
                         {Number(product.stock_quantity || 0).toLocaleString("ar-EG")} {product.unit}
@@ -844,32 +928,32 @@ export default function CustomersListPage() {
               </div>
             </aside>
 
-            <section className="min-w-0 space-y-4">
-              <div className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
-                <div className="mb-3 flex items-center justify-between gap-3">
+            <section className="flex min-w-0 flex-col gap-3">
+              <div className="order-2 rounded-xl border border-slate-200 bg-white p-2.5 shadow-sm">
+                <div className="mb-2 flex items-center justify-between gap-3">
                   <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">تفاصيل الفاتورة</p>
                   <span className="rounded-lg bg-slate-100 px-3 py-1 text-[10px] font-black text-slate-500">
                     {cart.length.toLocaleString("ar-EG")} صنف
                   </span>
                 </div>
-                <div className="max-h-[380px] overflow-auto rounded-xl border border-slate-200">
+                <div className="max-h-[320px] overflow-auto rounded-lg border border-slate-200">
                 {cart.length === 0 ? (
-                  <div className="grid h-60 place-items-center text-center text-slate-300">
+                  <div className="grid h-44 place-items-center text-center text-slate-300">
                     <div>
-                      <p className="text-3xl font-black">فاتورة فارغة</p>
+                      <p className="text-xl font-black">فاتورة فارغة</p>
                       <p className="mt-2 text-xs font-bold">اسحب الباركود أو اختار صنف من القائمة</p>
                     </div>
                   </div>
                 ) : (
-                  <table className="w-full min-w-[720px] text-right">
+                  <table className="w-full min-w-[650px] text-right">
                     <thead className="sticky top-0 z-10 border-b bg-slate-50 text-[10px] font-black text-slate-400">
                       <tr>
-                        <th className="p-3">الصنف</th>
-                        <th className="p-3 text-center">الكمية</th>
-                        <th className="p-3 text-center">الوحدة</th>
-                        <th className="p-3 text-center">السعر</th>
-                        <th className="p-3 text-left">الإجمالي</th>
-                        <th className="p-3"></th>
+                        <th className="p-2">الصنف</th>
+                        <th className="p-2 text-center">الكمية</th>
+                        <th className="p-2 text-center">الوحدة</th>
+                        <th className="p-2 text-center">السعر</th>
+                        <th className="p-2 text-left">الإجمالي</th>
+                        <th className="p-2"></th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
@@ -877,26 +961,26 @@ export default function CustomersListPage() {
                         const lineTotal = Number(item.qty || 0) * Number(item.price || 0);
                         return (
                           <tr key={item.id} className="align-top">
-                            <td className="p-3">
-                              <p className="text-sm font-black text-slate-900">{item.name}</p>
+                            <td className="p-2">
+                              <p className="text-xs font-black text-slate-900">{item.name}</p>
                               <p className="mt-1 text-[10px] font-bold text-slate-400">
                                 تكلفة {Number(item.cost || 0).toLocaleString("ar-EG", { maximumFractionDigits: 2 })} ج
                               </p>
                             </td>
-                            <td className="p-3 text-center">
+                            <td className="p-2 text-center">
                               <input
                                 type="number"
                                 step="any"
                                 value={item.qty}
                                 onChange={(event) => updateCart(item.id, "qty", event.target.value)}
-                                className="h-10 w-20 rounded-xl border border-slate-200 bg-slate-50 text-center text-sm font-black outline-none focus:border-indigo-400"
+                                className="h-8 w-16 rounded-lg border border-slate-200 bg-slate-50 text-center text-xs font-black outline-none focus:border-indigo-400"
                               />
                             </td>
-                            <td className="p-3 text-center">
+                            <td className="p-2 text-center">
                               <select
                                 value={item.invoiceUnit || item.unit}
                                 onChange={(event) => updateCartUnit(item.id, event.target.value)}
-                                className="h-10 w-28 rounded-xl border border-slate-200 bg-slate-50 text-center text-xs font-black outline-none focus:border-indigo-400"
+                                className="h-8 w-24 rounded-lg border border-slate-200 bg-slate-50 text-center text-[11px] font-black outline-none focus:border-indigo-400"
                               >
                                 {invoiceUnitOptions(item).map((unit) => (
                                   <option key={unit} value={unit}>
@@ -925,23 +1009,23 @@ export default function CustomersListPage() {
                                 </p>
                               )}
                             </td>
-                            <td className="p-3 text-center">
+                            <td className="p-2 text-center">
                               <input
                                 type="number"
                                 step="any"
                                 value={item.price}
                                 onChange={(event) => updateCart(item.id, "price", event.target.value)}
-                                className="h-10 w-24 rounded-xl border border-slate-200 bg-slate-50 text-center text-sm font-black text-indigo-600 outline-none focus:border-indigo-400"
+                                className="h-8 w-20 rounded-lg border border-slate-200 bg-slate-50 text-center text-xs font-black text-indigo-600 outline-none focus:border-indigo-400"
                               />
                             </td>
-                            <td className="p-3 text-left text-sm font-black">
+                            <td className="p-2 text-left text-xs font-black">
                               {lineTotal.toLocaleString("ar-EG", { maximumFractionDigits: 2 })}
                             </td>
-                            <td className="p-3">
+                            <td className="p-2">
                               <button
                                 type="button"
                                 onClick={() => removeFromCart(item.id)}
-                                className="h-8 w-8 rounded-lg bg-rose-50 text-sm font-black text-rose-600 hover:bg-rose-100"
+                                className="h-7 w-7 rounded-lg bg-rose-50 text-xs font-black text-rose-600 hover:bg-rose-100"
                               >
                                 ×
                               </button>
@@ -955,10 +1039,10 @@ export default function CustomersListPage() {
                 </div>
               </div>
 
-              <div className="grid gap-4 lg:grid-cols-[1fr_300px]">
-                <div className="grid gap-3 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm sm:grid-cols-2">
+              <div className="order-1 grid gap-3 lg:grid-cols-[1fr_280px]">
+                <div className="grid gap-2 rounded-xl border border-slate-200 bg-white p-2.5 shadow-sm sm:grid-cols-2">
                   <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 sm:col-span-2">الدفع والخصم</p>
-                  <label className="block rounded-xl border border-slate-200 bg-slate-50 p-3">
+                  <label className="block rounded-lg border border-slate-200 bg-slate-50 p-2">
                     <span className="block text-[10px] font-black text-slate-400">خصم على الفاتورة</span>
                     <div className="mt-1 flex items-center gap-2">
                       <input
@@ -968,20 +1052,20 @@ export default function CustomersListPage() {
                         step="any"
                         value={discountPercent}
                         onChange={(event) => setDiscountPercent(event.target.value)}
-                        className="w-full bg-transparent text-lg font-black outline-none"
+                        className="w-full bg-transparent text-base font-black outline-none"
                         placeholder="0"
                       />
                       <span className="font-black text-slate-400">%</span>
                     </div>
                   </label>
-                  <label className="block rounded-xl border border-slate-200 bg-slate-50 p-3">
+                  <label className="block rounded-lg border border-slate-200 bg-slate-50 p-2">
                     <span className="block text-[10px] font-black text-slate-400">المدفوع كاش</span>
                     <input
                       type="number"
                       step="any"
                       value={cashPaid}
                       onChange={(event) => setCashPaid(event.target.value)}
-                      className="mt-1 w-full bg-transparent text-lg font-black text-emerald-600 outline-none"
+                      className="mt-1 w-full bg-transparent text-base font-black text-emerald-600 outline-none"
                       placeholder="0"
                     />
                   </label>
@@ -990,40 +1074,42 @@ export default function CustomersListPage() {
                       value={note}
                       onChange={(event) => setNote(event.target.value)}
                       placeholder="ملاحظة على الفاتورة"
-                      className="h-11 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm font-bold outline-none focus:border-indigo-400"
+                      className="h-9 w-full rounded-lg border border-slate-200 bg-slate-50 px-2.5 text-xs font-bold outline-none focus:border-indigo-400"
                     />
                   </label>
                 </div>
-                <div className="rounded-2xl bg-[#0f172a] p-4 text-white shadow-sm">
-                  <p className="mb-3 text-[10px] font-black uppercase tracking-widest text-slate-500">ملخص الفاتورة</p>
-                  <div className="grid grid-cols-2 gap-3">
+                <div className="rounded-xl bg-[#0f172a] p-3 text-white shadow-sm">
+                  <p className="mb-2 text-[10px] font-black uppercase tracking-widest text-slate-500">ملخص الفاتورة</p>
+                  <div className="grid grid-cols-2 gap-2">
                     <div>
                       <p className="text-[9px] font-black text-slate-500">الإجمالي</p>
-                      <p className="text-lg font-black">{total.toLocaleString("ar-EG", { maximumFractionDigits: 2 })} ج</p>
+                      <p className="text-base font-black">{total.toLocaleString("ar-EG", { maximumFractionDigits: 2 })} ج</p>
                     </div>
                     <div>
                       <p className="text-[9px] font-black text-slate-500">المتبقي</p>
-                      <p className={`text-lg font-black ${remaining > 0 ? "text-rose-300" : "text-emerald-300"}`}>
+                      <p className={`text-base font-black ${remaining > 0 ? "text-rose-300" : "text-emerald-300"}`}>
                         {remaining.toLocaleString("ar-EG", { maximumFractionDigits: 2 })} ج
                       </p>
                     </div>
-                    <div>
-                      <p className="text-[9px] font-black text-slate-500">الربح</p>
-                      <p className={`text-sm font-black ${profit >= 0 ? "text-emerald-300" : "text-rose-300"}`}>
-                        {profit.toLocaleString("ar-EG", { maximumFractionDigits: 2 })} ج ({margin}%)
-                      </p>
-                    </div>
+                    {canViewProfit && (
+                      <div>
+                        <p className="text-[9px] font-black text-slate-500">الربح</p>
+                        <p className={`text-sm font-black ${profit >= 0 ? "text-emerald-300" : "text-rose-300"}`}>
+                          {profit.toLocaleString("ar-EG", { maximumFractionDigits: 2 })} ج ({margin}%)
+                        </p>
+                      </div>
+                    )}
                     <div>
                       <p className="text-[9px] font-black text-slate-500">{taxInfo.label}</p>
                       <p className="text-sm font-black">{taxAmount.toLocaleString("ar-EG", { maximumFractionDigits: 2 })} ج</p>
                     </div>
                   </div>
-                  <div className="mt-4 grid gap-2">
+                  <div className="mt-3 grid gap-2">
                     <button
                       type="button"
                       onClick={() => saveQuickInvoice(false)}
                       disabled={invoiceSaving || cart.length === 0}
-                      className="h-11 rounded-xl bg-emerald-500 text-sm font-black text-white disabled:opacity-50"
+                      className="h-9 rounded-lg bg-emerald-500 text-xs font-black text-white disabled:opacity-50"
                     >
                       {invoiceSaving ? "جاري الحفظ..." : "حفظ واعتماد"}
                     </button>
@@ -1031,7 +1117,7 @@ export default function CustomersListPage() {
                       type="button"
                       onClick={() => saveQuickInvoice(true)}
                       disabled={invoiceSaving || cart.length === 0}
-                      className="h-11 rounded-xl bg-white/10 text-sm font-black text-white disabled:opacity-50"
+                      className="h-9 rounded-lg bg-white/10 text-xs font-black text-white disabled:opacity-50"
                     >
                       حفظ وطباعة
                     </button>
@@ -1041,7 +1127,9 @@ export default function CustomersListPage() {
             </section>
           </div>
         </section>
+        )}
 
+        {directoryOnly && (
         <section className="min-w-0 overflow-hidden rounded-[1.5rem] border border-slate-200 bg-white shadow-sm ring-1 ring-white">
           <div className="border-b border-slate-100 bg-white p-5">
             <div className="flex flex-wrap items-center justify-between gap-3">
@@ -1050,6 +1138,13 @@ export default function CustomersListPage() {
                 <h2 className="text-lg font-black">العملاء المسجلين والفلاتر</h2>
               </div>
               <div className="flex flex-wrap gap-2">
+                <Link
+                  href="/customer"
+                  onClick={() => setDirectoryOnly(false)}
+                  className="app-btn app-btn-soft app-btn-sm"
+                >
+                  رجوع للفاتورة
+                </Link>
                 <button onClick={() => setShowAddModal(true)} className="app-btn app-btn-success app-btn-sm">
                   إضافة عميل
                 </button>
@@ -1064,7 +1159,7 @@ export default function CustomersListPage() {
               <div className="grid gap-3 xl:grid-cols-[minmax(220px,1fr)_auto]">
               <div className="relative">
                 <input
-                  placeholder="ابحث بالاسم أو الموبايل..."
+                  placeholder="ابحث بالاسم أو الموبايل أو رقم الفاتورة..."
                   className="h-11 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 pl-10 text-sm font-bold outline-none focus:border-indigo-400"
                   value={searchTerm}
                   onChange={(event) => setSearchTerm(event.target.value)}
@@ -1230,6 +1325,7 @@ export default function CustomersListPage() {
             </div>
           </div>
         </section>
+        )}
       </main>
 
       <section className="print-invoice hidden" dir="rtl">
@@ -1243,6 +1339,7 @@ export default function CustomersListPage() {
             <div className="print-meta">
               <p>التاريخ: {printDateLabel || "-"}</p>
               <p>العميل: {selectedInvoiceCustomer?.name || manualCustomerName || "-"}</p>
+              <p>رقم الفاتورة: {quickPrintInvoiceNumber}</p>
               <p>الرصيد السابق: {(selectedInvoiceCustomer?.balance || 0).toLocaleString("ar-EG")} ج.م</p>
             </div>
           </div>

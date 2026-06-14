@@ -36,7 +36,7 @@ export const DEFAULT_CATEGORY_CONFIGS: CategoryConfig[] = [
     key: "food",
     label: "مواد غذائية",
     shortLabel: "غذائي",
-    active: true,
+    active: false,
     units: ["قطعة", "علبة", "كرتونة", "كيلو", "جرام", "عبوة"],
     unitConversions: [
       { id: "food-carton-piece", fromUnit: "كرتونة", toUnit: "قطعة", factor: 12 },
@@ -52,7 +52,7 @@ export const DEFAULT_CATEGORY_CONFIGS: CategoryConfig[] = [
     key: "drinks",
     label: "مشروبات",
     shortLabel: "مشروبات",
-    active: true,
+    active: false,
     units: ["قطعة", "عبوة", "كرتونة", "لتر"],
     unitConversions: [
       { id: "drinks-carton-piece", fromUnit: "كرتونة", toUnit: "قطعة", factor: 12 },
@@ -68,7 +68,7 @@ export const DEFAULT_CATEGORY_CONFIGS: CategoryConfig[] = [
     key: "clothes",
     label: "ملابس",
     shortLabel: "ملابس",
-    active: true,
+    active: false,
     units: ["قطعة", "طقم", "زوج"],
     unitConversions: [],
     fields: [
@@ -81,7 +81,7 @@ export const DEFAULT_CATEGORY_CONFIGS: CategoryConfig[] = [
     key: "electronics",
     label: "إلكترونيات",
     shortLabel: "إلكترونيات",
-    active: true,
+    active: false,
     units: ["قطعة", "طقم"],
     unitConversions: [],
     fields: [
@@ -94,7 +94,7 @@ export const DEFAULT_CATEGORY_CONFIGS: CategoryConfig[] = [
     key: "cosmetics",
     label: "عناية وتجميل",
     shortLabel: "تجميل",
-    active: true,
+    active: false,
     units: ["قطعة", "علبة", "عبوة"],
     unitConversions: [
       { id: "cosmetics-box-piece", fromUnit: "علبة", toUnit: "قطعة", factor: 1 },
@@ -105,15 +105,15 @@ export const DEFAULT_CATEGORY_CONFIGS: CategoryConfig[] = [
       { key: "skin_type", label: "نوع الاستخدام", type: "text", placeholder: "دهني / جاف / كل الأنواع" },
     ],
   },
-  { key: "household", label: "منزلية", shortLabel: "منزلية", active: true, units: ["قطعة", "طقم", "عبوة", "لتر"], unitConversions: [], fields: [
+  { key: "household", label: "منزلية", shortLabel: "منزلية", active: false, units: ["قطعة", "طقم", "عبوة", "لتر"], unitConversions: [], fields: [
     { key: "size", label: "المقاس/السعة", type: "text", placeholder: "2L / كبير / صغير" },
     { key: "color", label: "اللون", type: "text", placeholder: "اختياري" },
   ] },
-  { key: "tools", label: "عدد وأدوات", shortLabel: "أدوات", active: true, units: ["قطعة", "طقم", "متر"], unitConversions: [], fields: [
+  { key: "tools", label: "عدد وأدوات", shortLabel: "أدوات", active: false, units: ["قطعة", "طقم", "متر"], unitConversions: [], fields: [
     { key: "size", label: "المقاس", type: "text", placeholder: "10mm / 2 inch" },
     { key: "material", label: "الخامة", type: "text", placeholder: "حديد / ستانلس" },
   ] },
-  { key: "pharmacy", label: "صيدلية", shortLabel: "صيدلية", active: true, units: ["علبة", "شريط", "قرص", "أمبول", "عبوة"], unitConversions: [
+  { key: "pharmacy", label: "صيدلية", shortLabel: "صيدلية", active: false, units: ["علبة", "شريط", "قرص", "أمبول", "عبوة"], unitConversions: [
     { id: "pharmacy-box-strip", fromUnit: "علبة", toUnit: "شريط", factor: 2 },
     { id: "pharmacy-strip-pill", fromUnit: "شريط", toUnit: "قرص", factor: 10 },
   ], fields: [
@@ -121,16 +121,16 @@ export const DEFAULT_CATEGORY_CONFIGS: CategoryConfig[] = [
     { key: "batch_number", label: "Batch No.", type: "text", placeholder: "رقم التشغيلة" },
     { key: "dosage", label: "التركيز", type: "text", placeholder: "500mg / 10ml" },
   ] },
-  { key: "services", label: "خدمات", shortLabel: "خدمات", active: true, units: ["خدمة"], unitConversions: [], fields: [
+  { key: "services", label: "خدمات", shortLabel: "خدمات", active: false, units: ["خدمة"], unitConversions: [], fields: [
     { key: "duration", label: "مدة الخدمة", type: "text", placeholder: "30 دقيقة / شهر" },
     { key: "service_code", label: "كود الخدمة", type: "text", placeholder: "اختياري" },
   ] },
-  { key: "books", label: "كتب", shortLabel: "كتب", active: true, units: ["قطعة"], unitConversions: [], fields: [
+  { key: "books", label: "كتب", shortLabel: "كتب", active: false, units: ["قطعة"], unitConversions: [], fields: [
     { key: "author", label: "المؤلف", type: "text", placeholder: "اسم المؤلف" },
     { key: "publisher", label: "دار النشر", type: "text", placeholder: "اختياري" },
     { key: "grade", label: "الصف/المستوى", type: "text", placeholder: "اختياري" },
   ] },
-  { key: "stationery", label: "أدوات مكتبية", shortLabel: "مكتبي", active: true, units: ["قطعة", "علبة", "كرتونة"], unitConversions: [
+  { key: "stationery", label: "أدوات مكتبية", shortLabel: "مكتبي", active: false, units: ["قطعة", "علبة", "كرتونة"], unitConversions: [
     { id: "stationery-box-piece", fromUnit: "علبة", toUnit: "قطعة", factor: 12 },
     { id: "stationery-carton-box", fromUnit: "كرتونة", toUnit: "علبة", factor: 12 },
   ], fields: [
@@ -226,10 +226,54 @@ export function readCategorySettings() {
 
   try {
     const saved = window.localStorage.getItem(CATEGORY_SETTINGS_STORAGE_KEY);
-    return normalizeCategoryConfigs(saved ? JSON.parse(saved) : DEFAULT_CATEGORY_CONFIGS);
+    if (!saved) return DEFAULT_CATEGORY_CONFIGS;
+
+    const parsed = JSON.parse(saved);
+    if (isGeneratedAllActiveCategorySettings(parsed)) return DEFAULT_CATEGORY_CONFIGS;
+    return normalizeCategoryConfigs(parsed);
   } catch {
     return DEFAULT_CATEGORY_CONFIGS;
   }
+}
+
+export function hasSavedCategorySettings() {
+  if (typeof window === "undefined") return false;
+
+  try {
+    const saved = window.localStorage.getItem(CATEGORY_SETTINGS_STORAGE_KEY);
+    if (!saved) return false;
+    const parsed = JSON.parse(saved);
+    return hasUsableCategorySettings(parsed) && !isGeneratedAllActiveCategorySettings(parsed);
+  } catch {
+    return false;
+  }
+}
+
+export function hasUsableCategorySettings(configs: unknown) {
+  return Array.isArray(configs) && configs.some((item) => {
+    if (!item || typeof item !== "object") return false;
+    const row = item as Partial<CategoryConfig>;
+    return typeof row.key === "string" && row.key.trim() && typeof row.label === "string" && row.label.trim();
+  });
+}
+
+export function isGeneratedAllActiveCategorySettings(configs: unknown) {
+  if (!Array.isArray(configs) || configs.length !== DEFAULT_CATEGORY_CONFIGS.length) return false;
+
+  const normalized = normalizeCategoryConfigs(configs);
+  return DEFAULT_CATEGORY_CONFIGS.every((defaultCategory) => {
+    const current = normalized.find((category) => category.key === defaultCategory.key);
+    if (!current) return false;
+
+    return (
+      current.active === true &&
+      current.label === defaultCategory.label &&
+      current.shortLabel === defaultCategory.shortLabel &&
+      JSON.stringify(current.units) === JSON.stringify(defaultCategory.units) &&
+      JSON.stringify(current.unitConversions) === JSON.stringify(defaultCategory.unitConversions) &&
+      JSON.stringify(current.fields) === JSON.stringify(defaultCategory.fields)
+    );
+  });
 }
 
 export function saveCategorySettings(configs: CategoryConfig[]) {

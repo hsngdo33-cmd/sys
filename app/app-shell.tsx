@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useEffect, useState } from "react";
 import {
   BarChart3,
   BookOpen,
@@ -20,7 +21,17 @@ import {
   WalletCards,
 } from "lucide-react";
 import { clearStaffSession, useStaffSession } from "@/app/staff-session";
-import { hasPermission, permissionForPath, roleLabels } from "@/lib/permissions";
+import { supabase } from "@/lib/supabase";
+import {
+  hasPermissionWithConfig,
+  permissionForPath,
+  permissionSettingsEvent,
+  readRolePermissions,
+  roleLabels,
+  rolePermissions,
+  sanitizeRolePermissions,
+  writeRolePermissions,
+} from "@/lib/permissions";
 
 const navItems = [
   { href: "/", label: "الرئيسية", icon: Home, permission: "dashboard:view" as const },
@@ -53,15 +64,104 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const pageTitle = getPageTitle(pathname);
   const staff = useStaffSession();
+  const [permissionConfig, setPermissionConfig] = useState(rolePermissions);
   const isLoginPage = pathname.startsWith("/login");
-  const visibleNavItems = staff ? navItems.filter((item) => hasPermission(staff.role, item.permission)) : navItems;
-  const visibleQuickLinks = staff ? quickLinks.filter((item) => hasPermission(staff.role, item.permission)) : quickLinks;
+  const visibleNavItems = staff ? navItems.filter((item) => hasPermissionWithConfig(staff.role, item.permission, permissionConfig)) : navItems;
+  const visibleQuickLinks = staff ? quickLinks.filter((item) => hasPermissionWithConfig(staff.role, item.permission, permissionConfig)) : quickLinks;
   const requiredPermission = permissionForPath(pathname);
-  const isAllowed = !staff || isLoginPage || hasPermission(staff.role, requiredPermission);
+  const isAllowed = !staff || isLoginPage || hasPermissionWithConfig(staff.role, requiredPermission, permissionConfig);
+  const isCleanCustomerPage = pathname === "/customer";
+
+  useEffect(() => {
+    const refreshPermissions = () => setPermissionConfig(readRolePermissions());
+
+    async function loadRemotePermissions() {
+      try {
+        const { data, error } = await supabase
+          .from("business_settings")
+          .select("role_permissions")
+          .eq("id", "main")
+          .maybeSingle();
+        if (error) return;
+
+        const remotePermissions = (data as { role_permissions?: unknown } | null)?.role_permissions;
+        if (remotePermissions) {
+          const sanitized = sanitizeRolePermissions(remotePermissions);
+          setPermissionConfig(sanitized);
+          writeRolePermissions(sanitized);
+        } else {
+          setPermissionConfig(rolePermissions);
+        }
+      } catch {
+        setPermissionConfig(rolePermissions);
+      }
+    }
+
+    void loadRemotePermissions();
+
+    window.addEventListener(permissionSettingsEvent, refreshPermissions);
+    window.addEventListener("storage", refreshPermissions);
+    return () => {
+      window.removeEventListener(permissionSettingsEvent, refreshPermissions);
+      window.removeEventListener("storage", refreshPermissions);
+    };
+  }, []);
 
   function logout() {
     clearStaffSession();
     window.location.href = "/login";
+  }
+
+  if (isCleanCustomerPage) {
+    return (
+      <body className="min-h-screen overflow-x-hidden bg-slate-50 text-slate-900 font-sans">
+        <nav className="fixed left-1/2 top-4 z-50 flex -translate-x-1/2 items-center gap-2 rounded-full border border-white/50 bg-white/75 p-1.5 shadow-2xl shadow-slate-900/10 backdrop-blur-xl">
+          <Link
+            href="/"
+            aria-label="الرجوع للرئيسية"
+            title="الرئيسية"
+            className="group inline-flex h-10 items-center gap-2 overflow-hidden rounded-full bg-slate-950 px-2 text-xs font-black text-white shadow-lg shadow-slate-900/20 transition-all duration-300 hover:w-32 hover:bg-slate-900 focus-visible:w-32 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-emerald-300/30"
+          >
+            <span className="relative grid h-7 w-7 shrink-0 place-items-center rounded-full bg-emerald-500 text-white transition-transform duration-300 group-hover:scale-110">
+              <span className="absolute inset-0 rounded-full bg-emerald-300/30 opacity-0 transition-opacity duration-300 group-hover:opacity-100 group-hover:animate-ping" />
+              <Home className="relative h-3.5 w-3.5" />
+            </span>
+            <span className="w-0 translate-x-2 whitespace-nowrap opacity-0 transition-all duration-300 group-hover:w-14 group-hover:translate-x-0 group-hover:opacity-100 group-focus-visible:w-14 group-focus-visible:translate-x-0 group-focus-visible:opacity-100">
+              الرئيسية
+            </span>
+          </Link>
+
+          <Link
+            href="/reports/invoices"
+            aria-label="فتح صفحة الفواتير"
+            title="الفواتير"
+            className="group inline-flex h-10 items-center gap-2 overflow-hidden rounded-full bg-indigo-600 px-2 text-xs font-black text-white shadow-lg shadow-indigo-900/20 transition-all duration-300 hover:w-32 hover:bg-indigo-500 focus-visible:w-32 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-indigo-300/30"
+          >
+            <span className="relative grid h-7 w-7 shrink-0 place-items-center rounded-full bg-white/20 text-white transition-transform duration-300 group-hover:scale-110">
+              <span className="absolute inset-0 rounded-full bg-white/20 opacity-0 transition-opacity duration-300 group-hover:opacity-100 group-hover:animate-ping" />
+              <ReceiptText className="relative h-3.5 w-3.5" />
+            </span>
+            <span className="w-0 translate-x-2 whitespace-nowrap opacity-0 transition-all duration-300 group-hover:w-14 group-hover:translate-x-0 group-hover:opacity-100 group-focus-visible:w-14 group-focus-visible:translate-x-0 group-focus-visible:opacity-100">
+              الفواتير
+            </span>
+          </Link>
+        </nav>
+
+        {isAllowed ? (
+          children
+        ) : (
+          <div className="flex min-h-screen items-center justify-center p-4">
+            <section className="w-full max-w-xl rounded-3xl border border-rose-200 bg-rose-50 p-8 text-center text-rose-700">
+              <h2 className="text-2xl font-black">لا توجد صلاحية لفتح الصفحة</h2>
+              <p className="mt-2 text-sm font-bold">سجل دخول بموظف له صلاحية مناسبة أو راجع المدير.</p>
+              <Link href="/login" className="mt-5 inline-flex h-12 items-center justify-center rounded-2xl bg-rose-600 px-5 text-sm font-black text-white">
+                تسجيل دخول آخر
+              </Link>
+            </section>
+          </div>
+        )}
+      </body>
+    );
   }
 
   return (

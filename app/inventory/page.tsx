@@ -8,8 +8,10 @@ import { barcodeValidationMessage, cleanBarcode, generateInternalBarcode, isPrin
 import { CategorySelect, useCategoryUnits, useEnabledCategories } from "@/app/category-select";
 import { ProductAttributes, ProductCategoryFields, cleanProductAttributes, productAttributesSummary } from "@/app/product-category-fields";
 import { useBarcodeHardwareSettings } from "@/app/barcode-hardware-settings";
+import { useStaffSession } from "@/app/staff-session";
 import { formatPriceInput, priceFromPurchase, profitPercentFromPrices, purchaseFromPrice } from "@/lib/pricing";
 import { productUnitConversions, unitConversionsForBaseUnit, UnitConversion } from "@/lib/category-settings";
+import { canViewProfitControls } from "@/lib/permissions";
 
 type Product = {
   id: string;
@@ -68,6 +70,8 @@ export default function InventoryPage() {
   const [isScannerOpen, setIsScannerOpen] = useState(false);
   const [isBarcodeViewOpen, setIsBarcodeViewOpen] = useState(false);
   const { hardwareSettings } = useBarcodeHardwareSettings();
+  const staff = useStaffSession();
+  const canViewProfit = canViewProfitControls(staff?.role);
 
   // الصنف الحالي للعرض
   const [barcodeProduct, setBarcodeProduct] = useState<Product | null>(null);
@@ -1238,7 +1242,7 @@ export default function InventoryPage() {
 
                       <td className="p-4">
                         {p.sale_price}
-                        {profitPercentFromPrices(p.purchase_price, p.sale_price) !== "" && (
+                        {canViewProfit && profitPercentFromPrices(p.purchase_price, p.sale_price) !== "" && (
                           <div className="mt-1 text-[10px] font-black text-emerald-600">
                             مكسب {profitPercentFromPrices(p.purchase_price, p.sale_price)}%
                           </div>
@@ -1460,18 +1464,20 @@ export default function InventoryPage() {
                         className="mt-1 w-full rounded-2xl border border-slate-200 p-3 font-bold outline-none focus:border-slate-400"
                       />
                     </label>
-                    <label className="sm:col-span-2 flex items-center gap-2 rounded-2xl bg-emerald-50 px-4 py-3">
-                      <span className="text-xs font-black text-emerald-700">نسبة المكسب</span>
-                      <input
-                        type="number"
-                        step="any"
-                        value={editForm.profit_margin ?? ""}
-                        onChange={(e) => updateEditProfitMargin(e.target.value)}
-                        className="min-w-0 flex-1 bg-transparent text-center text-sm font-black text-emerald-700 outline-none"
-                        placeholder="%"
-                      />
-                      <span className="text-xs font-black text-emerald-700">%</span>
-                    </label>
+                    {canViewProfit && (
+                      <label className="sm:col-span-2 flex items-center gap-2 rounded-2xl bg-emerald-50 px-4 py-3">
+                        <span className="text-xs font-black text-emerald-700">نسبة المكسب</span>
+                        <input
+                          type="number"
+                          step="any"
+                          value={editForm.profit_margin ?? ""}
+                          onChange={(e) => updateEditProfitMargin(e.target.value)}
+                          className="min-w-0 flex-1 bg-transparent text-center text-sm font-black text-emerald-700 outline-none"
+                          placeholder="%"
+                        />
+                        <span className="text-xs font-black text-emerald-700">%</span>
+                      </label>
+                    )}
                   </div>
                 </div>
               </div>
@@ -1704,18 +1710,20 @@ export default function InventoryPage() {
                 className="h-11 w-full rounded-xl border border-slate-200 px-3 text-sm font-bold outline-none focus:border-slate-400"
               />
 
-              <label className="flex h-11 items-center gap-2 rounded-xl bg-emerald-50 px-3">
-                <span className="text-xs font-black text-emerald-700">نسبة المكسب</span>
-                <input
-                  type="number"
-                  step="any"
-                  value={newProduct.profit_margin}
-                  onChange={(e) => updateNewProfitMargin(e.target.value)}
-                  className="min-w-0 flex-1 bg-transparent text-center text-sm font-black text-emerald-700 outline-none"
-                  placeholder="%"
-                />
-                <span className="text-xs font-black text-emerald-700">%</span>
-              </label>
+              {canViewProfit && (
+                <label className="flex h-11 items-center gap-2 rounded-xl bg-emerald-50 px-3">
+                  <span className="text-xs font-black text-emerald-700">نسبة المكسب</span>
+                  <input
+                    type="number"
+                    step="any"
+                    value={newProduct.profit_margin}
+                    onChange={(e) => updateNewProfitMargin(e.target.value)}
+                    className="min-w-0 flex-1 bg-transparent text-center text-sm font-black text-emerald-700 outline-none"
+                    placeholder="%"
+                  />
+                  <span className="text-xs font-black text-emerald-700">%</span>
+                </label>
+              )}
 
               <button
                 onClick={handleAddProduct}

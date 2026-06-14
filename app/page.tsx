@@ -30,6 +30,8 @@ import {
 import { supabase } from "@/lib/supabase";
 import { normalizeProductCategory, productCategoryLabel } from "@/lib/product-category";
 import { CashShiftWidget } from "@/app/cash-shift-widget";
+import { useStaffSession } from "@/app/staff-session";
+import { canViewProfitControls } from "@/lib/permissions";
 
 type RangeDays = 14 | 30 | 90;
 type MetricKey = "sales" | "profit" | "collected";
@@ -169,6 +171,8 @@ function getTopProducts(txs: CustomerTx[]) {
 }
 
 export default function Dashboard() {
+  const staff = useStaffSession();
+  const canViewProfit = canViewProfitControls(staff?.role);
   const [rangeDays, setRangeDays] = useState<RangeDays>(30);
   const [metric, setMetric] = useState<MetricKey>("sales");
   const [loading, setLoading] = useState(true);
@@ -182,6 +186,12 @@ export default function Dashboard() {
     fetchDashboard();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rangeDays]);
+
+  useEffect(() => {
+    if (!canViewProfit && metric === "profit") {
+      setMetric("sales");
+    }
+  }, [canViewProfit, metric]);
 
   async function fetchDashboard() {
     setLoading(true);
@@ -257,9 +267,9 @@ export default function Dashboard() {
   const insights = useMemo(() => {
     const notes: Array<{ title: string; body: string; tone: "good" | "warn" | "risk" }> = [];
 
-    if (stats.margin > 0 && stats.margin < 12) {
+    if (canViewProfit && stats.margin > 0 && stats.margin < 12) {
       notes.push({ title: "هامش الربح منخفض", body: `الهامش ${stats.margin}% فقط. راجع أسعار البيع أو تكلفة الشراء.`, tone: "risk" });
-    } else if (stats.margin >= 25) {
+    } else if (canViewProfit && stats.margin >= 25) {
       notes.push({ title: "ربحية قوية", body: `هامش الربح ${stats.margin}% خلال آخر ${rangeDays} يوم. حافظ على نفس سياسة التسعير.`, tone: "good" });
     }
 
@@ -280,7 +290,7 @@ export default function Dashboard() {
     }
 
     return notes.slice(0, 4);
-  }, [rangeDays, stats]);
+  }, [canViewProfit, rangeDays, stats]);
 
   const metricLabel: Record<MetricKey, string> = {
     sales: "المبيعات",
@@ -341,7 +351,9 @@ export default function Dashboard() {
           <>
             <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
               <MetricCard title="مبيعات الفترة" value={`${money(stats.revenue)} ج`} hint={`${stats.invoices} فاتورة`} icon={ShoppingCart} tone="emerald" delta={stats.growth} />
-              <MetricCard title="صافي الربح" value={`${money(stats.profit)} ج`} hint={`هامش ${stats.margin}%`} icon={TrendingUp} tone="blue" />
+              {canViewProfit && (
+                <MetricCard title="صافي الربح" value={`${money(stats.profit)} ج`} hint={`هامش ${stats.margin}%`} icon={TrendingUp} tone="blue" />
+              )}
               <MetricCard title="التحصيل" value={`${money(stats.collected)} ج`} hint="مدفوعات العملاء" icon={WalletCards} tone="amber" />
               <MetricCard title="مخزون منخفض" value={`${stats.lowStock.length}`} hint="صنف يحتاج متابعة" icon={Boxes} tone="rose" />
             </section>
@@ -354,7 +366,7 @@ export default function Dashboard() {
                     <p className="text-xs font-bold text-slate-500">تغير المؤشرات خلال الفترة المختارة</p>
                   </div>
                   <div className="flex rounded-2xl bg-slate-100 p-1">
-                    {(["sales", "profit", "collected"] as MetricKey[]).map((key) => (
+                    {(["sales", ...(canViewProfit ? ["profit" as const] : []), "collected"] as MetricKey[]).map((key) => (
                       <button
                         key={key}
                         type="button"
