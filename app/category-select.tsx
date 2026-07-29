@@ -8,15 +8,16 @@ import {
   DEFAULT_CATEGORY_CONFIGS,
   DEFAULT_UNITS,
   CustomCategoryField,
-  hasSavedCategorySettings,
   hasUsableCategorySettings,
   isGeneratedAllActiveCategorySettings,
+  normalizeCategoryConfigs,
   readCategorySettings,
   saveCategorySettings,
   slugifyCategory,
 } from "@/lib/category-settings";
 import { ProductCategory, productCategoryLabel } from "@/lib/product-category";
 import { supabase } from "@/lib/supabase";
+import { enqueueOfflineJob, isOfflineError } from "@/lib/offline-sync";
 
 const ACTIVE_CATEGORIES_STORAGE_KEY = "activeProductCategories";
 
@@ -28,65 +29,50 @@ type CategorySelectProps = {
   variant?: "select" | "cards";
 };
 
-function settingsWithLegacyActiveFlags() {
-  const settings = readCategorySettings();
-
-  if (typeof window === "undefined") return settings;
-
-  const legacy = window.localStorage.getItem(ACTIVE_CATEGORIES_STORAGE_KEY);
-  if (!legacy) return settings;
-
-  try {
-    const enabled = JSON.parse(legacy) as string[];
-    if (!Array.isArray(enabled) || enabled.length === 0) return settings;
-    const defaultKeys = new Set(DEFAULT_CATEGORY_CONFIGS.map((category) => category.key));
-    const enabledDefaultKeys = enabled.filter((key) => defaultKeys.has(key));
-    if (enabledDefaultKeys.length >= DEFAULT_CATEGORY_CONFIGS.length) return settings;
-    return settings.map((category) => ({ ...category, active: enabled.includes(category.key) }));
-  } catch {
-    return settings;
-  }
-}
-
 function useCategorySettings() {
   const [settings, setSettings] = useState<CategoryConfig[]>(DEFAULT_CATEGORY_CONFIGS);
 
   useEffect(() => {
-    const refresh = () => setSettings(settingsWithLegacyActiveFlags());
-    refresh();
+    const refresh = () => setSettings(readCategorySettings());
+
     async function loadRemoteSettings() {
       try {
-        const { data } = await supabase
+        const { data, error } = await supabase
           .from("business_settings")
           .select("category_settings")
           .eq("id", "main")
           .maybeSingle();
+        if (error) throw error;
+
         const remoteSettings = (data as { category_settings?: unknown } | null)?.category_settings;
         if (hasUsableCategorySettings(remoteSettings) && !isGeneratedAllActiveCategorySettings(remoteSettings)) {
-          saveCategorySettings(remoteSettings as CategoryConfig[]);
-          setSettings(readCategorySettings());
+          const normalized = normalizeCategoryConfigs(remoteSettings);
+          saveCategorySettings(normalized);
+          setSettings(normalized);
           return;
         }
 
-        if (hasSavedCategorySettings()) {
-          const localSettings = settingsWithLegacyActiveFlags();
-          await supabase
-            .from("business_settings")
-            .upsert(
-              {
-                id: "main",
-                category_settings: localSettings,
-                updated_at: new Date().toISOString(),
-              },
-              { onConflict: "id" },
-            )
-            .select("id")
-            .single();
-        }
+        const defaultSettings = normalizeCategoryConfigs(DEFAULT_CATEGORY_CONFIGS);
+        saveCategorySettings(defaultSettings);
+        setSettings(defaultSettings);
+
+        await supabase
+          .from("business_settings")
+          .upsert(
+            {
+              id: "main",
+              category_settings: defaultSettings,
+              updated_at: new Date().toISOString(),
+            },
+            { onConflict: "id" },
+          )
+          .select("id")
+          .single();
       } catch {
-        // Local settings remain available when the database is not upgraded yet.
+        setSettings(readCategorySettings());
       }
     }
+
     void loadRemoteSettings();
     window.addEventListener(CATEGORY_SETTINGS_EVENT, refresh);
     window.addEventListener("storage", refresh);
@@ -97,6 +83,40 @@ function useCategorySettings() {
   }, []);
 
   return settings;
+}
+
+async function saveCategorySettingsToDatabase(configs: CategoryConfig[]) {
+  const normalized = normalizeCategoryConfigs(configs);
+  const payload = {
+    id: "main",
+    category_settings: normalized,
+    updated_at: new Date().toISOString(),
+  };
+
+  try {
+    if (!navigator.onLine) throw new Error("offline");
+    const { error } = await supabase
+      .from("business_settings")
+      .upsert(payload, { onConflict: "id" })
+      .select("id")
+      .single();
+    if (error) throw error;
+  } catch (saveError) {
+    if (!isOfflineError(saveError)) throw saveError;
+
+    await enqueueOfflineJob("حفظ إعدادات الأقسام", [
+      {
+        table: "business_settings",
+        action: "upsert",
+        values: payload,
+        onConflict: "id",
+      },
+    ]);
+  }
+
+  saveCategorySettings(normalized);
+  if (typeof window !== "undefined") window.localStorage.removeItem(ACTIVE_CATEGORIES_STORAGE_KEY);
+  return normalized;
 }
 
 export function useEnabledCategories() {
@@ -223,6 +243,9 @@ export function CategorySettingsPanel() {
   const liveSettings = useCategorySettings();
   const [draft, setDraft] = useState<CategoryConfig[]>(liveSettings);
   const [selectedKey, setSelectedKey] = useState("general");
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const selected = draft.find((category) => category.key === selectedKey) || draft[0];
 
   useEffect(() => {
@@ -238,6 +261,10 @@ export function CategorySettingsPanel() {
   };
 
   const save = async () => {
+    setSaving(true);
+    setMessage(null);
+    setError(null);
+
     const normalized = draft.map((category) => ({
       ...category,
       key: slugifyCategory(category.key || category.label),
@@ -246,25 +273,16 @@ export function CategorySettingsPanel() {
       unitConversions: category.unitConversions.filter((conversion) => conversion.fromUnit && conversion.toUnit && Number(conversion.factor) > 0),
       fields: category.fields.filter((field) => field.label.trim()),
     }));
-    saveCategorySettings(normalized);
-    window.localStorage.removeItem(ACTIVE_CATEGORIES_STORAGE_KEY);
-    setDraft(readCategorySettings());
 
     try {
-      await supabase
-        .from("business_settings")
-        .upsert(
-          {
-            id: "main",
-            category_settings: normalized,
-            updated_at: new Date().toISOString(),
-          },
-          { onConflict: "id" },
-        )
-        .select("id")
-        .single();
-    } catch {
-      // The local copy is already saved; remote sync waits until the database is upgraded.
+      const saved = await saveCategorySettingsToDatabase(normalized);
+      setDraft(saved);
+      setMessage("تم حفظ إعدادات الأقسام في قاعدة البيانات.");
+    } catch (saveError) {
+      const saveMessage = saveError instanceof Error ? saveError.message : "تعذر حفظ إعدادات الأقسام.";
+      setError(`${saveMessage} تأكد من تشغيل ملف ترقية Supabase وصلاحيات جدول business_settings.`);
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -304,13 +322,20 @@ export function CategorySettingsPanel() {
           <button
             type="button"
             onClick={save}
-            className="inline-flex h-11 items-center gap-2 rounded-2xl bg-slate-950 px-4 text-xs font-black text-white hover:bg-slate-800"
+            disabled={saving}
+            className="inline-flex h-11 items-center gap-2 rounded-2xl bg-slate-950 px-4 text-xs font-black text-white hover:bg-slate-800 disabled:opacity-60"
           >
             <Save className="h-4 w-4" />
-            حفظ الإعدادات
+            {saving ? "جاري الحفظ..." : "حفظ الإعدادات"}
           </button>
         </div>
       </div>
+
+      {(message || error) && (
+        <div className={`mb-4 rounded-2xl p-3 text-xs font-black ${error ? "bg-rose-50 text-rose-700" : "bg-emerald-50 text-emerald-700"}`}>
+          {error || message}
+        </div>
+      )}
 
       <div className="grid gap-4 xl:grid-cols-[320px_1fr]">
         <div className="max-h-[620px] overflow-auto rounded-2xl border border-slate-200 bg-slate-50 p-3">

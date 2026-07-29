@@ -12,6 +12,7 @@ import { useStaffSession } from "@/app/staff-session";
 import { formatPriceInput, priceFromPurchase, profitPercentFromPrices, purchaseFromPrice } from "@/lib/pricing";
 import { productUnitConversions, unitConversionsForBaseUnit, UnitConversion } from "@/lib/category-settings";
 import { canViewProfitControls } from "@/lib/permissions";
+import { enqueueOfflineJob, isOfflineError } from "@/lib/offline-sync";
 
 type Product = {
   id: string;
@@ -502,12 +503,20 @@ export default function InventoryPage() {
   // =========================
 
   const startEdit = async (product: Product) => {
-    const { data } = await supabase
-      .from("products")
-      .select("*")
-      .eq("id", product.id)
-      .maybeSingle();
-    const freshProduct = ((data as Product | null) || product) as Product;
+    let freshProduct = product;
+
+    if (navigator.onLine) {
+      try {
+        const { data, error } = await supabase
+          .from("products")
+          .select("*")
+          .eq("id", product.id)
+          .maybeSingle();
+        if (!error && data) freshProduct = data as Product;
+      } catch {
+        // The product already shown in the inventory remains editable offline.
+      }
+    }
 
     setEditingId(freshProduct.id);
     const freshAttributes = normalizedAttributes(freshProduct.product_attributes);
@@ -630,14 +639,16 @@ export default function InventoryPage() {
       product_attributes: savedProductAttributes,
     };
 
-    const { data: savedProduct, error } = await supabase
-      .from("products")
-      .update(updatePayload)
-      .eq("id", editingId)
-      .select("*")
-      .maybeSingle();
+    try {
+      if (!navigator.onLine) throw new Error("offline");
+      const { data: savedProduct, error } = await supabase
+        .from("products")
+        .update(updatePayload)
+        .eq("id", editingId)
+        .select("*")
+        .maybeSingle();
 
-    if (!error) {
+      if (error) throw error;
 
       alert("تم التعديل بنجاح ✅");
 
@@ -656,9 +667,31 @@ export default function InventoryPage() {
 
       await fetchProducts();
 
-    } else {
+    } catch (saveError) {
+      if (!isOfflineError(saveError) || !editingId) {
+        alert(saveError instanceof Error ? saveError.message : "تعذر تعديل الصنف");
+        return;
+      }
 
-      alert(error.message);
+      await enqueueOfflineJob(`تعديل صنف: ${String(updatePayload.name || "")}`, [
+        {
+          table: "products",
+          action: "update",
+          values: updatePayload,
+          match: { id: editingId },
+        },
+      ]);
+
+      setProducts((current) =>
+        current.map((product) =>
+          product.id === editingId
+            ? ({ ...product, ...updatePayload, product_attributes: savedProductAttributes } as Product)
+            : product,
+        ),
+      );
+      setEditingId(null);
+      setEditUnitConversions(null);
+      alert("النت غير متصل. تم حفظ تعديل الصنف محليًا وسيتم مزامنته عند رجوع الاتصال.");
     }
   };
 
@@ -693,35 +726,37 @@ export default function InventoryPage() {
     const reorderPoint = Number(newProduct.reorder_point) || 5;
     const reorderTarget = Math.max(Number(newProduct.reorder_target) || 10, reorderPoint);
 
-    const { error } = await supabase
-      .from("products")
-      .insert([
-        {
-          name: newProduct.name,
-          unit: newProduct.unit,
-          purchase_price:
-            Number(newProduct.purchase_price) || 0,
-          sale_price:
-            Number(newProduct.sale_price) || 0,
-          stock_quantity:
-            Number(newProduct.stock_quantity) || 0,
-          reorder_point: reorderPoint,
-          reorder_target: reorderTarget,
-          supplier_id: newProduct.supplier_id || null,
-          barcode: barcodeValue,
-          product_category: normalizeProductCategory(newProduct.product_category),
-          product_attributes: cleanProductAttributes(
-            newProduct.product_category,
-            attributesWithDefaultConversions(
-              newProduct.product_attributes,
+    try {
+      if (!navigator.onLine) throw new Error("offline");
+      const { error } = await supabase
+        .from("products")
+        .insert([
+          {
+            name: newProduct.name,
+            unit: newProduct.unit,
+            purchase_price:
+              Number(newProduct.purchase_price) || 0,
+            sale_price:
+              Number(newProduct.sale_price) || 0,
+            stock_quantity:
+              Number(newProduct.stock_quantity) || 0,
+            reorder_point: reorderPoint,
+            reorder_target: reorderTarget,
+            supplier_id: newProduct.supplier_id || null,
+            barcode: barcodeValue,
+            product_category: normalizeProductCategory(newProduct.product_category),
+            product_attributes: cleanProductAttributes(
               newProduct.product_category,
-              newProduct.unit,
+              attributesWithDefaultConversions(
+                newProduct.product_attributes,
+                newProduct.product_category,
+                newProduct.unit,
+              ),
             ),
-          ),
-        },
-      ]);
+          },
+        ]);
 
-    if (!error) {
+      if (error) throw error;
 
       alert("تمت الإضافة بنجاح ✅");
 
@@ -745,9 +780,60 @@ export default function InventoryPage() {
 
       fetchProducts();
 
-    } else {
+    } catch (saveError) {
+      if (!isOfflineError(saveError)) {
+        alert(saveError instanceof Error ? saveError.message : "تعذر إضافة الصنف");
+        return;
+      }
 
-      alert(error.message);
+      const offlineProduct = {
+        id: crypto.randomUUID(),
+        name: newProduct.name,
+        unit: newProduct.unit,
+        purchase_price: Number(newProduct.purchase_price) || 0,
+        sale_price: Number(newProduct.sale_price) || 0,
+        stock_quantity: Number(newProduct.stock_quantity) || 0,
+        reorder_point: reorderPoint,
+        reorder_target: reorderTarget,
+        supplier_id: newProduct.supplier_id || null,
+        barcode: barcodeValue,
+        product_category: normalizeProductCategory(newProduct.product_category),
+        product_attributes: cleanProductAttributes(
+          newProduct.product_category,
+          attributesWithDefaultConversions(
+            newProduct.product_attributes,
+            newProduct.product_category,
+            newProduct.unit,
+          ),
+        ),
+      };
+
+      await enqueueOfflineJob(`إضافة صنف: ${offlineProduct.name}`, [
+        {
+          table: "products",
+          action: "insert",
+          values: [offlineProduct],
+        },
+      ]);
+
+      setProducts((current) => [offlineProduct as Product, ...current]);
+      setShowNewUnitConversions(false);
+      setIsModalOpen(false);
+      setNewProduct({
+        name: "",
+        unit: "قطعة",
+        purchase_price: "",
+        sale_price: "",
+        profit_margin: "25",
+        stock_quantity: "",
+        reorder_point: "5",
+        reorder_target: "10",
+        supplier_id: "",
+        barcode: "",
+        product_category: activeCategory,
+        product_attributes: {},
+      });
+      alert("النت غير متصل. تم حفظ الصنف محليًا وسيتم مزامنته عند رجوع الاتصال.");
     }
   };
 

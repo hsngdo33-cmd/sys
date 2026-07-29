@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import {
   BarChart3,
@@ -20,7 +20,8 @@ import {
   UsersRound,
   WalletCards,
 } from "lucide-react";
-import { clearStaffSession, useStaffSession } from "@/app/staff-session";
+import { clearStaffSession, useStaffSessionState } from "@/app/staff-session";
+import { OfflineSyncStatus } from "@/app/offline-sync-status";
 import { supabase } from "@/lib/supabase";
 import {
   hasPermissionWithConfig,
@@ -62,15 +63,22 @@ function getPageTitle(pathname: string) {
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const router = useRouter();
   const pageTitle = getPageTitle(pathname);
-  const staff = useStaffSession();
+  const { staff, ready: sessionReady } = useStaffSessionState();
   const [permissionConfig, setPermissionConfig] = useState(rolePermissions);
   const isLoginPage = pathname.startsWith("/login");
   const visibleNavItems = staff ? navItems.filter((item) => hasPermissionWithConfig(staff.role, item.permission, permissionConfig)) : navItems;
   const visibleQuickLinks = staff ? quickLinks.filter((item) => hasPermissionWithConfig(staff.role, item.permission, permissionConfig)) : quickLinks;
   const requiredPermission = permissionForPath(pathname);
-  const isAllowed = !staff || isLoginPage || hasPermissionWithConfig(staff.role, requiredPermission, permissionConfig);
+  const isAllowed = isLoginPage || Boolean(staff && hasPermissionWithConfig(staff.role, requiredPermission, permissionConfig));
   const isCleanCustomerPage = pathname === "/customer";
+
+  useEffect(() => {
+    if (sessionReady && !staff && !isLoginPage) {
+      router.replace("/login");
+    }
+  }, [isLoginPage, router, sessionReady, staff]);
 
   useEffect(() => {
     const refreshPermissions = () => setPermissionConfig(readRolePermissions());
@@ -110,6 +118,25 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   function logout() {
     clearStaffSession();
     window.location.href = "/login";
+  }
+
+  if (!sessionReady || (!staff && !isLoginPage)) {
+    return (
+      <body className="flex min-h-screen items-center justify-center bg-slate-950 p-6 font-sans">
+        <div className="text-center text-white">
+          <div className="mx-auto h-10 w-10 animate-spin rounded-full border-4 border-white/20 border-t-emerald-400" />
+          <p className="mt-4 text-sm font-black">جاري التحقق من تسجيل الدخول...</p>
+        </div>
+      </body>
+    );
+  }
+
+  if (isLoginPage) {
+    return (
+      <body className="min-h-screen overflow-x-hidden bg-[#f4f7fb] p-4 font-sans text-slate-900 sm:p-8">
+        {children}
+      </body>
+    );
   }
 
   if (isCleanCustomerPage) {
@@ -160,6 +187,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             </section>
           </div>
         )}
+        <OfflineSyncStatus />
       </body>
     );
   }
@@ -354,6 +382,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           })}
         </div>
       </nav>
+      <OfflineSyncStatus />
     </body>
   );
 }

@@ -141,7 +141,7 @@ export default function StaffLoginPage() {
             </div>
           ) : staffRows.length === 0 ? (
             <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5 text-sm font-bold leading-7 text-amber-900">
-              لا يوجد موظفين نشطين. افتح الإعدادات واضف موظف وكود دخول، أو استخدم النظام بدون تسجيل دخول مؤقتًا.
+              لا يوجد موظفين نشطين. شغّل ترقية الموظفين في Supabase أو تواصل مع مسؤول النظام لإضافة موظف وكود دخول.
             </div>
           ) : (
             <div className="space-y-4">

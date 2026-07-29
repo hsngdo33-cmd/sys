@@ -12,6 +12,11 @@ export type StaffSession = {
   role: StaffRole;
 };
 
+export type StaffSessionState = {
+  staff: StaffSession | null;
+  ready: boolean;
+};
+
 function readSession(): StaffSession | null {
   if (typeof window === "undefined") return null;
 
@@ -41,15 +46,24 @@ export function clearStaffSession() {
 }
 
 export function useStaffSession() {
-  const [staff, setStaff] = useState<StaffSession | null>(null);
+  return useStaffSessionState().staff;
+}
+
+export function useStaffSessionState() {
+  const [state, setState] = useState<StaffSessionState>({
+    staff: null,
+    ready: false,
+  });
 
   useEffect(() => {
-    setStaff(readSession());
-
     function refresh() {
-      setStaff(readSession());
+      setState({
+        staff: readSession(),
+        ready: true,
+      });
     }
 
+    refresh();
     window.addEventListener(STAFF_SESSION_EVENT, refresh);
     window.addEventListener("storage", refresh);
     return () => {
@@ -58,5 +72,5 @@ export function useStaffSession() {
     };
   }, []);
 
-  return staff;
+  return state;
 }
