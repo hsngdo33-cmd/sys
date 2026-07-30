@@ -87,6 +87,21 @@ export default function SupplierReturnInvoicePage() {
     }
   }, [id, loadData]);
 
+  const supplierCategories = useMemo(() => {
+    const purchasedCategoryKeys = new Set(
+      transactions
+        .filter((tx) => isSupplierInvoice(tx.type))
+        .flatMap((invoice) => invoice.items || [])
+        .map((item: any) => normalizeProductCategory(item.product_category)),
+    );
+
+    return PRODUCT_CATEGORIES.filter((category) => purchasedCategoryKeys.has(category.key));
+  }, [transactions]);
+
+  const selectedCategory = supplierCategories.some((category) => category.key === activeCategory)
+    ? activeCategory
+    : supplierCategories[0]?.key || activeCategory;
+
   const purchasedItems = useMemo<PurchaseItem[]>(() => {
     const returns = transactions.filter((tx) => isSupplierReturn(tx.type));
 
@@ -126,8 +141,8 @@ export default function SupplierReturnInvoicePage() {
         }),
       )
       .filter((item) => item.availableQty > 0)
-      .filter((item) => normalizeProductCategory(item.product_category) === activeCategory);
-  }, [transactions, stockById, activeCategory]);
+      .filter((item) => normalizeProductCategory(item.product_category) === selectedCategory);
+  }, [transactions, stockById, selectedCategory]);
 
   const filteredItems = useMemo(() => {
     const term = searchTerm.trim().toLowerCase();
@@ -270,7 +285,7 @@ export default function SupplierReturnInvoicePage() {
             رجوع
           </Link>
           <div>
-            <h1 className="text-lg font-black">فاتورة مرتجع مورد {productCategoryLabel(activeCategory)}: {supplier?.name}</h1>
+            <h1 className="text-lg font-black">فاتورة مرتجع مورد {productCategoryLabel(selectedCategory)}: {supplier?.name}</h1>
             <p className="text-[10px] text-slate-400 font-bold">
               {new Date().toLocaleDateString("ar-EG", { weekday: "long", day: "numeric", month: "long" })}
             </p>
@@ -313,7 +328,7 @@ export default function SupplierReturnInvoicePage() {
           <div className="p-4 border-b border-slate-100 space-y-3">
             <h3 className="font-black text-slate-400 text-[10px] uppercase tracking-widest">اختيار الأصناف المرتجعة للمورد</h3>
             <div className="grid grid-cols-2 gap-2">
-              {PRODUCT_CATEGORIES.map((category) => (
+              {supplierCategories.map((category) => (
                 <button
                   key={category.key}
                   type="button"
@@ -323,7 +338,7 @@ export default function SupplierReturnInvoicePage() {
                     setSearchTerm("");
                   }}
                   className={`rounded-xl px-3 py-2 text-xs font-black transition-all ${
-                    activeCategory === category.key
+                    selectedCategory === category.key
                       ? "bg-slate-900 text-white"
                       : "bg-slate-100 text-slate-600 hover:bg-slate-200"
                   }`}
@@ -513,7 +528,7 @@ export default function SupplierReturnInvoicePage() {
         <div className="print-card">
           <div className="print-header">
             <div>
-              <p className="print-eyebrow">فاتورة مرتجع مورد {productCategoryLabel(activeCategory)}</p>
+              <p className="print-eyebrow">فاتورة مرتجع مورد {productCategoryLabel(selectedCategory)}</p>
               <h1>منظومة إدارة المحل التجاري</h1>
               <p>إدارة الموردين والأصناف</p>
             </div>
