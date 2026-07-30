@@ -80,6 +80,7 @@ export default function InventoryPage() {
 
   // تعديل
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<Partial<Product>>({});
   const [editUnitConversions, setEditUnitConversions] = useState<UnitConversion[] | null>(null);
   const [showNewUnitConversions, setShowNewUnitConversions] = useState(false);
@@ -531,6 +532,57 @@ export default function InventoryPage() {
         ...(freshConversions.length > 0 ? { unit_conversions: freshConversions } : {}),
       },
     });
+  };
+
+  const deleteProduct = async (product: Product) => {
+    if (!navigator.onLine) {
+      alert("حذف الصنف يحتاج اتصال بالإنترنت للتأكد من عدم وجود حركات مرتبطة به.");
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `هل تريد حذف الصنف "${product.name}" نهائيًا؟\nلا يمكن التراجع عن الحذف.`,
+    );
+    if (!confirmed) return;
+
+    setDeletingId(product.id);
+
+    try {
+      const { data: deletedProduct, error } = await supabase
+        .from("products")
+        .delete()
+        .eq("id", product.id)
+        .select("id")
+        .maybeSingle();
+      if (error) throw error;
+      if (!deletedProduct) {
+        throw new Error("لم يتم حذف الصنف. تأكد من صلاحيات الحذف في قاعدة البيانات.");
+      }
+
+      setProducts((current) => current.filter((item) => item.id !== product.id));
+      if (barcodeProduct?.id === product.id) {
+        setBarcodeProduct(null);
+        setIsBarcodeViewOpen(false);
+      }
+      alert("تم حذف الصنف بنجاح.");
+    } catch (deleteError) {
+      const code =
+        deleteError && typeof deleteError === "object" && "code" in deleteError
+          ? String((deleteError as { code?: unknown }).code || "")
+          : "";
+      const message =
+        deleteError && typeof deleteError === "object" && "message" in deleteError
+          ? String((deleteError as { message?: unknown }).message || "")
+          : "";
+
+      if (code === "23503" || message.toLowerCase().includes("foreign key")) {
+        alert("لا يمكن حذف الصنف لأن له حركات مخزون مرتبطة. احتفظ به للحفاظ على سجل العمليات.");
+      } else {
+        alert(message || "تعذر حذف الصنف. حاول مرة أخرى.");
+      }
+    } finally {
+      setDeletingId(null);
+    }
   };
 
   const updateEditPurchasePrice = (value: string) => {
@@ -1350,15 +1402,25 @@ export default function InventoryPage() {
 
                       <td className="p-4">
 
-                        <div className="flex gap-2 justify-center">
+                        <div className="flex flex-wrap justify-center gap-3">
 
                           <button
                             onClick={() =>
                               startEdit(p)
                             }
-                            className="text-blue-600 font-bold"
+                            disabled={deletingId === p.id}
+                            className="font-bold text-blue-600 disabled:cursor-not-allowed disabled:opacity-50"
                           >
                             ✏️ تعديل
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => void deleteProduct(p)}
+                            disabled={deletingId !== null}
+                            className="font-bold text-rose-600 hover:text-rose-800 disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            {deletingId === p.id ? "جاري الحذف..." : "🗑️ حذف"}
                           </button>
 
                         </div>

@@ -18,6 +18,8 @@ type PurchaseItem = {
   id: string;
   name: string;
   unit?: string;
+  invoiceUnit: string;
+  unitFactor: number;
   qty: number;
   price: number;
   source_invoice_id: string;
@@ -95,6 +97,7 @@ export default function SupplierReturnInvoicePage() {
           const sourceInvoiceId = String(invoice.id || "");
           const itemId = String(item.id || "");
           const purchasedQty = Number(item.qty || 0);
+          const unitFactor = Math.max(Number(item.unit_factor || 1), 0.001);
           const returnedQty = returns
             .flatMap((tx) => tx.items || [])
             .filter((returned: any) => String(returned.source_invoice_id || "") === sourceInvoiceId)
@@ -102,12 +105,15 @@ export default function SupplierReturnInvoicePage() {
             .reduce((sum: number, returned: any) => sum + Number(returned.qty || 0), 0);
           const invoiceAvailableQty = Math.max(purchasedQty - returnedQty, 0);
           const stockQty = Number(stockById[itemId] || 0);
-          const availableQty = Math.max(Math.min(invoiceAvailableQty, stockQty), 0);
+          const availableFromStock = stockQty / unitFactor;
+          const availableQty = Math.max(Math.min(invoiceAvailableQty, availableFromStock), 0);
 
           return {
             id: itemId,
             name: item.name || "صنف بدون اسم",
             unit: item.unit || "",
+            invoiceUnit: item.invoice_unit || item.unit || "",
+            unitFactor,
             qty: purchasedQty,
             price: Number(item.net_price ?? item.price ?? 0),
             product_category: normalizeProductCategory(item.product_category),
@@ -169,11 +175,7 @@ export default function SupplierReturnInvoicePage() {
       .filter((item) => item.qty > 0)
       .map((item) => ({
         id: item.id,
-        name: item.name,
-        unit: item.unit,
         qty: item.qty,
-        price: Number(item.price || 0),
-        product_category: normalizeProductCategory(item.product_category),
         source_invoice_id: item.source_invoice_id,
       }));
 
@@ -184,72 +186,69 @@ export default function SupplierReturnInvoicePage() {
 
     setIsSaving(true);
     try {
-      const { data: currentSupplier, error: readError } = await supabase
-        .from("suppliers")
-        .select("balance")
-        .eq("id", id)
-        .single();
-      if (readError) throw readError;
-
       const description = note.trim()
         ? `${note.trim()} - فاتورة مرتجع مورد${discountRate > 0 ? ` - خصم ${discountRate}%` : ""}`
         : `فاتورة مرتجع مورد${discountRate > 0 ? ` - خصم ${discountRate}%` : ""}`;
 
-      const { data: returnInvoice, error: insertError } = await supabase.from("transactions").insert([{
-        supplier_id: id,
-        amount: total,
-        type: "supplier_return",
-        description,
-        items: itemsToSave,
-      }]).select("id").single();
-      if (insertError) throw insertError;
-
-      for (const item of itemsToSave) {
-        await supabase.rpc("decrement_stock", { row_id: String(item.id), amount: Number(item.qty) });
-      }
-
-      await supabase.from("inventory_movements").insert(
-        itemsToSave.map((item) => {
-          const before = Number(stockById[String(item.id)] || 0);
-          const quantity = -Math.abs(Number(item.qty || 0));
-          return {
-            product_id: item.id,
-            movement_type: "supplier_return",
-            quantity,
-            quantity_before: before,
-            quantity_after: before + quantity,
-            unit_cost: Number(item.price || 0),
-            source_type: "supplier_return",
-            source_id: returnInvoice?.id?.toString(),
-            note: `مرتجع مورد - ${supplier.name}`,
-            created_by: operatorName,
-          };
-        }),
+      const { data: returnResult, error: returnError } = await supabase.rpc(
+        "record_supplier_return",
+        {
+          p_supplier_id: String(id),
+          p_items: itemsToSave,
+          p_discount_percent: discountRate,
+          p_description: description,
+          p_created_by: operatorName,
+        },
       );
+      if (returnError) throw returnError;
+
+      const savedReturn = (
+        Array.isArray(returnResult) ? returnResult[0] : returnResult
+      ) as {
+        transaction_id?: string | number;
+        total?: string | number;
+        supplier_balance?: string | number;
+      } | null;
+      if (!savedReturn?.transaction_id) {
+        throw new Error("لم ترجع قاعدة البيانات رقم فاتورة المرتجع.");
+      }
+      const savedTotal = Number(savedReturn.total ?? total);
+      const savedBalance = Number(savedReturn.supplier_balance ?? supplier.balance ?? 0);
+      setSupplier((current) => current ? { ...current, balance: savedBalance } : current);
 
       await recordStaffActivity({
         staff,
         action: "supplier_return_saved",
         entityType: "supplier_return",
-        entityId: returnInvoice?.id,
-        note: `مرتجع مورد - ${supplier.name} - ${total.toLocaleString("ar-EG")} ج`,
+        entityId: savedReturn.transaction_id,
+        note: `مرتجع مورد - ${supplier.name} - ${savedTotal.toLocaleString("ar-EG")} ج`,
       });
 
-      const { error: balanceError } = await supabase
-        .from("suppliers")
-        .update({ balance: Number(currentSupplier?.balance || 0) - total })
-        .eq("id", id);
-      if (balanceError) throw balanceError;
-
       if (printAfterSave) {
-        window.print();
-        window.setTimeout(() => router.push(`/suppliers/${id}/history`), 300);
+        window.setTimeout(() => {
+          window.print();
+          router.push(`/suppliers/${id}/history`);
+        }, 150);
       } else {
         router.push(`/suppliers/${id}/history`);
       }
     } catch (error) {
       console.error(error);
-      alert("حدث خطأ أثناء حفظ فاتورة مرتجع المورد");
+      const message =
+        error && typeof error === "object" && "message" in error
+          ? String((error as { message?: unknown }).message || "")
+          : "";
+      if (message.includes("record_supplier_return")) {
+        alert("عملية مرتجع المورد تحتاج تحديث قاعدة البيانات. شغّل ملف supabase-supplier-return-transaction.sql أولًا.");
+      } else if (message.includes("remaining invoice quantity")) {
+        alert("كمية المرتجع أكبر من الكمية المتبقية في فاتورة التوريد.");
+      } else if (message.includes("Stock is not enough")) {
+        alert("المخزون الحالي لا يكفي لتنفيذ كمية المرتجع المطلوبة.");
+      } else if (message.includes("Original supplier invoice item not found")) {
+        alert("تعذر ربط الصنف بفاتورة التوريد الأصلية. أعد تحميل الصفحة وحاول مرة أخرى.");
+      } else {
+        alert(message || "حدث خطأ أثناء حفظ فاتورة مرتجع المورد");
+      }
     } finally {
       setIsSaving(false);
     }
@@ -286,6 +285,28 @@ export default function SupplierReturnInvoicePage() {
           </div>
         </div>
       </header>
+
+      <section className="mx-auto mt-4 grid max-w-[1500px] gap-2 px-4 sm:grid-cols-2 xl:grid-cols-4">
+        {[
+          ["1", "اختيار الفاتورة", "اختار الصنف من فاتورة التوريد الأصلية"],
+          ["2", "تحديد الكمية", "الكمية تكون بوحدة الشراء المسجلة"],
+          ["3", "مراجعة الحساب", "راجع الخصم وصافي المرتجع"],
+          ["4", "الحفظ والاعتماد", "المخزون والرصيد والسجل يتحدثوا معًا"],
+        ].map(([step, title, body]) => (
+          <div
+            key={step}
+            className="flex items-start gap-3 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm"
+          >
+            <span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-slate-900 text-xs font-black text-white">
+              {step}
+            </span>
+            <div>
+              <p className="text-xs font-black text-slate-900">{title}</p>
+              <p className="mt-1 text-[10px] font-bold leading-5 text-slate-400">{body}</p>
+            </div>
+          </div>
+        ))}
+      </section>
 
       <main className="app-invoice-layout max-w-[1500px] mx-auto p-4 mt-3">
         <aside className="app-invoice-sidebar bg-white border border-slate-200 shadow-sm flex flex-col">
@@ -343,8 +364,12 @@ export default function SupplierReturnInvoicePage() {
                       </p>
                     </div>
                     <div className="text-left">
-                      <p className="text-xs font-black text-amber-700">متاح {item.availableQty}</p>
-                      <p className="text-[10px] font-bold text-slate-400">مخزن {item.stockQty}</p>
+                      <p className="text-xs font-black text-amber-700">
+                        متاح {item.availableQty.toLocaleString("ar-EG")} {item.invoiceUnit}
+                      </p>
+                      <p className="text-[10px] font-bold text-slate-400">
+                        المخزن {item.stockQty.toLocaleString("ar-EG")} {item.unit}
+                      </p>
                       <p className="text-[10px] font-bold text-slate-400">{item.price.toLocaleString("ar-EG")} ج</p>
                     </div>
                   </div>
@@ -382,8 +407,15 @@ export default function SupplierReturnInvoicePage() {
                         <td className="p-4">
                           <p className="font-black text-sm">{item.name}</p>
                           <p className="text-[9px] text-slate-400 font-bold">فاتورة #{item.source_invoice_id.slice(0, 8)}</p>
+                          {item.unitFactor !== 1 && (
+                            <p className="mt-1 text-[9px] font-bold text-indigo-500">
+                              1 {item.invoiceUnit} = {item.unitFactor.toLocaleString("ar-EG")} {item.unit}
+                            </p>
+                          )}
                         </td>
-                        <td className="p-4 text-center font-black text-amber-700">{item.availableQty}</td>
+                        <td className="p-4 text-center font-black text-amber-700">
+                          {item.availableQty.toLocaleString("ar-EG")} {item.invoiceUnit}
+                        </td>
                         <td className="p-4 text-center">
                           <input
                             type="number"
@@ -505,7 +537,7 @@ export default function SupplierReturnInvoicePage() {
               {normalizedCart.filter((item) => item.qty > 0).map((item) => (
                 <tr key={`${item.source_invoice_id}-${item.id}`}>
                   <td>{item.name}</td>
-                  <td>{item.unit || "-"}</td>
+                  <td>{item.invoiceUnit || item.unit || "-"}</td>
                   <td>{item.qty.toLocaleString("ar-EG")}</td>
                   <td>{item.price.toLocaleString("ar-EG")} ج</td>
                   <td>{(item.qty * item.price).toLocaleString("ar-EG")} ج</td>
