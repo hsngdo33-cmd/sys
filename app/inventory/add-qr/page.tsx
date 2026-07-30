@@ -45,7 +45,7 @@ export default function AddProductPage() {
     stock_quantity: "",
     purchase_price: "",
     sale_price:     "",
-    profit_margin: "25",
+    profit_margin: "14",
      product_category: "general" as ProductCategory,
     product_attributes: {} as ProductAttributes,
   });

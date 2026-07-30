@@ -56,7 +56,7 @@ export default function SupplierInvoicePage() {
   const [note, setNote]             = useState("");
   const [showAddModal, setShowAddModal] = useState(false);
   const [showNewProductUnitConversions, setShowNewProductUnitConversions] = useState(false);
-  const [newProd, setNewProd]       = useState({ name: "", unit: "قطعة", purchase_price: "", sale_price: "", profit_margin: "25", product_category: "general" as ProductCategory, product_attributes: {} as ProductAttributes });
+  const [newProd, setNewProd]       = useState({ name: "", unit: "قطعة", purchase_price: "", sale_price: "", profit_margin: "14", product_category: "general" as ProductCategory, product_attributes: {} as ProductAttributes });
   const newProdUnits = useCategoryUnits(newProd.product_category);
   const [addingSaving, setAddingSaving] = useState(false);
   const [newProdBarcode, setNewProdBarcode] = useState("");
@@ -456,7 +456,7 @@ export default function SupplierInvoicePage() {
       setShowNewProductUnitConversions(false);
       setShowAddModal(false);
       setNewProdBarcode("");
-      setNewProd({ name: "", unit: "قطعة", purchase_price: "", sale_price: "", profit_margin: "25", product_category: activeCategory, product_attributes: {} });
+      setNewProd({ name: "", unit: "قطعة", purchase_price: "", sale_price: "", profit_margin: "14", product_category: activeCategory, product_attributes: {} });
     }
     setAddingSaving(false);
   }
@@ -502,7 +502,7 @@ export default function SupplierInvoicePage() {
         const currentProfitMarginValue = Number(currentProfitMargin);
         const nextProfitMargin = Number.isFinite(currentProfitMarginValue) && currentProfitMarginValue > 0
           ? currentProfitMargin
-          : "25";
+          : "14";
         const nextSalePrice = Number(formatPriceInput(priceFromPurchase(basePurchasePrice, nextProfitMargin)));
         const nextAttributes = item.manualUnitFactor && item.invoiceUnit !== item.unit
           ? withProductUnitConversion(item.product_attributes, {
