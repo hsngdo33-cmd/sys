@@ -168,6 +168,7 @@ export default function CustomersListPage() {
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [newCustomer, setNewCustomer] = useState({ name: "", phone: "", balance: 0 });
   const [payAmount, setPayAmount] = useState(0);
+  const [quickCollectionAmount, setQuickCollectionAmount] = useState<number | string>("");
   const [payNote, setPayNote] = useState("");
   const [saving, setSaving] = useState(false);
 
@@ -436,6 +437,7 @@ export default function CustomersListPage() {
     setInvoiceCustomerId(customer.id);
     setManualCustomerName(customer.name);
     setManualCustomerPhone(customer.phone || "");
+    setQuickCollectionAmount("");
   }
 
   async function resolveInvoiceCustomer() {
@@ -681,27 +683,31 @@ export default function CustomersListPage() {
     }
   }
 
-  async function handleCollection() {
-    if (payAmount <= 0 || !selectedCustomer) return alert("ادخل مبلغ صحيح.");
-    if (payAmount > Number(selectedCustomer.balance || 0)) {
-      return alert("مبلغ التحصيل أكبر من مديونية العميل الحالية.");
+  async function processCollection(customer: Customer | null, amount: number, collectionNote: string) {
+    if (amount <= 0 || !customer) {
+      alert("ادخل مبلغ صحيح.");
+      return false;
+    }
+    if (amount > Number(customer.balance || 0)) {
+      alert("مبلغ التحصيل أكبر من مديونية العميل الحالية.");
+      return false;
     }
     setSaving(true);
     try {
-      const shiftCheck = await requireOpenShiftForCash(payAmount);
+      const shiftCheck = await requireOpenShiftForCash(amount);
       if (!shiftCheck.ok) {
         alert(shiftCheck.message);
-        return;
+        return false;
       }
 
       const { data: transaction, error: transactionError } = await supabase
         .from("customer_transactions")
         .insert([
           {
-            customer_id: selectedCustomer.id,
-            amount: payAmount,
+            customer_id: customer.id,
+            amount,
             type: "تحصيل نقدي",
-            description: payNote || "تحصيل نقدي من العميل",
+            description: collectionNote || "تحصيل نقدي من العميل",
           },
         ])
         .select("id")
@@ -714,27 +720,41 @@ export default function CustomersListPage() {
           entry_type: "customer_collection",
           direction: "in",
           payment_method: "cash",
-          amount: payAmount,
+          amount,
           source_type: "customer_collection",
           source_id: transaction?.id?.toString(),
-          note: payNote || `تحصيل نقدي من العميل - ${selectedCustomer.name}`,
+          note: collectionNote || `تحصيل نقدي من العميل - ${customer.name}`,
         },
       ]);
       if (cashError) throw cashError;
 
       await supabase
         .from("customers")
-        .update({ balance: (selectedCustomer.balance || 0) - payAmount })
-        .eq("id", selectedCustomer.id);
-      setShowPayModal(false);
-      setPayAmount(0);
-      setPayNote("");
-      fetchCustomers();
+        .update({ balance: (customer.balance || 0) - amount })
+        .eq("id", customer.id);
+      await fetchCustomers();
+      return true;
     } catch {
       alert("حدث خطأ أثناء التحصيل.");
+      return false;
     } finally {
       setSaving(false);
     }
+  }
+
+  async function handleCollection() {
+    const saved = await processCollection(selectedCustomer, Number(payAmount || 0), payNote);
+    if (!saved) return;
+    setShowPayModal(false);
+    setPayAmount(0);
+    setPayNote("");
+  }
+
+  async function handleQuickCollection() {
+    const amount = Number(quickCollectionAmount || 0);
+    const saved = await processCollection(selectedInvoiceCustomer, amount, "تحصيل سريع بدون فاتورة");
+    if (!saved) return;
+    setQuickCollectionAmount("");
   }
 
   return (
@@ -786,6 +806,7 @@ export default function CustomersListPage() {
                   setInvoiceCustomerId("");
                   setManualCustomerName("");
                   setManualCustomerPhone("");
+                  setQuickCollectionAmount("");
                   setCart([]);
                   setCashPaid(0);
                   setDiscountPercent(0);
@@ -800,7 +821,7 @@ export default function CustomersListPage() {
             </div>
 
             <div className="mt-2 rounded-lg border border-slate-200 bg-slate-50/70 px-2 py-1.5">
-              <div className="grid items-end gap-1.5 lg:grid-cols-[0.9fr_1fr_0.8fr_115px]">
+              <div className="grid items-end gap-1.5 lg:grid-cols-[0.9fr_1fr_0.8fr_1fr_115px]">
               <label className="block">
                 <span className="mb-0.5 block text-[9px] font-black text-slate-400">عميل مسجل</span>
                 <select
@@ -827,6 +848,7 @@ export default function CustomersListPage() {
                   onChange={(event) => {
                     setManualCustomerName(event.target.value);
                     setInvoiceCustomerId("");
+                    setQuickCollectionAmount("");
                   }}
                   placeholder="اكتب اسم العميل أو اختاره من الاقتراحات"
                   className="h-8 w-full rounded-md border border-slate-200 bg-white px-2 text-[11px] font-bold outline-none focus:border-indigo-400"
@@ -839,10 +861,35 @@ export default function CustomersListPage() {
                   onChange={(event) => {
                     setManualCustomerPhone(event.target.value);
                     setInvoiceCustomerId("");
+                    setQuickCollectionAmount("");
                   }}
                   placeholder="اختياري"
                   className="h-8 w-full rounded-md border border-slate-200 bg-white px-2 text-[11px] font-bold outline-none focus:border-indigo-400"
                 />
+              </label>
+              <label className="block">
+                <span className="mb-0.5 block text-[9px] font-black text-slate-400">تحصيل سريع</span>
+                <div className="flex h-8 overflow-hidden rounded-md border border-slate-200 bg-white focus-within:border-emerald-400">
+                  <input
+                    type="number"
+                    min="0"
+                    max={selectedInvoiceCustomer?.balance || 0}
+                    step="any"
+                    value={quickCollectionAmount}
+                    onChange={(event) => setQuickCollectionAmount(event.target.value)}
+                    disabled={!selectedInvoiceCustomer || Number(selectedInvoiceCustomer.balance || 0) <= 0 || saving}
+                    placeholder={selectedInvoiceCustomer ? "المبلغ" : "اختار عميل"}
+                    className="min-w-0 flex-1 bg-transparent px-2 text-[11px] font-black text-emerald-700 outline-none disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleQuickCollection}
+                    disabled={!selectedInvoiceCustomer || Number(selectedInvoiceCustomer.balance || 0) <= 0 || Number(quickCollectionAmount || 0) <= 0 || saving}
+                    className="bg-emerald-600 px-2 text-[10px] font-black text-white hover:bg-emerald-500 disabled:cursor-not-allowed disabled:bg-slate-300"
+                  >
+                    {saving ? "..." : "تحصيل"}
+                  </button>
+                </div>
               </label>
               <div className="rounded-md border border-slate-200 bg-white px-2 py-1">
                 <p className="text-[9px] font-black text-slate-400">الرصيد</p>
@@ -1159,7 +1206,7 @@ export default function CustomersListPage() {
 
         {directoryOnly && (
         <section className="min-w-0 overflow-hidden rounded-[1.5rem] border border-slate-200 bg-white shadow-sm ring-1 ring-white">
-          <div className="border-b border-slate-100 bg-white p-5">
+          <div className="border-b border-indigo-100 bg-gradient-to-l from-indigo-50 via-slate-50 to-emerald-50 p-5">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
                 <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">دليل العملاء</p>
@@ -1182,7 +1229,7 @@ export default function CustomersListPage() {
               </div>
             </div>
 
-            <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50/70 p-3">
+            <div className="mt-4 rounded-2xl border border-indigo-100 bg-white/80 p-3 shadow-sm backdrop-blur-sm">
               <p className="mb-3 text-[10px] font-black uppercase tracking-widest text-slate-400">بحث وفلاتر</p>
               <div className="grid gap-3 xl:grid-cols-[minmax(220px,1fr)_auto]">
               <div className="relative">
@@ -1284,13 +1331,27 @@ export default function CustomersListPage() {
                           </div>
                         </td>
                         <td className="px-4 py-3">
-                          <div className="flex justify-center gap-2">
+                          <div className="flex flex-wrap justify-center gap-2">
                             <button
                               type="button"
                               onClick={() => selectInvoiceCustomer(customer)}
                               className="app-btn app-btn-sm app-btn-success"
                             >
                               بيع
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSelectedCustomer(customer);
+                                setPayAmount(0);
+                                setPayNote("");
+                                setShowPayModal(true);
+                              }}
+                              disabled={customer.balance <= 0}
+                              className="app-btn app-btn-sm app-btn-warning disabled:cursor-not-allowed disabled:opacity-40"
+                              title={customer.balance > 0 ? "تسجيل تحصيل من مديونية العميل بدون فاتورة جديدة" : "العميل ليس عليه مديونية"}
+                            >
+                              تحصيل بدون فاتورة
                             </button>
                             <Link href={`/customer/${customer.id}/history`} className="app-btn app-btn-sm app-btn-primary">
                               السجل
