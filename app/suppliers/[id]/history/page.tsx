@@ -1,6 +1,7 @@
 "use client";
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { supabase } from "@/lib/supabase";
+import { downloadElementAsPng } from "@/lib/download-element-as-png";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 
@@ -78,6 +79,12 @@ export default function SupplierHistoryPage() {
   const [filterType, setFilterType]     = useState<TxType>("all");
   const [searchTerm, setSearchTerm]     = useState("");
   const [printTransaction, setPrintTransaction] = useState<any | null>(null);
+  const [printShowSalePrice, setPrintShowSalePrice] = useState(false);
+  const [salePriceInvoiceIds, setSalePriceInvoiceIds] = useState<string[]>([]);
+  const [productSalePrices, setProductSalePrices] = useState<Record<string, number>>({});
+  const [invoiceOutput, setInvoiceOutput] = useState<"print" | "image" | null>(null);
+  const [savingImageId, setSavingImageId] = useState<string | null>(null);
+  const invoiceCaptureRef = useRef<HTMLElement | null>(null);
 
   // Edit modal state
   const [showEdit, setShowEdit]         = useState(false);
@@ -104,10 +111,30 @@ export default function SupplierHistoryPage() {
   }, [id]);
 
   useEffect(() => {
-    if (!printTransaction) return;
-    const timer = window.setTimeout(() => window.print(), 50);
+    if (!printTransaction || !invoiceOutput) return;
+    const timer = window.setTimeout(async () => {
+      if (invoiceOutput === "print") {
+        window.print();
+        setPrintTransaction(null);
+        setInvoiceOutput(null);
+        return;
+      }
+
+      try {
+        if (!invoiceCaptureRef.current) throw new Error("تعذر تجهيز صورة الفاتورة.");
+        const invoiceNumber = shortSupplierNumber(printTransaction.id);
+        await downloadElementAsPng(invoiceCaptureRef.current, `فاتورة-${invoiceNumber}`);
+      } catch (error) {
+        console.error(error);
+        alert("تعذر حفظ صورة الفاتورة. حاول مرة أخرى.");
+      } finally {
+        setSavingImageId(null);
+        setPrintTransaction(null);
+        setInvoiceOutput(null);
+      }
+    }, 100);
     return () => window.clearTimeout(timer);
-  }, [printTransaction]);
+  }, [invoiceOutput, printTransaction]);
 
   useEffect(() => {
     if (!printStatement) return;
@@ -123,13 +150,35 @@ export default function SupplierHistoryPage() {
 
   async function loadData() {
     setLoading(true);
-    const [{ data: supp }, { data: trans }] = await Promise.all([
+    const [{ data: supp }, { data: trans }, { data: products }] = await Promise.all([
       supabase.from("suppliers").select("*").eq("id", id).single(),
       supabase.from("transactions").select("*").eq("supplier_id", id).order("created_at", { ascending: false }),
+      supabase.from("products").select("id,sale_price"),
     ]);
     setSupplier(supp);
     setTransactions(trans || []);
+    setProductSalePrices(Object.fromEntries(
+      (products || []).map((product: { id: string | number; sale_price: number | null }) => [
+        String(product.id),
+        Number(product.sale_price || 0),
+      ]),
+    ));
     setLoading(false);
+  }
+
+  function salePriceForItem(item: any) {
+    if (item.sale_price != null && Number.isFinite(Number(item.sale_price))) {
+      return Number(item.sale_price);
+    }
+    const unitFactor = Math.max(Number(item.unit_factor || 1), 0.001);
+    return Number(productSalePrices[String(item.id)] || 0) * unitFactor;
+  }
+
+  function toggleInvoiceSalePrice(transactionId: string | number) {
+    const key = String(transactionId);
+    setSalePriceInvoiceIds((current) =>
+      current.includes(key) ? current.filter((id) => id !== key) : [...current, key],
+    );
   }
 
   async function openEdit(t: any) {
@@ -550,6 +599,7 @@ export default function SupplierHistoryPage() {
               const isCollection = isSupplierCollection(t);
               const isPayment = isSupplierInvoicePayment(t) || isCollection || t.type?.includes("ط³ط¯ط§ط¯") || t.type?.includes("ط¯ظپط¹");
               const isOpen    = expandedId === t.id;
+              const showSalePrice = salePriceInvoiceIds.includes(String(t.id));
               return (
                 <div key={t.id} className="bg-white rounded-[2rem] border border-slate-200 shadow-sm overflow-hidden">
                   <div
@@ -589,6 +639,7 @@ export default function SupplierHistoryPage() {
                                 <th className="pb-3 text-right">الصنف</th>
                                 <th className="pb-3 text-center">الكمية</th>
                                 <th className="pb-3 text-center">السعر</th>
+                                {isInvoice && showSalePrice && <th className="pb-3 text-center text-indigo-500">سعر البيع</th>}
                                 <th className="pb-3 text-left">الإجمالي</th>
                               </tr>
                             </thead>
@@ -600,6 +651,14 @@ export default function SupplierHistoryPage() {
                                     {item.qty} <span className="text-[9px] text-slate-400">{item.unit}</span>
                                   </td>
                                   <td className="py-3 text-center font-bold text-slate-600">{Number(item.price).toLocaleString("ar-EG")} ج</td>
+                                  {isInvoice && showSalePrice && (
+                                    <td className="py-3 text-center font-black text-indigo-600">
+                                      {salePriceForItem(item).toLocaleString("ar-EG", { maximumFractionDigits: 2 })} ج
+                                      {item.sale_price == null && (
+                                        <span className="mt-1 block text-[8px] font-bold text-slate-400">السعر الحالي</span>
+                                      )}
+                                    </td>
+                                  )}
                                   <td className="py-3 text-left font-black">{(item.qty * item.price).toLocaleString("ar-EG")} ج</td>
                                 </tr>
                               ))}
@@ -622,14 +681,42 @@ export default function SupplierHistoryPage() {
                                   >
                                     ↩ مرتجع
                                   </Link>
+                                  <button
+                                    type="button"
+                                    onClick={() => toggleInvoiceSalePrice(t.id)}
+                                    className={`px-4 py-2 rounded-xl text-[10px] font-black transition-all ${
+                                      showSalePrice
+                                        ? "bg-indigo-600 text-white hover:bg-indigo-500"
+                                        : "bg-indigo-100 text-indigo-700 hover:bg-indigo-600 hover:text-white"
+                                    }`}
+                                  >
+                                    {showSalePrice ? "إخفاء سعر البيع" : "عرض سعر البيع"}
+                                  </button>
                                 </>
                               )}
                               <button
                                 type="button"
-                                onClick={() => setPrintTransaction(t)}
+                                onClick={() => {
+                                  setPrintShowSalePrice(isInvoice && showSalePrice);
+                                  setInvoiceOutput("print");
+                                  setPrintTransaction(t);
+                                }}
                                 className="bg-white border border-slate-200 hover:bg-slate-900 hover:text-white text-slate-600 px-4 py-2 rounded-xl text-[10px] font-black transition-all"
                               >
                                 {isReturn ? "طباعة المرتجع" : "طباعة الفاتورة"}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setPrintShowSalePrice(isInvoice && showSalePrice);
+                                  setSavingImageId(String(t.id));
+                                  setInvoiceOutput("image");
+                                  setPrintTransaction(t);
+                                }}
+                                disabled={savingImageId === String(t.id)}
+                                className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white px-4 py-2 rounded-xl text-[10px] font-black transition-all"
+                              >
+                                {savingImageId === String(t.id) ? "جاري حفظ الصورة..." : "حفظ كصورة"}
                               </button>
                             </div>
                             {t.description && (
@@ -919,7 +1006,11 @@ export default function SupplierHistoryPage() {
       )}
 
       {printTransaction && (
-        <section className="print-invoice hidden" dir="rtl">
+        <section
+          ref={invoiceCaptureRef}
+          className={invoiceOutput === "image" ? "invoice-image-capture" : "print-invoice hidden"}
+          dir="rtl"
+        >
           <div className="print-card">
             <div className="print-header">
               <div>
@@ -940,6 +1031,7 @@ export default function SupplierHistoryPage() {
                   <th>الوحدة</th>
                   <th>الكمية</th>
                   <th>سعر الشراء</th>
+                  {printShowSalePrice && <th>سعر البيع</th>}
                   <th>الإجمالي</th>
                 </tr>
               </thead>
@@ -950,6 +1042,9 @@ export default function SupplierHistoryPage() {
                     <td>{item.unit || "-"}</td>
                     <td>{Number(item.qty || 0).toLocaleString("ar-EG")}</td>
                     <td>{Number(item.price || 0).toLocaleString("ar-EG")} ج</td>
+                    {printShowSalePrice && (
+                      <td>{salePriceForItem(item).toLocaleString("ar-EG", { maximumFractionDigits: 2 })} ج</td>
+                    )}
                     <td>{(Number(item.qty || 0) * Number(item.price || 0)).toLocaleString("ar-EG")} ج</td>
                   </tr>
                 ))}

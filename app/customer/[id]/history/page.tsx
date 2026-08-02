@@ -1,6 +1,7 @@
 "use client";
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { supabase } from "@/lib/supabase";
+import { downloadElementAsPng } from "@/lib/download-element-as-png";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 
@@ -66,6 +67,9 @@ export default function CustomerHistory() {
   const [filterType, setFilterType]     = useState<TxType>("all");
   const [searchTerm, setSearchTerm]     = useState("");
   const [printTransaction, setPrintTransaction] = useState<any | null>(null);
+  const [invoiceOutput, setInvoiceOutput] = useState<"print" | "image" | null>(null);
+  const [savingImageId, setSavingImageId] = useState<string | null>(null);
+  const invoiceCaptureRef = useRef<HTMLElement | null>(null);
   const [paymentEdit, setPaymentEdit] = useState<any | null>(null);
   const [paymentAmount, setPaymentAmount] = useState("");
   const [paymentNote, setPaymentNote] = useState("");
@@ -86,10 +90,32 @@ export default function CustomerHistory() {
   }, [id]);
 
   useEffect(() => {
-    if (!printTransaction) return;
-    const timer = window.setTimeout(() => window.print(), 50);
+    if (!printTransaction || !invoiceOutput) return;
+    const timer = window.setTimeout(async () => {
+      if (invoiceOutput === "print") {
+        window.print();
+        setPrintTransaction(null);
+        setInvoiceOutput(null);
+        return;
+      }
+
+      try {
+        if (!invoiceCaptureRef.current) throw new Error("تعذر تجهيز صورة الفاتورة.");
+        await downloadElementAsPng(
+          invoiceCaptureRef.current,
+          `فاتورة-${displayInvoiceNumber(printTransaction)}`,
+        );
+      } catch (error) {
+        console.error(error);
+        alert("تعذر حفظ صورة الفاتورة. حاول مرة أخرى.");
+      } finally {
+        setSavingImageId(null);
+        setPrintTransaction(null);
+        setInvoiceOutput(null);
+      }
+    }, 100);
     return () => window.clearTimeout(timer);
-  }, [printTransaction]);
+  }, [invoiceOutput, printTransaction]);
 
   useEffect(() => {
     if (!printStatement) return;
@@ -645,10 +671,25 @@ export default function CustomerHistory() {
                               )}
                               <button
                                 type="button"
-                                onClick={() => setPrintTransaction(t)}
+                                onClick={() => {
+                                  setInvoiceOutput("print");
+                                  setPrintTransaction(t);
+                                }}
                                 className="bg-white border border-slate-200 hover:bg-slate-900 hover:text-white text-slate-600 px-4 py-2 rounded-xl text-[10px] font-black transition-all"
                               >
                                 طباعة الفاتورة
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setSavingImageId(String(t.id));
+                                  setInvoiceOutput("image");
+                                  setPrintTransaction(t);
+                                }}
+                                disabled={savingImageId === String(t.id)}
+                                className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white px-4 py-2 rounded-xl text-[10px] font-black transition-all"
+                              >
+                                {savingImageId === String(t.id) ? "جاري حفظ الصورة..." : "حفظ كصورة"}
                               </button>
                             </div>
                             {t.description && (
@@ -886,7 +927,11 @@ export default function CustomerHistory() {
       )}
 
       {printTransaction && (
-        <section className="print-invoice hidden" dir="rtl">
+        <section
+          ref={invoiceCaptureRef}
+          className={invoiceOutput === "image" ? "invoice-image-capture" : "print-invoice hidden"}
+          dir="rtl"
+        >
           <div className="print-card">
             <div className="print-header">
               <div>

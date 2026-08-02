@@ -16,6 +16,7 @@ import { enqueueOfflineJob, isOfflineError } from "@/lib/offline-sync";
 
 type Product = {
   id: string;
+  created_at?: string | null;
   name: string;
   unit: string;
   purchase_price: number | string;
@@ -61,6 +62,7 @@ export default function InventoryPage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
+  const [productOrder, setProductOrder] = useState<"name" | "newest" | "shortage">("name");
   const [activeCategory, setActiveCategory] = useState<ProductCategory>("general");
   const enabledCategories = useEnabledCategories();
   const defaultActiveCategory = enabledCategories[0] || "general";
@@ -893,14 +895,30 @@ export default function InventoryPage() {
   // FILTER
   // =========================
 
-  const filteredProducts = products.filter((p) => {
-    const matchesCategory = normalizeProductCategory(p.product_category) === activeCategory;
-    const matchesSearch =
-      p.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      p.barcode?.toString().includes(searchTerm);
+  const filteredProducts = useMemo(() => {
+    const filtered = products.filter((product) => {
+      const matchesCategory = normalizeProductCategory(product.product_category) === activeCategory;
+      const matchesSearch =
+        product.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        product.barcode?.toString().includes(searchTerm);
 
-    return matchesCategory && matchesSearch;
-  });
+      return matchesCategory && matchesSearch;
+    });
+
+    return filtered.sort((first, second) => {
+      if (productOrder === "newest") {
+        return new Date(second.created_at || 0).getTime() - new Date(first.created_at || 0).getTime();
+      }
+
+      if (productOrder === "shortage") {
+        const firstShortage = Math.max(Number(first.reorder_point ?? 5) - Number(first.stock_quantity || 0), 0);
+        const secondShortage = Math.max(Number(second.reorder_point ?? 5) - Number(second.stock_quantity || 0), 0);
+        if (firstShortage !== secondShortage) return secondShortage - firstShortage;
+      }
+
+      return first.name.localeCompare(second.name, "ar");
+    });
+  }, [activeCategory, productOrder, products, searchTerm]);
 
   const categoryCounts = products.reduce<Partial<Record<ProductCategory, number>>>((counts, product) => {
     const category = normalizeProductCategory(product.product_category);
@@ -1278,15 +1296,27 @@ export default function InventoryPage() {
             variant="cards"
           />
 
-          <input
-            type="text"
-            placeholder="بحث بالاسم أو الباركود..."
-            className="w-full p-4 border rounded-2xl font-bold outline-none"
-            value={searchTerm}
-            onChange={(e) =>
-              setSearchTerm(e.target.value)
-            }
-          />
+          <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_240px]">
+            <input
+              type="text"
+              placeholder="بحث بالاسم أو الباركود..."
+              className="w-full p-4 border rounded-2xl font-bold outline-none"
+              value={searchTerm}
+              onChange={(e) =>
+                setSearchTerm(e.target.value)
+              }
+            />
+            <select
+              value={productOrder}
+              onChange={(event) => setProductOrder(event.target.value as "name" | "newest" | "shortage")}
+              className="w-full rounded-2xl border bg-slate-50 p-4 font-black text-slate-700 outline-none focus:border-indigo-400"
+              aria-label="ترتيب الأصناف"
+            >
+              <option value="name">ترتيب بالاسم</option>
+              <option value="newest">الأحدث إضافة أولاً</option>
+              <option value="shortage">الأصناف الناقصة أولاً</option>
+            </select>
+          </div>
 
         </div>
 

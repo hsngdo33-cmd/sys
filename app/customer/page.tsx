@@ -152,6 +152,7 @@ export default function CustomersListPage() {
   const [cart, setCart] = useState<CartItem[]>([]);
   const [cashPaid, setCashPaid] = useState<number | string>(0);
   const [discountPercent, setDiscountPercent] = useState<number | string>(0);
+  const [discountValue, setDiscountValue] = useState<number | string>("");
   const [note, setNote] = useState("");
   const [invoiceSaving, setInvoiceSaving] = useState(false);
   const [printDateLabel, setPrintDateLabel] = useState("");
@@ -314,8 +315,11 @@ export default function CustomersListPage() {
 
   const subtotal = cart.reduce((sum, item) => sum + Number(item.qty || 0) * Number(item.price || 0), 0);
   const totalCost = cart.reduce((sum, item) => sum + Number(item.qty || 0) * Number(item.cost || 0), 0);
-  const discountRate = Math.min(Math.max(Number(discountPercent) || 0, 0), 100);
-  const discountAmount = subtotal * (discountRate / 100);
+  const discountIsFixed = discountValue !== "";
+  const discountAmount = discountIsFixed
+    ? Math.min(Math.max(Number(discountValue) || 0, 0), subtotal)
+    : subtotal * (Math.min(Math.max(Number(discountPercent) || 0, 0), 100) / 100);
+  const discountRate = subtotal > 0 ? Number(((discountAmount / subtotal) * 100).toFixed(2)) : 0;
   const netBeforeTax = Math.max(subtotal - discountAmount, 0);
   const taxInfo = calculateInvoiceTax(netBeforeTax, businessSettings.tax_mode);
   const taxAmount = taxInfo.taxAmount;
@@ -486,7 +490,7 @@ export default function CustomersListPage() {
       const baseSaleDescription =
         note ||
         `بيع ${productCategoryLabel(activeCategory)} لـ ${customer.name}${
-          discountRate > 0 ? ` - خصم ${discountRate}%` : ""
+          discountAmount > 0 ? ` - خصم ${discountIsFixed ? `${discountAmount} ج` : `${discountRate}%`}` : ""
         }${taxAmount > 0 ? ` - ${taxInfo.label}` : ""}`;
 
       const { data: invoice, error: invoiceError } = await supabase
@@ -590,6 +594,7 @@ export default function CustomersListPage() {
       setCart([]);
       setCashPaid(0);
       setDiscountPercent(0);
+      setDiscountValue("");
       setNote("");
       setInvoiceProductSearch("");
       await fetchCustomers();
@@ -784,6 +789,7 @@ export default function CustomersListPage() {
                   setCart([]);
                   setCashPaid(0);
                   setDiscountPercent(0);
+                  setDiscountValue("");
                   setNote("");
                   setInvoiceProductSearch("");
                 }}
@@ -1040,8 +1046,8 @@ export default function CustomersListPage() {
               </div>
 
               <div className="order-1 grid gap-3 lg:grid-cols-[1fr_280px]">
-                <div className="grid gap-2 rounded-xl border border-slate-200 bg-white p-2.5 shadow-sm sm:grid-cols-2">
-                  <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 sm:col-span-2">الدفع والخصم</p>
+                <div className="grid gap-2 rounded-xl border border-slate-200 bg-white p-2.5 shadow-sm sm:grid-cols-3">
+                  <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 sm:col-span-3">الدفع والخصم</p>
                   <label className="block rounded-lg border border-slate-200 bg-slate-50 p-2">
                     <span className="block text-[10px] font-black text-slate-400">خصم على الفاتورة</span>
                     <div className="mt-1 flex items-center gap-2">
@@ -1051,11 +1057,33 @@ export default function CustomersListPage() {
                         max="100"
                         step="any"
                         value={discountPercent}
-                        onChange={(event) => setDiscountPercent(event.target.value)}
+                        onChange={(event) => {
+                          setDiscountPercent(event.target.value);
+                          setDiscountValue("");
+                        }}
                         className="w-full bg-transparent text-base font-black outline-none"
                         placeholder="0"
                       />
                       <span className="font-black text-slate-400">%</span>
+                    </div>
+                  </label>
+                  <label className="block rounded-lg border border-slate-200 bg-slate-50 p-2">
+                    <span className="block text-[10px] font-black text-slate-400">قيمة الخصم</span>
+                    <div className="mt-1 flex items-center gap-2">
+                      <input
+                        type="number"
+                        min="0"
+                        max={subtotal}
+                        step="any"
+                        value={discountValue}
+                        onChange={(event) => {
+                          setDiscountValue(event.target.value);
+                          setDiscountPercent(0);
+                        }}
+                        className="w-full bg-transparent text-base font-black text-rose-600 outline-none"
+                        placeholder="0"
+                      />
+                      <span className="font-black text-slate-400">ج</span>
                     </div>
                   </label>
                   <label className="block rounded-lg border border-slate-200 bg-slate-50 p-2">
@@ -1069,7 +1097,7 @@ export default function CustomersListPage() {
                       placeholder="0"
                     />
                   </label>
-                  <label className="block sm:col-span-2">
+                  <label className="block sm:col-span-3">
                     <input
                       value={note}
                       onChange={(event) => setNote(event.target.value)}

@@ -17,6 +17,7 @@ import { supabase } from "@/lib/supabase";
 type Customer = {
   id: string;
   name: string | null;
+  balance: number | string | null;
 };
 
 type Supplier = {
@@ -38,6 +39,7 @@ type RawInvoice = {
 type InvoiceRow = RawInvoice & {
   partyName: string;
   itemsCount: number;
+  customerDebt: number | null;
 };
 
 type InvoiceItem = {
@@ -105,6 +107,7 @@ export default function InvoicesReportPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedInvoice, setSelectedInvoice] = useState<InvoiceRow | null>(null);
+  const [collections, setCollections] = useState({ total: 0, count: 0 });
 
   const loadData = useCallback(async () => {
     if (!invoiceDate) return;
@@ -116,8 +119,8 @@ export default function InvoicesReportPage() {
       const fromIso = startOfLocalDay(invoiceDate);
       const toIso = endOfLocalDay(invoiceDate);
 
-      const [customersResult, suppliersResult, salesResult, purchasesResult] = await Promise.all([
-        supabase.from("customers").select("id,name").order("name", { ascending: true }),
+      const [customersResult, suppliersResult, salesResult, purchasesResult, collectionsResult] = await Promise.all([
+        supabase.from("customers").select("id,name,balance").order("name", { ascending: true }),
         supabase.from("suppliers").select("id,name").order("name", { ascending: true }),
         supabase
           .from("customer_transactions")
@@ -135,17 +138,27 @@ export default function InvoicesReportPage() {
           .lte("created_at", toIso)
           .order("created_at", { ascending: false })
           .limit(500),
+        supabase
+          .from("customer_transactions")
+          .select("amount,type")
+          .in("type", ["payment", "تحصيل نقدي", "تحصيل", "دفع"])
+          .gte("created_at", fromIso)
+          .lte("created_at", toIso)
+          .limit(1000),
       ]);
 
       const requestError =
-        customersResult.error ?? suppliersResult.error ?? salesResult.error ?? purchasesResult.error;
+        customersResult.error ?? suppliersResult.error ?? salesResult.error ?? purchasesResult.error ?? collectionsResult.error;
 
       if (requestError) throw requestError;
 
       const customers = new Map(
         ((customersResult.data || []) as Customer[]).map((customer) => [
           customer.id,
-          customer.name || "عميل بدون اسم",
+          {
+            name: customer.name || "عميل بدون اسم",
+            debt: Math.max(num(customer.balance), 0),
+          },
         ]),
       );
       const suppliers = new Map(
@@ -164,7 +177,8 @@ export default function InvoicesReportPage() {
         created_at: invoice.created_at,
         items: invoice.items,
         source: "sale" as const,
-        partyName: customers.get(invoice.customer_id || "") || "عميل غير مسجل",
+        partyName: customers.get(invoice.customer_id || "")?.name || "عميل غير مسجل",
+        customerDebt: customers.get(invoice.customer_id || "")?.debt ?? 0,
         itemsCount: countItems(invoice.items),
       }));
 
@@ -178,12 +192,19 @@ export default function InvoicesReportPage() {
         items: invoice.items,
         source: "purchase" as const,
         partyName: suppliers.get(invoice.supplier_id || "") || "مورد غير مسجل",
+        customerDebt: null,
         itemsCount: countItems(invoice.items),
       }));
 
+      const collectionRows = collectionsResult.data || [];
+      setCollections({
+        total: collectionRows.reduce((sum, transaction) => sum + num(transaction.amount), 0),
+        count: collectionRows.length,
+      });
       setInvoices([...sales, ...purchases].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()));
     } catch (loadError) {
       setInvoices([]);
+      setCollections({ total: 0, count: 0 });
       setError(loadError instanceof Error ? loadError.message : "تعذر تحميل الفواتير.");
     } finally {
       setLoading(false);
@@ -320,10 +341,10 @@ export default function InvoicesReportPage() {
             <p className="mt-2 text-2xl font-black text-emerald-700">{money(totals.sales)} ج</p>
             <p className="mt-1 text-xs font-bold text-slate-400">{totals.salesCount.toLocaleString("ar-EG")} فاتورة</p>
           </div>
-          <div className="rounded-2xl border border-amber-100 bg-white p-4 shadow-sm">
-            <p className="text-xs font-black text-slate-500">إجمالي الشراء</p>
-            <p className="mt-2 text-2xl font-black text-amber-700">{money(totals.purchases)} ج</p>
-            <p className="mt-1 text-xs font-bold text-slate-400">{totals.purchasesCount.toLocaleString("ar-EG")} فاتورة</p>
+          <div className="rounded-2xl border border-blue-100 bg-white p-4 shadow-sm">
+            <p className="text-xs font-black text-slate-500">إجمالي التحصيل</p>
+            <p className="mt-2 text-2xl font-black text-blue-700">{money(collections.total)} ج</p>
+            <p className="mt-1 text-xs font-bold text-slate-400">{collections.count.toLocaleString("ar-EG")} حركة تحصيل</p>
           </div>
           <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
             <p className="text-xs font-black text-slate-500">عدد الفواتير المعروضة</p>
@@ -346,7 +367,7 @@ export default function InvoicesReportPage() {
           </div>
 
           <div className="max-h-[560px] overflow-auto">
-            <table className="w-full min-w-[900px] text-sm">
+            <table className="w-full min-w-[1000px] text-sm">
               <thead className="sticky top-0 z-10 bg-slate-50 text-xs font-black text-slate-500">
                 <tr>
                   <th className="p-3 text-right">النوع</th>
@@ -356,19 +377,20 @@ export default function InvoicesReportPage() {
                   <th className="p-3 text-right">الأصناف</th>
                   <th className="p-3 text-right">الإجمالي</th>
                   <th className="p-3 text-right">الوصف</th>
+                  <th className="p-3 text-right">الدين</th>
                   <th className="p-3 text-right">فتح</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {loading ? (
                   <tr>
-                    <td colSpan={8} className="p-10 text-center text-sm font-black text-slate-400">
+                    <td colSpan={9} className="p-10 text-center text-sm font-black text-slate-400">
                       جاري تحميل الفواتير...
                     </td>
                   </tr>
                 ) : visibleInvoices.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="p-10 text-center text-sm font-black text-slate-400">
+                    <td colSpan={9} className="p-10 text-center text-sm font-black text-slate-400">
                       لا توجد فواتير مطابقة للفلاتر الحالية.
                     </td>
                   </tr>
@@ -391,6 +413,17 @@ export default function InvoicesReportPage() {
                         <td className="p-3 font-bold text-slate-600">{invoice.itemsCount.toLocaleString("ar-EG")}</td>
                         <td className="p-3 font-black text-slate-950">{money(invoice.amount)} ج</td>
                         <td className="max-w-[260px] truncate p-3 font-bold text-slate-500">{invoice.description || "-"}</td>
+                        <td className="p-3">
+                          {isSale ? (
+                            Number(invoice.customerDebt || 0) > 0 ? (
+                              <span className="font-black text-rose-600">{money(invoice.customerDebt)} ج</span>
+                            ) : (
+                              <span className="font-black text-emerald-600">لا يوجد</span>
+                            )
+                          ) : (
+                            <span className="font-bold text-slate-300">-</span>
+                          )}
+                        </td>
                         <td className="p-3">
                           <div className="flex flex-wrap gap-2">
                             <button

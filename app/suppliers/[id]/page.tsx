@@ -51,6 +51,8 @@ export default function SupplierInvoicePage() {
   const [cart, setCart]             = useState<CartItem[]>([]);
   const [cashPaid, setCashPaid]     = useState<number | string>(0);
   const [discountPercent, setDiscountPercent] = useState<number | string>(0);
+  const [discountValue, setDiscountValue] = useState<number | string>("");
+  const [showSalePriceColumn, setShowSalePriceColumn] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [isSaving, setIsSaving]     = useState(false);
   const [note, setNote]             = useState("");
@@ -416,8 +418,11 @@ export default function SupplierInvoicePage() {
   };
 
   const subtotalInvoice = cart.reduce((s, i) => s + Number(i.qty || 0) * Number(i.p_price || 0), 0);
-  const discountRate = Math.min(Math.max(Number(discountPercent) || 0, 0), 100);
-  const discountAmount = subtotalInvoice * (discountRate / 100);
+  const discountIsFixed = discountValue !== "";
+  const discountAmount = discountIsFixed
+    ? Math.min(Math.max(Number(discountValue) || 0, 0), subtotalInvoice)
+    : subtotalInvoice * (Math.min(Math.max(Number(discountPercent) || 0, 0), 100) / 100);
+  const discountRate = subtotalInvoice > 0 ? Number(((discountAmount / subtotalInvoice) * 100).toFixed(2)) : 0;
   const netBeforeTax = Math.max(subtotalInvoice - discountAmount, 0);
   const taxInfo = calculateInvoiceTax(netBeforeTax, businessSettings.tax_mode);
   const taxAmount = taxInfo.taxAmount;
@@ -426,6 +431,16 @@ export default function SupplierInvoicePage() {
   const cash         = Number(cashPaid) || 0;
   const remaining    = totalInvoice - cash;
   const printPageSize = paperSizeCss(businessSettings.invoice_paper_size);
+
+  const invoiceUnitSalePrice = (item: CartItem) => {
+    const unitFactor = Math.max(Number(item.unitFactor || 1), 0.001);
+    const basePurchasePrice = (Number(item.p_price || 0) * purchasePriceFactor) / unitFactor;
+    const currentMargin = profitPercentFromPrices(item.purchase_price, item.sale_price);
+    const marginValue = Number(currentMargin);
+    const appliedMargin = Number.isFinite(marginValue) && marginValue > 0 ? currentMargin : "14";
+    const baseSalePrice = Number(formatPriceInput(priceFromPurchase(basePurchasePrice, appliedMargin)));
+    return Number((baseSalePrice * unitFactor).toFixed(2));
+  };
 
 
   async function handleAddNewProduct() {
@@ -480,9 +495,10 @@ export default function SupplierInvoicePage() {
           stock_qty: Number(i.qty) * Number(i.unitFactor || 1),
           price: Number(i.p_price),
           net_price: Number((Number(i.p_price || 0) * purchasePriceFactor).toFixed(2)),
+          sale_price: invoiceUnitSalePrice(i),
           product_category: normalizeProductCategory(i.product_category),
         })),
-        description: note || `توريد ${productCategoryLabel(activeCategory)} من ${supplier?.name}${discountRate > 0 ? ` - خصم ${discountRate}%` : ""}${taxAmount > 0 ? ` - ${taxInfo.label}` : ""}`,
+        description: note || `توريد ${productCategoryLabel(activeCategory)} من ${supplier?.name}${discountAmount > 0 ? ` - خصم ${discountIsFixed ? `${discountAmount} ج` : `${discountRate}%`}` : ""}${taxAmount > 0 ? ` - ${taxInfo.label}` : ""}`,
       }]).select("id").single();
       if (invoiceError) throw invoiceError;
 
@@ -666,6 +682,19 @@ export default function SupplierInvoicePage() {
 
         {/* ══ الفاتورة ══ */}
         <section className="min-w-0">
+          <div className="mb-3 flex justify-end">
+            <button
+              type="button"
+              onClick={() => setShowSalePriceColumn((current) => !current)}
+              className={`rounded-xl border px-4 py-2 text-xs font-black transition-all ${
+                showSalePriceColumn
+                  ? "border-indigo-200 bg-indigo-600 text-white"
+                  : "border-slate-200 bg-white text-slate-600 hover:border-indigo-300 hover:text-indigo-600"
+              }`}
+            >
+              {showSalePriceColumn ? "إخفاء سعر البيع" : "إضافة سعر البيع للفاتورة"}
+            </button>
+          </div>
           <div className="app-invoice-table bg-white border border-slate-200 shadow-sm overflow-auto">
             {cart.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-64 text-slate-300 space-y-3">
@@ -680,6 +709,7 @@ export default function SupplierInvoicePage() {
                     <th className="p-4 text-center">الكمية</th>
                     <th className="p-4 text-center">الوحدة</th>
                     <th className="p-4 text-center">سعر الشراء <span className="text-amber-400 normal-case font-normal">(قابل للتعديل)</span></th>
+                    {showSalePriceColumn && <th className="p-4 text-center text-indigo-500">سعر البيع</th>}
                     <th className="p-4 text-left">الإجمالي</th>
                     <th className="p-4 w-8"></th>
                   </tr>
@@ -745,6 +775,12 @@ export default function SupplierInvoicePage() {
                             className="w-24 p-2 border border-slate-200 rounded-xl text-center font-black text-amber-600 bg-slate-50 outline-none focus:border-amber-400 transition-all"
                           />
                         </td>
+                        {showSalePriceColumn && (
+                          <td className="p-4 text-center font-black text-indigo-600">
+                            {invoiceUnitSalePrice(item).toLocaleString("ar-EG", { maximumFractionDigits: 2 })} ج
+                            <p className="mt-1 text-[9px] font-bold text-slate-400">لكل {item.invoiceUnit || item.unit}</p>
+                          </td>
+                        )}
                         <td className="p-4 text-left font-black">{lineTotal.toLocaleString("ar-EG", { maximumFractionDigits: 2 })}</td>
                         <td className="p-4">
                           <button onClick={() => removeFromCart(item.id)} className="text-slate-300 hover:text-rose-500 transition-colors text-lg font-black">✕</button>
@@ -761,20 +797,44 @@ export default function SupplierInvoicePage() {
         </section>
 
         <aside className="space-y-4">
-          <div className="bg-white rounded-xl border border-slate-200 shadow-sm px-4 py-2.5">
-            <label className="block text-[10px] font-black text-slate-400 mb-1">نسبة خصم على الفاتورة كلها</label>
-            <div className="flex items-center gap-3">
-              <input
-                type="number"
-                min="0"
-                max="100"
-                step="any"
-                value={discountPercent}
-                onChange={e => setDiscountPercent(e.target.value)}
-                className="w-full bg-transparent font-black text-slate-900 outline-none text-lg"
-                placeholder="0"
-              />
-              <span className="rounded-xl bg-slate-100 px-3 py-2 text-sm font-black text-slate-500">%</span>
+          <div className="grid grid-cols-2 gap-2">
+            <div className="bg-white rounded-xl border border-slate-200 shadow-sm px-3 py-2.5">
+              <label className="block text-[10px] font-black text-slate-400 mb-1">نسبة الخصم</label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="any"
+                  value={discountPercent}
+                  onChange={(event) => {
+                    setDiscountPercent(event.target.value);
+                    setDiscountValue("");
+                  }}
+                  className="w-full min-w-0 bg-transparent font-black text-slate-900 outline-none text-lg"
+                  placeholder="0"
+                />
+                <span className="text-sm font-black text-slate-500">%</span>
+              </div>
+            </div>
+            <div className="bg-white rounded-xl border border-slate-200 shadow-sm px-3 py-2.5">
+              <label className="block text-[10px] font-black text-slate-400 mb-1">قيمة الخصم</label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="number"
+                  min="0"
+                  max={subtotalInvoice}
+                  step="any"
+                  value={discountValue}
+                  onChange={(event) => {
+                    setDiscountValue(event.target.value);
+                    setDiscountPercent(0);
+                  }}
+                  className="w-full min-w-0 bg-transparent font-black text-rose-600 outline-none text-lg"
+                  placeholder="0"
+                />
+                <span className="text-sm font-black text-slate-500">ج</span>
+              </div>
             </div>
           </div>
 
@@ -857,6 +917,7 @@ export default function SupplierInvoicePage() {
                 <th>الوحدة</th>
                 <th>الكمية</th>
                 <th>سعر الشراء</th>
+                {showSalePriceColumn && <th>سعر البيع</th>}
                 <th>الإجمالي</th>
               </tr>
             </thead>
@@ -870,6 +931,9 @@ export default function SupplierInvoicePage() {
                     {Number(item.unitFactor || 1) !== 1 ? ` = ${(Number(item.qty || 0) * Number(item.unitFactor || 1)).toLocaleString("ar-EG")} ${item.unit}` : ""}
                   </td>
                   <td>{Number(item.p_price || 0).toLocaleString("ar-EG")} ج</td>
+                  {showSalePriceColumn && (
+                    <td>{invoiceUnitSalePrice(item).toLocaleString("ar-EG", { maximumFractionDigits: 2 })} ج</td>
+                  )}
                   <td>{(Number(item.qty || 0) * Number(item.p_price || 0)).toLocaleString("ar-EG")} ج</td>
                 </tr>
               ))}
