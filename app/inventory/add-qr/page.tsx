@@ -475,7 +475,7 @@ export default function AddProductPage() {
           {/* ظ‡ط§ظ…ط´ ط§ظ„ط±ط¨ط­ live */}
           {canViewProfit && (
                           <label className="flex items-center gap-2 rounded-2xl bg-emerald-50 px-4 py-3">
-                  <span className="text-xs font-black text-emerald-700">نسبة المكسب</span>
+                  <span className="text-xs font-black text-emerald-700">خصم المورد من سعر البيع</span>
                   <input
                     type="number"
                     step="any"

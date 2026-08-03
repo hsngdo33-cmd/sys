@@ -1644,7 +1644,7 @@ export default function InventoryPage() {
                     </label>
                     {canViewProfit && (
                       <label className="sm:col-span-2 flex items-center gap-2 rounded-2xl bg-emerald-50 px-4 py-3">
-                        <span className="text-xs font-black text-emerald-700">نسبة المكسب</span>
+                        <span className="text-xs font-black text-emerald-700">خصم المورد من سعر البيع</span>
                         <input
                           type="number"
                           step="any"
@@ -1890,7 +1890,7 @@ export default function InventoryPage() {
 
               {canViewProfit && (
                 <label className="flex h-11 items-center gap-2 rounded-xl bg-emerald-50 px-3">
-                  <span className="text-xs font-black text-emerald-700">نسبة المكسب</span>
+                  <span className="text-xs font-black text-emerald-700">خصم المورد من سعر البيع</span>
                   <input
                     type="number"
                     step="any"

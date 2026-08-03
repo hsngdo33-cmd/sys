@@ -1021,7 +1021,7 @@ export default function SupplierInvoicePage() {
 
               {canViewProfit && (
                 <label className="flex h-11 items-center gap-2 rounded-xl bg-emerald-50 px-3">
-                  <span className="text-xs font-black text-emerald-700">نسبة المكسب</span>
+                  <span className="text-xs font-black text-emerald-700">خصم المورد من سعر البيع</span>
                   <input
                     type="number"
                     step="any"

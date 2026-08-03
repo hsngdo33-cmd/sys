@@ -29,6 +29,10 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
+/.codex-local*.log
+
+# local database migration backups
+/backups/
 
 # env files (can opt-in for committing if needed)
 .env*
