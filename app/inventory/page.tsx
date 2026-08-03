@@ -926,6 +926,19 @@ export default function InventoryPage() {
     return counts;
   }, {});
 
+  const inventoryValuesByCategory = useMemo(() => enabledCategories.map((category) => ({
+    category,
+    value: products
+      .filter((product) => normalizeProductCategory(product.product_category) === category)
+      .reduce((sum, product) => (
+        sum + Math.max(Number(product.stock_quantity) || 0, 0) * Math.max(Number(product.purchase_price) || 0, 0)
+      ), 0),
+  })), [enabledCategories, products]);
+
+  const totalInventoryValue = useMemo(() => (
+    inventoryValuesByCategory.reduce((sum, item) => sum + item.value, 0)
+  ), [inventoryValuesByCategory]);
+
   const supplierMap = useMemo(() => {
     return new Map(suppliers.map((supplier) => [supplier.id, supplier]));
   }, [suppliers]);
@@ -1242,7 +1255,7 @@ export default function InventoryPage() {
 
         {/* HEADER */}
 
-        <div className="bg-white p-5 rounded-3xl shadow mb-6 flex justify-between items-center">
+        <div className="relative mb-6 flex flex-wrap items-center justify-between gap-4 rounded-3xl bg-white p-5 shadow">
 
           <div>
             <h1 className="text-3xl font-black">
@@ -1253,6 +1266,32 @@ export default function InventoryPage() {
               إدارة منتجات المحل بالباركود
             </p>
           </div>
+
+          <details className="group relative w-full sm:mr-auto sm:w-72">
+            <summary className="flex cursor-pointer list-none items-center justify-between gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-emerald-800 transition hover:bg-emerald-100">
+              <div>
+                <p className="text-[10px] font-black text-emerald-600">قيمة المخزون</p>
+                <p className="text-lg font-black">
+                  {totalInventoryValue.toLocaleString("ar-EG", { maximumFractionDigits: 2 })} ج
+                </p>
+              </div>
+              <span className="text-[10px] font-black group-open:hidden">تفاصيل ◀</span>
+              <span className="hidden text-[10px] font-black group-open:inline">إخفاء ▲</span>
+            </summary>
+            <div className="mt-2 grid gap-1.5 rounded-2xl border border-slate-200 bg-white p-2 shadow-lg sm:absolute sm:left-0 sm:z-30 sm:w-72">
+              {inventoryValuesByCategory.map((item) => (
+                <div key={item.category} className="flex items-center justify-between rounded-xl bg-slate-50 px-3 py-2">
+                  <div>
+                    <p className="text-[10px] font-black text-slate-600">{productCategoryLabel(item.category)}</p>
+                    <p className="text-[9px] font-bold text-slate-400">{categoryCounts[item.category] || 0} صنف</p>
+                  </div>
+                  <p className="text-sm font-black text-slate-900">
+                    {item.value.toLocaleString("ar-EG", { maximumFractionDigits: 2 })} ج
+                  </p>
+                </div>
+              ))}
+            </div>
+          </details>
 
           <div className="flex gap-3">
 

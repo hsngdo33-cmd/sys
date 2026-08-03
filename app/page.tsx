@@ -7,7 +7,6 @@ import {
   ArrowDownRight,
   ArrowUpRight,
   BarChart3,
-  Boxes,
   RefreshCw,
   ShoppingCart,
   TrendingUp,
@@ -78,6 +77,10 @@ function num(value: unknown) {
 
 function money(value: number) {
   return value.toLocaleString("ar-EG", { maximumFractionDigits: 2 });
+}
+
+function wholeMoney(value: number) {
+  return Math.round(value).toLocaleString("ar-EG", { maximumFractionDigits: 0 });
 }
 
 function shortMoney(value: number) {
@@ -349,13 +352,14 @@ export default function Dashboard() {
           </div>
         ) : (
           <>
-            <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-              <MetricCard title="مبيعات الفترة" value={`${money(stats.revenue)} ج`} hint={`${stats.invoices} فاتورة`} icon={ShoppingCart} tone="emerald" delta={stats.growth} />
+            <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+              <MetricCard title="مبيعات الفترة" value={`${wholeMoney(stats.revenue)} ج`} hint={`${stats.invoices} فاتورة`} icon={ShoppingCart} tone="emerald" delta={stats.growth} />
               {canViewProfit && (
-                <MetricCard title="صافي الربح" value={`${money(stats.profit)} ج`} hint={`هامش ${stats.margin}%`} icon={TrendingUp} tone="blue" />
+                <MetricCard title="صافي الربح" value={`${wholeMoney(stats.profit)} ج`} hint={`هامش ${stats.margin}%`} icon={TrendingUp} tone="blue" />
               )}
-              <MetricCard title="التحصيل" value={`${money(stats.collected)} ج`} hint="مدفوعات العملاء" icon={WalletCards} tone="amber" />
-              <MetricCard title="مخزون منخفض" value={`${stats.lowStock.length}`} hint="صنف يحتاج متابعة" icon={Boxes} tone="rose" />
+              <MetricCard title="التحصيل" value={`${wholeMoney(stats.collected)} ج`} hint="مدفوعات العملاء" icon={WalletCards} tone="amber" />
+              <MetricCard title="ديون العملاء" value={`${wholeMoney(stats.customerDebts)} ج`} hint="إجمالي الرصيد المستحق" icon={ArrowUpRight} tone="rose" />
+              <MetricCard title="ديون الموردين" value={`${wholeMoney(stats.supplierDebts)} ج`} hint="إجمالي الرصيد المستحق" icon={ArrowDownRight} tone="blue" />
             </section>
 
             <section className="grid gap-5 xl:grid-cols-[1.5fr_1fr]">
@@ -495,15 +499,15 @@ function MetricCard({
   };
 
   return (
-    <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+    <div className="min-h-40 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="text-xs font-black text-slate-400">{title}</p>
-          <p className="mt-2 text-2xl font-black text-slate-950">{value}</p>
+          <p className="mt-3 text-3xl font-black text-slate-950">{value}</p>
           <p className="mt-1 text-xs font-bold text-slate-500">{hint}</p>
         </div>
-        <div className={`flex h-12 w-12 items-center justify-center rounded-2xl ${tones[tone]}`}>
-          <Icon className="h-6 w-6" />
+        <div className={`flex h-14 w-14 items-center justify-center rounded-2xl ${tones[tone]}`}>
+          <Icon className="h-7 w-7" />
         </div>
       </div>
       {typeof delta === "number" && (

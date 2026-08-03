@@ -11,6 +11,7 @@ import { requireOpenShiftForCash } from "@/app/cash-session";
 import { recordStaffActivity } from "@/app/staff-activity";
 import { useStaffSession } from "@/app/staff-session";
 import { canViewProfitControls } from "@/lib/permissions";
+import { handleInvoiceArrowNavigation } from "@/lib/invoice-keyboard-navigation";
 import {
   conversionFactorForUnit,
   hasKnownConversion,
@@ -1022,6 +1023,8 @@ export default function CustomersListPage() {
                             </td>
                             <td className="p-2 text-center">
                               <input
+                                data-invoice-cell="true"
+                                onKeyDown={handleInvoiceArrowNavigation}
                                 type="number"
                                 step="any"
                                 value={item.qty}
@@ -1031,6 +1034,8 @@ export default function CustomersListPage() {
                             </td>
                             <td className="p-2 text-center">
                               <select
+                                data-invoice-cell="true"
+                                onKeyDown={handleInvoiceArrowNavigation}
                                 value={item.invoiceUnit || item.unit}
                                 onChange={(event) => updateCartUnit(item.id, event.target.value)}
                                 className="h-8 w-24 rounded-lg border border-slate-200 bg-slate-50 text-center text-[11px] font-black outline-none focus:border-indigo-400"
@@ -1047,6 +1052,8 @@ export default function CustomersListPage() {
                                     {manualConversionHint(item.invoiceUnit, item.unit)}
                                   </span>
                                   <input
+                                    data-invoice-cell="true"
+                                    onKeyDown={handleInvoiceArrowNavigation}
                                     type="number"
                                     min={0.001}
                                     step="any"
@@ -1064,6 +1071,8 @@ export default function CustomersListPage() {
                             </td>
                             <td className="p-2 text-center">
                               <input
+                                data-invoice-cell="true"
+                                onKeyDown={handleInvoiceArrowNavigation}
                                 type="number"
                                 step="any"
                                 value={item.price}

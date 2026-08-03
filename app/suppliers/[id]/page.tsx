@@ -13,6 +13,7 @@ import { calculateInvoiceTax, paperSizeCss, useBusinessSettings } from "@/app/bu
 import { conversionFactorForUnit, hasKnownConversion, invoiceUnitsForBaseUnit, manualConversionHint, productUnitConversions, UnitConversion, unitConversionsForBaseUnit, withProductUnitConversion } from "@/lib/category-settings";
 import { formatPriceInput, priceFromPurchase, profitPercentFromPrices, purchaseFromPrice } from "@/lib/pricing";
 import { canViewProfitControls } from "@/lib/permissions";
+import { handleInvoiceArrowNavigation } from "@/lib/invoice-keyboard-navigation";
 
 interface Product {
   id: string; name: string; unit: string;
@@ -725,6 +726,8 @@ export default function SupplierInvoicePage() {
                         </td>
                         <td className="p-4 text-center">
                           <input
+                            data-invoice-cell="true"
+                            onKeyDown={handleInvoiceArrowNavigation}
                             type="number" step="any"
                             value={item.qty}
                             onChange={e => updateCart(item.id, "qty", e.target.value)}
@@ -733,6 +736,8 @@ export default function SupplierInvoicePage() {
                         </td>
                         <td className="p-4 text-center">
                           <select
+                            data-invoice-cell="true"
+                            onKeyDown={handleInvoiceArrowNavigation}
                             value={item.invoiceUnit || item.unit}
                             onChange={(event) => updateCartUnit(item.id, event.target.value)}
                             className="w-24 rounded-xl border border-slate-200 bg-slate-50 p-2 text-center text-xs font-black outline-none focus:border-amber-400"
@@ -747,6 +752,8 @@ export default function SupplierInvoicePage() {
                                 {manualConversionHint(item.invoiceUnit, item.unit)}
                               </span>
                               <input
+                                data-invoice-cell="true"
+                                onKeyDown={handleInvoiceArrowNavigation}
                                 type="number"
                                 min={0.001}
                                 step="any"
@@ -769,6 +776,8 @@ export default function SupplierInvoicePage() {
                         </td>
                         <td className="p-4 text-center">
                           <input
+                            data-invoice-cell="true"
+                            onKeyDown={handleInvoiceArrowNavigation}
                             type="number" step="any"
                             value={item.p_price}
                             onChange={e => updateCart(item.id, "p_price", e.target.value)}
