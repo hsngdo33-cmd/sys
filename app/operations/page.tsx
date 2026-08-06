@@ -102,11 +102,11 @@ const cashTypes = [
 const cashCategories = ["مصروف تشغيلي", "إيجار", "كهرباء", "مرتبات", "صيانة", "خدمات", "فرق خزنة", "أخرى"];
 
 function money(value: unknown) {
-  return Number(value || 0).toLocaleString("ar-EG", { maximumFractionDigits: 2 });
+  return Number(value || 0).toLocaleString("ar-EG-u-nu-latn", { maximumFractionDigits: 2 });
 }
 
 function dateTime(value: string) {
-  return new Intl.DateTimeFormat("ar-EG", {
+  return new Intl.DateTimeFormat("ar-EG-u-nu-latn", {
     dateStyle: "short",
     timeStyle: "short",
   }).format(new Date(value));
@@ -791,7 +791,7 @@ export default function OperationsPage() {
           {!isCashier && (
             <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
               <p className="text-xs font-black text-slate-400">حركات مخزون قابلة للمراجعة</p>
-              <p className="mt-3 text-2xl font-black text-indigo-600">{movements.length.toLocaleString("ar-EG")}</p>
+              <p className="mt-3 text-2xl font-black text-indigo-600">{movements.length.toLocaleString("ar-EG-u-nu-latn")}</p>
             </div>
           )}
         </section>

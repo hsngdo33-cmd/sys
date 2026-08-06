@@ -69,7 +69,7 @@ function numberValue(value: number | string | null | undefined) {
 }
 
 function formatMoney(value: number) {
-  return value.toLocaleString("ar-EG", {
+  return value.toLocaleString("ar-EG-u-nu-latn", {
     maximumFractionDigits: 0,
   });
 }
@@ -119,7 +119,7 @@ function getDayRange(date: Date, timeZone: string) {
 }
 
 function formatDateLabel(localDate: string, timeZone: string) {
-  return new Intl.DateTimeFormat("ar-EG", {
+  return new Intl.DateTimeFormat("ar-EG-u-nu-latn", {
     timeZone,
     weekday: "long",
     year: "numeric",

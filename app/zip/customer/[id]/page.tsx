@@ -184,7 +184,7 @@ export default function GlobalInvoiceSystem() {
             <div className="p-10 border-b border-slate-50 flex justify-between items-start bg-gradient-to-l from-white to-slate-50/50">
                <div>
                   <h2 className="text-4xl font-black text-slate-900 mb-1 tracking-tighter">فاتورة مبيعات</h2>
-                  <p className="text-slate-400 font-bold text-sm">تاريخ العملية: {new Date().toLocaleDateString('ar-EG', { dateStyle: 'full' })}</p>
+                  <p className="text-slate-400 font-bold text-sm">تاريخ العملية: {new Date().toLocaleDateString('ar-EG-u-nu-latn', { dateStyle: 'full' })}</p>
                </div>
                <div className="text-left bg-blue-50 p-5 rounded-[2rem] border border-blue-100 min-w-[200px]">
                   <p className="text-[9px] font-black text-blue-400 uppercase mb-1 tracking-[0.2em]">العميل</p>

@@ -49,7 +49,7 @@ function num(value: unknown) {
 }
 
 function money(value: unknown) {
-  return num(value).toLocaleString("ar-EG", { maximumFractionDigits: 2 });
+  return num(value).toLocaleString("ar-EG-u-nu-latn", { maximumFractionDigits: 2 });
 }
 
 function csvCell(value: unknown) {
@@ -264,10 +264,10 @@ export default function ReorderReportPage() {
             </label>
 
             <div className="grid gap-3 md:grid-cols-4">
-              <SummaryCard title="أصناف مطلوبة" value={totals.items.toLocaleString("ar-EG")} />
-              <SummaryCard title="كمية مقترحة" value={totals.qty.toLocaleString("ar-EG")} />
+              <SummaryCard title="أصناف مطلوبة" value={totals.items.toLocaleString("ar-EG-u-nu-latn")} />
+              <SummaryCard title="كمية مقترحة" value={totals.qty.toLocaleString("ar-EG-u-nu-latn")} />
               <SummaryCard title="تكلفة تقديرية" value={`${money(totals.cost)} ج`} />
-              <SummaryCard title="بدون مورد" value={totals.withoutSupplier.toLocaleString("ar-EG")} />
+              <SummaryCard title="بدون مورد" value={totals.withoutSupplier.toLocaleString("ar-EG-u-nu-latn")} />
             </div>
           </div>
         </section>
@@ -286,7 +286,7 @@ export default function ReorderReportPage() {
                 className="h-11 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 text-sm font-bold text-slate-800 outline-none focus:border-amber-400 sm:w-80"
               />
               <span className="inline-flex h-11 items-center justify-center rounded-xl bg-slate-100 px-4 text-xs font-black text-slate-600">
-                {reorderRows.length.toLocaleString("ar-EG")} صنف ظاهر
+                {reorderRows.length.toLocaleString("ar-EG-u-nu-latn")} صنف ظاهر
               </span>
             </div>
           </div>

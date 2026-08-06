@@ -200,7 +200,7 @@ export default function CustomersListPage() {
 
   useEffect(() => {
     barcodeInputRef.current?.focus();
-    setPrintDateLabel(new Date().toLocaleDateString("ar-EG"));
+    setPrintDateLabel(new Date().toLocaleDateString("ar-EG-u-nu-latn"));
 
     const syncDirectoryMode = () => {
       setDirectoryOnly(new URLSearchParams(window.location.search).get("view") === "directory");
@@ -335,7 +335,7 @@ export default function CustomersListPage() {
   const formatLastActivity = (customerId: string) => {
     const activity = activityMap.get(customerId);
     if (!activity?.lastDate) return "لا توجد حركات";
-    return new Date(activity.lastDate).toLocaleDateString("ar-EG");
+    return new Date(activity.lastDate).toLocaleDateString("ar-EG-u-nu-latn");
   };
 
   const getCustomerStatus = (customer: Customer) => {
@@ -583,7 +583,7 @@ export default function CustomersListPage() {
         action: "customer_invoice_saved",
         entityType: "customer_invoice",
         entityId: invoice?.id,
-        note: `فاتورة بيع ${invoiceNumber} - ${customer.name} - ${total.toLocaleString("ar-EG")} ج`,
+        note: `فاتورة بيع ${invoiceNumber} - ${customer.name} - ${total.toLocaleString("ar-EG-u-nu-latn")} ج`,
       });
 
       if (printAfterSave) {
@@ -777,15 +777,15 @@ export default function CustomersListPage() {
             <div className="grid grid-cols-3 gap-2 text-center sm:w-80">
               <div className="rounded-xl bg-slate-50 px-3 py-2">
                 <p className="text-[9px] font-black text-slate-400">العملاء</p>
-                <p className="text-lg font-black text-slate-900">{customers.length.toLocaleString("ar-EG")}</p>
+                <p className="text-lg font-black text-slate-900">{customers.length.toLocaleString("ar-EG-u-nu-latn")}</p>
               </div>
               <div className="rounded-xl bg-rose-50 px-3 py-2">
                 <p className="text-[9px] font-black text-rose-400">الديون</p>
-                <p className="text-lg font-black text-rose-600">{totalDebt.toLocaleString("ar-EG")}</p>
+                <p className="text-lg font-black text-rose-600">{totalDebt.toLocaleString("ar-EG-u-nu-latn")}</p>
               </div>
               <div className="rounded-xl bg-emerald-50 px-3 py-2">
                 <p className="text-[9px] font-black text-emerald-500">سليم</p>
-                <p className="text-lg font-black text-emerald-700">{clearCount.toLocaleString("ar-EG")}</p>
+                <p className="text-lg font-black text-emerald-700">{clearCount.toLocaleString("ar-EG-u-nu-latn")}</p>
               </div>
             </div>
           </Link>
@@ -895,7 +895,7 @@ export default function CustomersListPage() {
               <div className="rounded-md border border-slate-200 bg-white px-2 py-1">
                 <p className="text-[9px] font-black text-slate-400">الرصيد</p>
                 <p className={`text-sm font-black ${(selectedInvoiceCustomer?.balance || 0) > 0 ? "text-rose-600" : "text-emerald-600"}`}>
-                  {(selectedInvoiceCustomer?.balance || 0).toLocaleString("ar-EG")} ج
+                  {(selectedInvoiceCustomer?.balance || 0).toLocaleString("ar-EG-u-nu-latn")} ج
                 </p>
               </div>
               </div>
@@ -970,8 +970,8 @@ export default function CustomersListPage() {
                     >
                       <p className="line-clamp-1 text-xs font-black text-slate-900">{product.name}</p>
                       <p className="mt-1 text-[10px] font-bold text-slate-400">
-                        {Number(product.sale_price || 0).toLocaleString("ar-EG")} ج - مخزون{" "}
-                        {Number(product.stock_quantity || 0).toLocaleString("ar-EG")} {product.unit}
+                        {Number(product.sale_price || 0).toLocaleString("ar-EG-u-nu-latn")} ج - مخزون{" "}
+                        {Number(product.stock_quantity || 0).toLocaleString("ar-EG-u-nu-latn")} {product.unit}
                       </p>
                     </button>
                   );
@@ -987,7 +987,7 @@ export default function CustomersListPage() {
                 <div className="mb-2 flex items-center justify-between gap-3">
                   <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">تفاصيل الفاتورة</p>
                   <span className="rounded-lg bg-slate-100 px-3 py-1 text-[10px] font-black text-slate-500">
-                    {cart.length.toLocaleString("ar-EG")} صنف
+                    {cart.length.toLocaleString("ar-EG-u-nu-latn")} صنف
                   </span>
                 </div>
                 <div className="max-h-[320px] overflow-auto rounded-lg border border-slate-200">
@@ -1018,7 +1018,7 @@ export default function CustomersListPage() {
                             <td className="p-2">
                               <p className="text-xs font-black text-slate-900">{item.name}</p>
                               <p className="mt-1 text-[10px] font-bold text-slate-400">
-                                تكلفة {Number(item.cost || 0).toLocaleString("ar-EG", { maximumFractionDigits: 2 })} ج
+                                تكلفة {Number(item.cost || 0).toLocaleString("ar-EG-u-nu-latn", { maximumFractionDigits: 2 })} ج
                               </p>
                             </td>
                             <td className="p-2 text-center">
@@ -1065,7 +1065,7 @@ export default function CustomersListPage() {
                               )}
                               {Number(item.unitFactor || 1) !== 1 && (
                                 <p className="mt-1 text-[9px] font-bold text-slate-400">
-                                  = {(Number(item.qty || 0) * Number(item.unitFactor || 1)).toLocaleString("ar-EG")} {item.unit}
+                                  = {(Number(item.qty || 0) * Number(item.unitFactor || 1)).toLocaleString("ar-EG-u-nu-latn")} {item.unit}
                                 </p>
                               )}
                             </td>
@@ -1081,7 +1081,7 @@ export default function CustomersListPage() {
                               />
                             </td>
                             <td className="p-2 text-left text-xs font-black">
-                              {lineTotal.toLocaleString("ar-EG", { maximumFractionDigits: 2 })}
+                              {lineTotal.toLocaleString("ar-EG-u-nu-latn", { maximumFractionDigits: 2 })}
                             </td>
                             <td className="p-2">
                               <button
@@ -1167,25 +1167,25 @@ export default function CustomersListPage() {
                   <div className="grid grid-cols-2 gap-2">
                     <div>
                       <p className="text-[9px] font-black text-slate-500">الإجمالي</p>
-                      <p className="text-base font-black">{total.toLocaleString("ar-EG", { maximumFractionDigits: 2 })} ج</p>
+                      <p className="text-base font-black">{total.toLocaleString("ar-EG-u-nu-latn", { maximumFractionDigits: 2 })} ج</p>
                     </div>
                     <div>
                       <p className="text-[9px] font-black text-slate-500">المتبقي</p>
                       <p className={`text-base font-black ${remaining > 0 ? "text-rose-300" : "text-emerald-300"}`}>
-                        {remaining.toLocaleString("ar-EG", { maximumFractionDigits: 2 })} ج
+                        {remaining.toLocaleString("ar-EG-u-nu-latn", { maximumFractionDigits: 2 })} ج
                       </p>
                     </div>
                     {canViewProfit && (
                       <div>
                         <p className="text-[9px] font-black text-slate-500">الربح</p>
                         <p className={`text-sm font-black ${profit >= 0 ? "text-emerald-300" : "text-rose-300"}`}>
-                          {profit.toLocaleString("ar-EG", { maximumFractionDigits: 2 })} ج ({margin}%)
+                          {profit.toLocaleString("ar-EG-u-nu-latn", { maximumFractionDigits: 2 })} ج ({margin}%)
                         </p>
                       </div>
                     )}
                     <div>
                       <p className="text-[9px] font-black text-slate-500">{taxInfo.label}</p>
-                      <p className="text-sm font-black">{taxAmount.toLocaleString("ar-EG", { maximumFractionDigits: 2 })} ج</p>
+                      <p className="text-sm font-black">{taxAmount.toLocaleString("ar-EG-u-nu-latn", { maximumFractionDigits: 2 })} ج</p>
                     </div>
                   </div>
                   <div className="mt-3 grid gap-2">
@@ -1269,7 +1269,7 @@ export default function CustomersListPage() {
                       filter === tab.key ? "bg-[#0f172a] text-white shadow-sm" : "text-slate-500 hover:bg-white"
                     }`}
                   >
-                    {tab.label} <span className="opacity-70">({tab.count.toLocaleString("ar-EG")})</span>
+                    {tab.label} <span className="opacity-70">({tab.count.toLocaleString("ar-EG-u-nu-latn")})</span>
                   </button>
                 ))}
               </div>
@@ -1277,10 +1277,10 @@ export default function CustomersListPage() {
             </div>
 
             <div className="mt-3 grid gap-2 sm:grid-cols-4">
-              <MiniStat label="إجمالي الديون" value={`${totalDebt.toLocaleString("ar-EG")} ج`} tone="dark" />
-              <MiniStat label="مديونون" value={debtorCount.toLocaleString("ar-EG")} />
-              <MiniStat label="حساب سليم" value={clearCount.toLocaleString("ar-EG")} />
-              <MiniStat label="بدون حركة" value={inactiveCount.toLocaleString("ar-EG")} />
+              <MiniStat label="إجمالي الديون" value={`${totalDebt.toLocaleString("ar-EG-u-nu-latn")} ج`} tone="dark" />
+              <MiniStat label="مديونون" value={debtorCount.toLocaleString("ar-EG-u-nu-latn")} />
+              <MiniStat label="حساب سليم" value={clearCount.toLocaleString("ar-EG-u-nu-latn")} />
+              <MiniStat label="بدون حركة" value={inactiveCount.toLocaleString("ar-EG-u-nu-latn")} />
             </div>
 
             <div className="mt-3 flex flex-wrap gap-2 rounded-2xl border border-slate-200 bg-slate-50/70 p-2">
@@ -1325,7 +1325,7 @@ export default function CustomersListPage() {
                             {customer.name}
                           </Link>
                           <p className="mt-1 text-[11px] font-bold text-slate-400">
-                            آخر حركة: {formatLastActivity(customer.id)} · {(activityMap.get(customer.id)?.count || 0).toLocaleString("ar-EG")} حركة
+                            آخر حركة: {formatLastActivity(customer.id)} · {(activityMap.get(customer.id)?.count || 0).toLocaleString("ar-EG-u-nu-latn")} حركة
                           </p>
                         </td>
                         <td className="px-4 py-3 font-bold text-slate-400">{customer.phone || "—"}</td>
@@ -1335,7 +1335,7 @@ export default function CustomersListPage() {
                               {status.label}
                             </span>
                             <span className={`text-lg font-black ${customer.balance > 0 ? "text-rose-600" : "text-slate-500"}`}>
-                              {customer.balance > 0 ? customer.balance.toLocaleString("ar-EG") : "0"}
+                              {customer.balance > 0 ? customer.balance.toLocaleString("ar-EG-u-nu-latn") : "0"}
                             </span>
                           </div>
                         </td>
@@ -1438,7 +1438,7 @@ export default function CustomersListPage() {
               <p>التاريخ: {printDateLabel || "-"}</p>
               <p>العميل: {selectedInvoiceCustomer?.name || manualCustomerName || "-"}</p>
               <p>رقم الفاتورة: {quickPrintInvoiceNumber}</p>
-              <p>الرصيد السابق: {(selectedInvoiceCustomer?.balance || 0).toLocaleString("ar-EG")} ج.م</p>
+              <p>الرصيد السابق: {(selectedInvoiceCustomer?.balance || 0).toLocaleString("ar-EG-u-nu-latn")} ج.م</p>
             </div>
           </div>
           <table className="print-table">
@@ -1457,13 +1457,13 @@ export default function CustomersListPage() {
                   <td>{item.name}</td>
                   <td>{item.invoiceUnit || item.unit}</td>
                   <td>
-                    {Number(item.qty || 0).toLocaleString("ar-EG")}
+                    {Number(item.qty || 0).toLocaleString("ar-EG-u-nu-latn")}
                     {Number(item.unitFactor || 1) !== 1
-                      ? ` = ${(Number(item.qty || 0) * Number(item.unitFactor || 1)).toLocaleString("ar-EG")} ${item.unit}`
+                      ? ` = ${(Number(item.qty || 0) * Number(item.unitFactor || 1)).toLocaleString("ar-EG-u-nu-latn")} ${item.unit}`
                       : ""}
                   </td>
-                  <td>{Number(item.price || 0).toLocaleString("ar-EG")} ج</td>
-                  <td>{(Number(item.qty || 0) * Number(item.price || 0)).toLocaleString("ar-EG")} ج</td>
+                  <td>{Number(item.price || 0).toLocaleString("ar-EG-u-nu-latn")} ج</td>
+                  <td>{(Number(item.qty || 0) * Number(item.price || 0)).toLocaleString("ar-EG-u-nu-latn")} ج</td>
                 </tr>
               ))}
             </tbody>
@@ -1471,29 +1471,29 @@ export default function CustomersListPage() {
           <div className="print-summary">
             <p>
               <span>الإجمالي قبل الخصم</span>
-              <b>{subtotal.toLocaleString("ar-EG", { maximumFractionDigits: 2 })} ج</b>
+              <b>{subtotal.toLocaleString("ar-EG-u-nu-latn", { maximumFractionDigits: 2 })} ج</b>
             </p>
             <p>
               <span>الخصم ({discountRate}%)</span>
-              <b>{discountAmount.toLocaleString("ar-EG", { maximumFractionDigits: 2 })} ج</b>
+              <b>{discountAmount.toLocaleString("ar-EG-u-nu-latn", { maximumFractionDigits: 2 })} ج</b>
             </p>
             {businessSettings.tax_mode !== "none" && (
               <p>
                 <span>{taxInfo.label}</span>
-                <b>{taxAmount.toLocaleString("ar-EG", { maximumFractionDigits: 2 })} ج</b>
+                <b>{taxAmount.toLocaleString("ar-EG-u-nu-latn", { maximumFractionDigits: 2 })} ج</b>
               </p>
             )}
             <p>
               <span>الصافي</span>
-              <b>{total.toLocaleString("ar-EG", { maximumFractionDigits: 2 })} ج</b>
+              <b>{total.toLocaleString("ar-EG-u-nu-latn", { maximumFractionDigits: 2 })} ج</b>
             </p>
             <p>
               <span>المدفوع</span>
-              <b>{cash.toLocaleString("ar-EG", { maximumFractionDigits: 2 })} ج</b>
+              <b>{cash.toLocaleString("ar-EG-u-nu-latn", { maximumFractionDigits: 2 })} ج</b>
             </p>
             <p className="print-total">
               <span>المتبقي</span>
-              <b>{remaining.toLocaleString("ar-EG", { maximumFractionDigits: 2 })} ج</b>
+              <b>{remaining.toLocaleString("ar-EG-u-nu-latn", { maximumFractionDigits: 2 })} ج</b>
             </p>
           </div>
           {note && <p className="print-note">ملاحظة: {note}</p>}
@@ -1575,7 +1575,7 @@ export default function CustomersListPage() {
           <div className="mb-6 border-r-4 border-emerald-500 pr-3">
             <h3 className="text-xl font-black text-slate-900">تحصيل من: {selectedCustomer.name}</h3>
             <p className="mt-1 text-xs font-bold text-slate-400">
-              المديونية الحالية: <span className="font-black text-rose-600">{selectedCustomer.balance.toLocaleString("ar-EG")} ج.م</span>
+              المديونية الحالية: <span className="font-black text-rose-600">{selectedCustomer.balance.toLocaleString("ar-EG-u-nu-latn")} ج.م</span>
             </p>
           </div>
           <div className="space-y-4">
@@ -1592,7 +1592,7 @@ export default function CustomersListPage() {
                 <p className="mt-2 text-xs font-bold text-slate-400">
                   المتبقي بعد التحصيل:{" "}
                   <span className={`font-black ${selectedCustomer.balance - payAmount > 0 ? "text-rose-500" : "text-emerald-600"}`}>
-                    {(selectedCustomer.balance - payAmount).toLocaleString("ar-EG")} ج.م
+                    {(selectedCustomer.balance - payAmount).toLocaleString("ar-EG-u-nu-latn")} ج.م
                   </span>
                 </p>
               )}

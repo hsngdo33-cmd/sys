@@ -137,6 +137,14 @@ export default function CustomerHistory() {
     ]);
     setCustomer(cust);
     setTransactions(trans || []);
+    const requestedInvoiceId = new URLSearchParams(window.location.search).get("invoice");
+    if (requestedInvoiceId && (trans || []).some(transaction => String(transaction.id) === requestedInvoiceId)) {
+      setFilterType("sale");
+      setExpandedId(requestedInvoiceId);
+      window.setTimeout(() => {
+        document.getElementById(`invoice-${requestedInvoiceId}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+      }, 100);
+    }
     setLoading(false);
   }
 
@@ -283,14 +291,14 @@ export default function CustomerHistory() {
         .single();
       if (balanceReadError) throw balanceReadError;
 
-      const editedAt = new Date().toLocaleString("ar-EG", {
+      const editedAt = new Date().toLocaleString("ar-EG-u-nu-latn", {
         day: "numeric",
         month: "long",
         year: "numeric",
         hour: "2-digit",
         minute: "2-digit",
       });
-      const auditNote = `تم تعديل مبلغ السداد من ${oldAmount.toLocaleString("ar-EG")} ج إلى ${newAmount.toLocaleString("ar-EG")} ج يوم ${editedAt}`;
+      const auditNote = `تم تعديل مبلغ السداد من ${oldAmount.toLocaleString("ar-EG-u-nu-latn")} ج إلى ${newAmount.toLocaleString("ar-EG-u-nu-latn")} ج يوم ${editedAt}`;
       const cleanNote = paymentNote.trim();
       const description = cleanNote ? `${cleanNote}\n${auditNote}` : auditNote;
 
@@ -326,7 +334,7 @@ export default function CustomerHistory() {
     downloadCsv(`customer-statement-${shortInvoiceNumber(id)}.csv`, [
       ["التاريخ", "النوع", "الوصف", "المبلغ"],
       ...filtered.map(t => [
-        new Date(t.created_at).toLocaleString("ar-EG"),
+        new Date(t.created_at).toLocaleString("ar-EG-u-nu-latn"),
         txLabel(t.type),
         t.description || "",
         Number(t.amount || 0),
@@ -386,9 +394,9 @@ export default function CustomerHistory() {
     ? transactions.reduce((sum, t) => sum + Number(t.amount || 0), 0) / transactions.length
     : 0;
   const followupAlerts = [
-    Number(customer?.balance || 0) > 0 ? `متابعة تحصيل: على العميل ${Number(customer?.balance || 0).toLocaleString("ar-EG")} ج.م` : "",
+    Number(customer?.balance || 0) > 0 ? `متابعة تحصيل: على العميل ${Number(customer?.balance || 0).toLocaleString("ar-EG-u-nu-latn")} ج.م` : "",
     transactions.length === 0 ? "العميل لم يسجل أي حركة حتى الآن" : "",
-    daysFromLastActivity != null && daysFromLastActivity > 30 ? `لا توجد حركة منذ ${daysFromLastActivity.toLocaleString("ar-EG")} يوم` : "",
+    daysFromLastActivity != null && daysFromLastActivity > 30 ? `لا توجد حركة منذ ${daysFromLastActivity.toLocaleString("ar-EG-u-nu-latn")} يوم` : "",
   ].filter(Boolean);
 
   const filterTabs: { key: TxType; label: string }[] = [
@@ -414,7 +422,7 @@ export default function CustomerHistory() {
           </div>
           <div className="flex items-center gap-3">
             <div className={`px-4 py-2 rounded-xl text-sm font-black ${customer?.balance > 0 ? "bg-rose-600" : "bg-emerald-600"}`}>
-              {customer?.balance > 0 ? `دين: ${customer?.balance?.toLocaleString("ar-EG")} ج.م` : "حساب سليم ✅"}
+              {customer?.balance > 0 ? `دين: ${customer?.balance?.toLocaleString("ar-EG-u-nu-latn")} ج.م` : "حساب سليم ✅"}
             </div>
             <Link
               href={`/customer/${id}`}
@@ -464,20 +472,20 @@ export default function CustomerHistory() {
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
               <div className="rounded-2xl bg-slate-50 p-3">
                 <p className="text-[10px] font-black text-slate-400 mb-1">عدد الحركات</p>
-                <p className="text-lg font-black text-slate-900">{transactions.length.toLocaleString("ar-EG")}</p>
+                <p className="text-lg font-black text-slate-900">{transactions.length.toLocaleString("ar-EG-u-nu-latn")}</p>
               </div>
               <div className="rounded-2xl bg-slate-50 p-3">
                 <p className="text-[10px] font-black text-slate-400 mb-1">آخر حركة</p>
-                <p className="text-sm font-black text-slate-900">{lastTransaction ? new Date(lastTransaction.created_at).toLocaleDateString("ar-EG") : "-"}</p>
+                <p className="text-sm font-black text-slate-900">{lastTransaction ? new Date(lastTransaction.created_at).toLocaleDateString("ar-EG-u-nu-latn") : "-"}</p>
               </div>
               <div className="rounded-2xl bg-slate-50 p-3">
                 <p className="text-[10px] font-black text-slate-400 mb-1">متوسط الحركة</p>
-                <p className="text-lg font-black text-slate-900">{averageTransaction.toLocaleString("ar-EG", { maximumFractionDigits: 0 })}</p>
+                <p className="text-lg font-black text-slate-900">{averageTransaction.toLocaleString("ar-EG-u-nu-latn", { maximumFractionDigits: 0 })}</p>
               </div>
               <div className="rounded-2xl bg-slate-50 p-3">
                 <p className="text-[10px] font-black text-slate-400 mb-1">الرصيد</p>
                 <p className={`text-lg font-black ${Number(customer?.balance || 0) > 0 ? "text-rose-600" : "text-emerald-600"}`}>
-                  {Number(customer?.balance || 0).toLocaleString("ar-EG")}
+                  {Number(customer?.balance || 0).toLocaleString("ar-EG-u-nu-latn")}
                 </p>
               </div>
             </div>
@@ -518,23 +526,23 @@ export default function CustomerHistory() {
         <div className="grid grid-cols-4 gap-4">
           <div className="bg-white p-5 rounded-[2rem] border border-slate-200 shadow-sm text-center">
             <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">إجمالي المبيعات</p>
-            <p className="text-2xl font-black text-slate-900">{totalSales.toLocaleString("ar-EG")}</p>
+            <p className="text-2xl font-black text-slate-900">{totalSales.toLocaleString("ar-EG-u-nu-latn")}</p>
             <p className="text-[10px] text-slate-400 font-bold mt-1">ج.م</p>
           </div>
           <div className="bg-white p-5 rounded-[2rem] border border-slate-200 shadow-sm text-center">
             <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">إجمالي المرتجعات</p>
-            <p className="text-2xl font-black text-amber-600">{totalReturns.toLocaleString("ar-EG")}</p>
+            <p className="text-2xl font-black text-amber-600">{totalReturns.toLocaleString("ar-EG-u-nu-latn")}</p>
             <p className="text-[10px] text-slate-400 font-bold mt-1">ج.م</p>
           </div>
           <div className="bg-white p-5 rounded-[2rem] border border-slate-200 shadow-sm text-center">
             <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">إجمالي المدفوع</p>
-            <p className="text-2xl font-black text-emerald-600">{totalPaid.toLocaleString("ar-EG")}</p>
+            <p className="text-2xl font-black text-emerald-600">{totalPaid.toLocaleString("ar-EG-u-nu-latn")}</p>
             <p className="text-[10px] text-slate-400 font-bold mt-1">ج.م</p>
           </div>
           <div className="bg-white p-5 rounded-[2rem] border border-slate-200 shadow-sm text-center">
             <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">دين العميل الحالي</p>
             <p className={`text-2xl font-black ${(customer?.balance || 0) > 0 ? "text-rose-600" : "text-emerald-600"}`}>
-              {Number(customer?.balance || 0).toLocaleString("ar-EG")}
+              {Number(customer?.balance || 0).toLocaleString("ar-EG-u-nu-latn")}
             </p>
             <p className="text-[10px] text-slate-400 font-bold mt-1">ج.م</p>
           </div>
@@ -578,7 +586,7 @@ export default function CustomerHistory() {
               const isPayment = PAYMENT_TYPES.includes(t.type);
               const isOpen = expandedId === t.id;
               return (
-                <div key={t.id} className="bg-white rounded-[2rem] border border-slate-200 shadow-sm overflow-hidden transition-all">
+                <div id={`invoice-${t.id}`} key={t.id} className="bg-white rounded-[2rem] border border-slate-200 shadow-sm overflow-hidden transition-all scroll-mt-6">
                   {/* رأس المعاملة */}
                   <div
                     onClick={() => setExpandedId(isOpen ? null : t.id)}
@@ -594,14 +602,14 @@ export default function CustomerHistory() {
                           {isSale && <span className="mr-2 rounded-lg bg-slate-100 px-2 py-0.5 text-[10px] text-slate-500">#{displayInvoiceNumber(t)}</span>}
                         </p>
                         <p className="text-[10px] font-bold text-slate-400 mt-0.5">
-                          {new Date(t.created_at).toLocaleString("ar-EG", { day:"numeric", month:"long", year:"numeric", hour:"2-digit", minute:"2-digit" })}
+                          {new Date(t.created_at).toLocaleString("ar-EG-u-nu-latn", { day:"numeric", month:"long", year:"numeric", hour:"2-digit", minute:"2-digit" })}
                         </p>
                       </div>
                     </div>
                     <div className="text-left flex items-center gap-4">
                       <div>
                         <p className={`text-xl font-black ${isSale ? "text-slate-900" : isReturn ? "text-amber-600" : "text-emerald-600"}`}>
-                          {isSale ? "+" : "−"} {t.amount?.toLocaleString("ar-EG")} ج.م
+                          {isSale ? "+" : "−"} {t.amount?.toLocaleString("ar-EG-u-nu-latn")} ج.م
                         </p>
                         {isSale && t.profit != null && (
                           <p className="text-[10px] text-emerald-600 font-black text-left">ربح: {Number(t.profit).toFixed(1)} ج</p>
@@ -644,8 +652,8 @@ export default function CustomerHistory() {
                                   <td className="py-3 text-center font-bold text-slate-600">
                                     {item.qty} <span className="text-[9px] text-slate-400">{item.unit}</span>
                                   </td>
-                                  <td className="py-3 text-center font-bold text-slate-600">{Number(item.price).toLocaleString("ar-EG")} ج</td>
-                                  <td className="py-3 text-left font-black">{(item.qty * item.price).toLocaleString("ar-EG")} ج</td>
+                                  <td className="py-3 text-center font-bold text-slate-600">{Number(item.price).toLocaleString("ar-EG-u-nu-latn")} ج</td>
+                                  <td className="py-3 text-left font-black">{(item.qty * item.price).toLocaleString("ar-EG-u-nu-latn")} ج</td>
                                 </tr>
                               ))}
                             </tbody>
@@ -739,7 +747,7 @@ export default function CustomerHistory() {
               <div className="grid grid-cols-2 gap-3">
                 <div className="bg-slate-50 p-4 rounded-2xl text-center">
                   <p className="text-[10px] font-black text-slate-400 mb-1">المبلغ الحالي</p>
-                  <p className="text-xl font-black text-slate-500">{Number(paymentEdit.amount || 0).toLocaleString("ar-EG")} ج</p>
+                  <p className="text-xl font-black text-slate-500">{Number(paymentEdit.amount || 0).toLocaleString("ar-EG-u-nu-latn")} ج</p>
                 </div>
                 <div className="bg-emerald-50 p-4 rounded-2xl text-center border border-emerald-100">
                   <p className="text-[10px] font-black text-emerald-700 mb-1">المبلغ الجديد</p>
@@ -832,7 +840,7 @@ export default function CustomerHistory() {
                               className="w-24 rounded-xl border border-slate-200 bg-slate-50 p-2 text-center font-black outline-none focus:border-amber-400"
                             />
                           </td>
-                          <td className="p-3 text-left font-black text-slate-900">{(qty * Number(item.price || 0)).toLocaleString("ar-EG")} ج</td>
+                          <td className="p-3 text-left font-black text-slate-900">{(qty * Number(item.price || 0)).toLocaleString("ar-EG-u-nu-latn")} ج</td>
                         </tr>
                       );
                     })}
@@ -850,11 +858,11 @@ export default function CustomerHistory() {
               <div className="grid grid-cols-2 gap-3">
                 <div className="rounded-2xl bg-amber-50 border border-amber-100 p-4 text-center">
                   <p className="text-[10px] font-black text-amber-700 mb-1">قيمة المرتجع</p>
-                  <p className="text-2xl font-black text-amber-700">{returnTotal.toLocaleString("ar-EG")} ج</p>
+                  <p className="text-2xl font-black text-amber-700">{returnTotal.toLocaleString("ar-EG-u-nu-latn")} ج</p>
                 </div>
                 <div className="rounded-2xl bg-slate-50 border border-slate-100 p-4 text-center">
                   <p className="text-[10px] font-black text-slate-400 mb-1">تأثير الربح</p>
-                  <p className="text-2xl font-black text-slate-700">-{returnProfitImpact.toLocaleString("ar-EG")} ج</p>
+                  <p className="text-2xl font-black text-slate-700">-{returnProfitImpact.toLocaleString("ar-EG-u-nu-latn")} ج</p>
                 </div>
               </div>
             </div>
@@ -890,16 +898,16 @@ export default function CustomerHistory() {
                 <p>كشف حساب حسب الفلتر الحالي</p>
               </div>
               <div className="print-meta">
-                <p>التاريخ: {new Date().toLocaleDateString("ar-EG")}</p>
-                <p>عدد الحركات: {filtered.length.toLocaleString("ar-EG")}</p>
-                <p>الرصيد الحالي: {Number(customer?.balance || 0).toLocaleString("ar-EG")} ج</p>
+                <p>التاريخ: {new Date().toLocaleDateString("ar-EG-u-nu-latn")}</p>
+                <p>عدد الحركات: {filtered.length.toLocaleString("ar-EG-u-nu-latn")}</p>
+                <p>الرصيد الحالي: {Number(customer?.balance || 0).toLocaleString("ar-EG-u-nu-latn")} ج</p>
               </div>
             </div>
             <div className="print-summary">
-              <p><span>إجمالي المبيعات</span><b>{totalSales.toLocaleString("ar-EG")} ج</b></p>
-              <p><span>إجمالي المرتجعات</span><b>{totalReturns.toLocaleString("ar-EG")} ج</b></p>
-              <p><span>إجمالي المدفوع</span><b>{totalPaid.toLocaleString("ar-EG")} ج</b></p>
-              <p className="print-total"><span>الرصيد الحالي</span><b>{Number(customer?.balance || 0).toLocaleString("ar-EG")} ج</b></p>
+              <p><span>إجمالي المبيعات</span><b>{totalSales.toLocaleString("ar-EG-u-nu-latn")} ج</b></p>
+              <p><span>إجمالي المرتجعات</span><b>{totalReturns.toLocaleString("ar-EG-u-nu-latn")} ج</b></p>
+              <p><span>إجمالي المدفوع</span><b>{totalPaid.toLocaleString("ar-EG-u-nu-latn")} ج</b></p>
+              <p className="print-total"><span>الرصيد الحالي</span><b>{Number(customer?.balance || 0).toLocaleString("ar-EG-u-nu-latn")} ج</b></p>
             </div>
             <table className="print-table" style={{ marginTop: 10 }}>
               <thead>
@@ -913,10 +921,10 @@ export default function CustomerHistory() {
               <tbody>
                 {filtered.map(t => (
                   <tr key={t.id}>
-                    <td>{new Date(t.created_at).toLocaleDateString("ar-EG")}</td>
+                    <td>{new Date(t.created_at).toLocaleDateString("ar-EG-u-nu-latn")}</td>
                     <td>{txLabel(t.type)}</td>
                     <td>{t.description || "-"}</td>
-                    <td>{Number(t.amount || 0).toLocaleString("ar-EG")} ج</td>
+                    <td>{Number(t.amount || 0).toLocaleString("ar-EG-u-nu-latn")} ج</td>
                   </tr>
                 ))}
               </tbody>
@@ -940,7 +948,7 @@ export default function CustomerHistory() {
                 <p>إدارة العملاء والمبيعات</p>
               </div>
               <div className="print-meta">
-                <p>التاريخ: {new Date(printTransaction.created_at).toLocaleDateString("ar-EG")}</p>
+                <p>التاريخ: {new Date(printTransaction.created_at).toLocaleDateString("ar-EG-u-nu-latn")}</p>
                 <p>العميل: {customer?.name || "-"}</p>
                 <p>رقم الفاتورة: {displayInvoiceNumber(printTransaction)}</p>
               </div>
@@ -960,19 +968,19 @@ export default function CustomerHistory() {
                   <tr key={idx}>
                     <td>{item.name}</td>
                     <td>{item.unit || "-"}</td>
-                    <td>{Number(item.qty || 0).toLocaleString("ar-EG")}</td>
-                    <td>{Number(item.price || 0).toLocaleString("ar-EG")} ج</td>
-                    <td>{(Number(item.qty || 0) * Number(item.price || 0)).toLocaleString("ar-EG")} ج</td>
+                    <td>{Number(item.qty || 0).toLocaleString("ar-EG-u-nu-latn")}</td>
+                    <td>{Number(item.price || 0).toLocaleString("ar-EG-u-nu-latn")} ج</td>
+                    <td>{(Number(item.qty || 0) * Number(item.price || 0)).toLocaleString("ar-EG-u-nu-latn")} ج</td>
                   </tr>
                 ))}
               </tbody>
             </table>
             <div className="print-summary">
-              <p><span>الإجمالي قبل الخصم</span><b>{printSubtotal.toLocaleString("ar-EG")} ج</b></p>
-              <p><span>الخصم ({printDiscountRate}%)</span><b>{printDiscountAmount.toLocaleString("ar-EG")} ج</b></p>
-              <p><span>صافي الفاتورة</span><b>{printNetTotal.toLocaleString("ar-EG")} ج</b></p>
-              <p><span>المدفوع</span><b>{printPaid.toLocaleString("ar-EG")} ج</b></p>
-              <p className="print-total"><span>المتبقي</span><b>{printRemaining.toLocaleString("ar-EG")} ج</b></p>
+              <p><span>الإجمالي قبل الخصم</span><b>{printSubtotal.toLocaleString("ar-EG-u-nu-latn")} ج</b></p>
+              <p><span>الخصم ({printDiscountRate}%)</span><b>{printDiscountAmount.toLocaleString("ar-EG-u-nu-latn")} ج</b></p>
+              <p><span>صافي الفاتورة</span><b>{printNetTotal.toLocaleString("ar-EG-u-nu-latn")} ج</b></p>
+              <p><span>المدفوع</span><b>{printPaid.toLocaleString("ar-EG-u-nu-latn")} ج</b></p>
+              <p className="print-total"><span>المتبقي</span><b>{printRemaining.toLocaleString("ar-EG-u-nu-latn")} ج</b></p>
             </div>
             {printTransaction.description && <p className="print-note">ملاحظة: {printTransaction.description}</p>}
           </div>

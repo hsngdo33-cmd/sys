@@ -317,7 +317,7 @@ export default function ReportSettingsPage() {
 
               {updatedAt && (
                 <p className="text-xs font-bold text-slate-400">
-                  آخر تحديث: {new Date(updatedAt).toLocaleString("ar-EG")}
+                  آخر تحديث: {new Date(updatedAt).toLocaleString("ar-EG-u-nu-latn")}
                 </p>
               )}
 

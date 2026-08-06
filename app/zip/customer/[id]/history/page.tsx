@@ -93,10 +93,10 @@ export default function GlobalHistoryUI() {
                 {/* Date Label */}
                 <div className="mb-3">
                    <span className="text-[10px] font-black text-slate-400 bg-slate-100 px-3 py-1 rounded-lg uppercase">
-                     {new Date(t.created_at).toLocaleString('ar-EG', { dateStyle: 'full' })}
+                     {new Date(t.created_at).toLocaleString('ar-EG-u-nu-latn', { dateStyle: 'full' })}
                    </span>
                    <span className="text-[10px] font-bold text-slate-300 mr-3 italic">
-                      {new Date(t.created_at).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })}
+                      {new Date(t.created_at).toLocaleTimeString('ar-EG-u-nu-latn', { hour: '2-digit', minute: '2-digit' })}
                    </span>
                 </div>
 

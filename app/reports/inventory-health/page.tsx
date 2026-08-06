@@ -47,7 +47,7 @@ function num(value: unknown) {
 }
 
 function money(value: unknown) {
-  return num(value).toLocaleString("ar-EG", { maximumFractionDigits: 2 });
+  return num(value).toLocaleString("ar-EG-u-nu-latn", { maximumFractionDigits: 2 });
 }
 
 function margin(product: ProductRow) {
@@ -253,7 +253,7 @@ export default function InventoryHealthReportPage() {
               >
                 <Icon className={`mb-3 h-6 w-6 ${selected ? "text-indigo-700" : "text-slate-400"}`} />
                 <p className="text-xs font-black text-slate-400">{card.title}</p>
-                <p className="mt-2 text-2xl font-black text-slate-950">{card.value.toLocaleString("ar-EG")}</p>
+                <p className="mt-2 text-2xl font-black text-slate-950">{card.value.toLocaleString("ar-EG-u-nu-latn")}</p>
               </button>
             );
           })}
@@ -266,7 +266,7 @@ export default function InventoryHealthReportPage() {
             <div className="mt-4 grid gap-3 sm:grid-cols-3">
               <MiniStat label="تكلفة حالية" value={`${money(summary.stockValue)} ج`} />
               <MiniStat label="قيمة بيع محتملة" value={`${money(summary.potentialSaleValue)} ج`} />
-              <MiniStat label="هامش تقديري" value={`${summary.potentialMargin.toLocaleString("ar-EG")}%`} />
+              <MiniStat label="هامش تقديري" value={`${summary.potentialMargin.toLocaleString("ar-EG-u-nu-latn")}%`} />
             </div>
             <p className="mt-4 rounded-xl bg-slate-50 p-4 text-xs font-bold leading-6 text-slate-500">
               الأرقام دي تقديرية بناءً على الكمية الحالية وسعر الشراء والبيع المسجلين على الصنف.
@@ -321,7 +321,7 @@ export default function InventoryHealthReportPage() {
                 className="h-11 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 text-sm font-bold text-slate-800 outline-none focus:border-indigo-400 sm:w-80"
               />
               <span className="inline-flex h-11 items-center justify-center rounded-xl bg-slate-100 px-4 text-xs font-black text-slate-600">
-                {riskRows.length.toLocaleString("ar-EG")} صنف ظاهر
+                {riskRows.length.toLocaleString("ar-EG-u-nu-latn")} صنف ظاهر
               </span>
             </div>
           </div>
@@ -368,7 +368,7 @@ export default function InventoryHealthReportPage() {
                       <td className="p-3 font-black text-slate-700">{money(product.purchase_price)} ج</td>
                       <td className="p-3 font-black text-slate-700">{money(product.sale_price)} ج</td>
                       <td className={`p-3 font-black ${margin(product) <= 0 ? "text-rose-700" : "text-emerald-700"}`}>
-                        {margin(product).toLocaleString("ar-EG")}%
+                        {margin(product).toLocaleString("ar-EG-u-nu-latn")}%
                       </td>
                     </tr>
                   ))}

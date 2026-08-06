@@ -117,16 +117,16 @@ function num(value: unknown) {
 }
 
 function money(value: number) {
-  return value.toLocaleString("ar-EG", { maximumFractionDigits: 0 });
+  return value.toLocaleString("ar-EG-u-nu-latn", { maximumFractionDigits: 0 });
 }
 
 function formatShortDate(value: string | null) {
   if (!value) return "-";
-  return new Date(value).toLocaleDateString("ar-EG", { day: "numeric", month: "short" });
+  return new Date(value).toLocaleDateString("ar-EG-u-nu-latn", { day: "numeric", month: "short" });
 }
 
 function formatRangeDate(date: Date) {
-  return date.toLocaleDateString("ar-EG", { day: "numeric", month: "long", year: "numeric" });
+  return date.toLocaleDateString("ar-EG-u-nu-latn", { day: "numeric", month: "long", year: "numeric" });
 }
 
 function isCustomerSale(type: string | null) {
@@ -171,7 +171,7 @@ function getRange(period: Period, day: string, month: string, year: number) {
     return {
       start,
       end,
-      label: start.toLocaleDateString("ar-EG", { month: "long", year: "numeric" }),
+      label: start.toLocaleDateString("ar-EG-u-nu-latn", { month: "long", year: "numeric" }),
     };
   }
 
@@ -181,9 +181,9 @@ function getRange(period: Period, day: string, month: string, year: number) {
 }
 
 function getTrendLabel(period: Period, date: Date) {
-  if (period === "daily") return date.toLocaleTimeString("ar-EG", { hour: "2-digit" });
-  if (period === "monthly") return date.toLocaleDateString("ar-EG", { day: "numeric" });
-  return date.toLocaleDateString("ar-EG", { month: "short" });
+  if (period === "daily") return date.toLocaleTimeString("ar-EG-u-nu-latn", { hour: "2-digit" });
+  if (period === "monthly") return date.toLocaleDateString("ar-EG-u-nu-latn", { day: "numeric" });
+  return date.toLocaleDateString("ar-EG-u-nu-latn", { month: "short" });
 }
 
 function makeTrend(

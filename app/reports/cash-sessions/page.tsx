@@ -107,7 +107,7 @@ function num(value: unknown) {
 }
 
 function money(value: unknown) {
-  return num(value).toLocaleString("ar-EG", { maximumFractionDigits: 2 });
+  return num(value).toLocaleString("ar-EG-u-nu-latn", { maximumFractionDigits: 2 });
 }
 
 function inputDate(date: Date) {
@@ -134,7 +134,7 @@ function endOfDay(date: string) {
 
 function formatDate(value: string | null) {
   if (!value) return "لم تغلق";
-  return new Date(value).toLocaleString("ar-EG", {
+  return new Date(value).toLocaleString("ar-EG-u-nu-latn", {
     day: "numeric",
     month: "short",
     hour: "2-digit",
@@ -435,8 +435,8 @@ export default function CashSessionsReportPage() {
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
             <SummaryCard title="داخل الخزنة" value={`${money(totals.in)} ج`} tone="emerald" />
             <SummaryCard title="خارج الخزنة" value={`${money(totals.out)} ج`} tone="rose" />
-            <SummaryCard title="ورديات مفتوحة" value={totals.open.toLocaleString("ar-EG")} tone="amber" />
-            <SummaryCard title="ورديات مقفولة" value={totals.closed.toLocaleString("ar-EG")} tone="blue" />
+            <SummaryCard title="ورديات مفتوحة" value={totals.open.toLocaleString("ar-EG-u-nu-latn")} tone="amber" />
+            <SummaryCard title="ورديات مقفولة" value={totals.closed.toLocaleString("ar-EG-u-nu-latn")} tone="blue" />
             <SummaryCard title="فرق العهدة" value={`${money(totals.variance)} ج`} tone={Math.abs(totals.variance) > 0 ? "rose" : "slate"} />
           </div>
         </section>
@@ -502,7 +502,7 @@ export default function CashSessionsReportPage() {
               <h2 className="text-xl font-black text-slate-950">تفاصيل الورديات</h2>
               <p className="mt-1 text-xs font-bold text-slate-500">كل وردية في صف واضح مع الرصيد المتوقع والفعلي وفروق العهدة.</p>
             </div>
-            <span className="text-xs font-black text-slate-400">{summaries.length.toLocaleString("ar-EG")} وردية</span>
+            <span className="text-xs font-black text-slate-400">{summaries.length.toLocaleString("ar-EG-u-nu-latn")} وردية</span>
           </div>
           {loading ? (
             <div className="rounded-xl bg-slate-50 p-8 text-center text-sm font-black text-slate-400">جاري تحميل الورديات...</div>
@@ -554,7 +554,7 @@ export default function CashSessionsReportPage() {
                       <td className={`p-3 font-black ${Math.abs(session.variance) > 0 ? "text-rose-700" : "text-emerald-700"}`}>
                         {money(session.variance)} ج
                       </td>
-                      <td className="p-3 font-black text-slate-700">{session.entriesCount.toLocaleString("ar-EG")}</td>
+                      <td className="p-3 font-black text-slate-700">{session.entriesCount.toLocaleString("ar-EG-u-nu-latn")}</td>
                     </tr>
                   ))}
                 </tbody>

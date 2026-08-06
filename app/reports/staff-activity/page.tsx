@@ -36,7 +36,7 @@ const actionLabels: Record<string, string> = {
 };
 
 function formatDate(value: string) {
-  return new Date(value).toLocaleString("ar-EG", {
+  return new Date(value).toLocaleString("ar-EG-u-nu-latn", {
     day: "numeric",
     month: "short",
     hour: "2-digit",
@@ -219,22 +219,22 @@ export default function StaffActivityReportPage() {
           <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
             <Activity className="mb-3 h-6 w-6 text-emerald-600" />
             <p className="text-xs font-black text-slate-400">إجمالي العمليات</p>
-            <p className="mt-2 text-2xl font-black text-slate-950">{summary.total.toLocaleString("ar-EG")}</p>
+            <p className="mt-2 text-2xl font-black text-slate-950">{summary.total.toLocaleString("ar-EG-u-nu-latn")}</p>
           </div>
           <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
             <UserRound className="mb-3 h-6 w-6 text-indigo-600" />
             <p className="text-xs font-black text-slate-400">موظفين نشطوا</p>
-            <p className="mt-2 text-2xl font-black text-slate-950">{summary.uniqueStaff.toLocaleString("ar-EG")}</p>
+            <p className="mt-2 text-2xl font-black text-slate-950">{summary.uniqueStaff.toLocaleString("ar-EG-u-nu-latn")}</p>
           </div>
           <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
             <CalendarDays className="mb-3 h-6 w-6 text-amber-600" />
             <p className="text-xs font-black text-slate-400">عمليات خزنة</p>
-            <p className="mt-2 text-2xl font-black text-slate-950">{summary.cashActions.toLocaleString("ar-EG")}</p>
+            <p className="mt-2 text-2xl font-black text-slate-950">{summary.cashActions.toLocaleString("ar-EG-u-nu-latn")}</p>
           </div>
           <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
             <ShieldCheck className="mb-3 h-6 w-6 text-rose-600" />
             <p className="text-xs font-black text-slate-400">فواتير ومرتجعات</p>
-            <p className="mt-2 text-2xl font-black text-slate-950">{summary.invoiceActions.toLocaleString("ar-EG")}</p>
+            <p className="mt-2 text-2xl font-black text-slate-950">{summary.invoiceActions.toLocaleString("ar-EG-u-nu-latn")}</p>
           </div>
         </section>
 

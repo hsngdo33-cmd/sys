@@ -211,7 +211,7 @@ export default function SuppliersPage() {
   const formatLastActivity = (supplierId: string) => {
     const activity = activityMap.get(supplierId);
     if (!activity?.lastDate) return "لا توجد حركات";
-    return new Date(activity.lastDate).toLocaleDateString("ar-EG");
+    return new Date(activity.lastDate).toLocaleDateString("ar-EG-u-nu-latn");
   };
 
   const getSupplierStatus = (supplier: Supplier) => {
@@ -321,7 +321,7 @@ export default function SuppliersPage() {
                   onClick={() => setFilterDebt(tab.key)}
                   className={`min-h-10 rounded-lg px-3 text-xs font-black transition-all ${filterDebt === tab.key ? "bg-[#0f172a] text-white shadow-sm" : "text-slate-500 hover:bg-white"}`}
                 >
-                  {tab.label} <span className="opacity-70">({tab.count.toLocaleString("ar-EG")})</span>
+                  {tab.label} <span className="opacity-70">({tab.count.toLocaleString("ar-EG-u-nu-latn")})</span>
                 </button>
               ))}
             </div>
@@ -355,7 +355,7 @@ export default function SuppliersPage() {
         <div className="grid gap-3">
           <div className="app-mini-stat bg-[#0f172a] text-white shadow-lg">
             <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">إجمالي المديونية</p>
-            <p className="text-2xl font-black">{totalDebt.toLocaleString("ar-EG")}</p>
+            <p className="text-2xl font-black">{totalDebt.toLocaleString("ar-EG-u-nu-latn")}</p>
             <p className="text-xs text-slate-500 font-bold mt-1">جنيه مصري</p>
           </div>
           <div className="app-mini-stat bg-white border border-slate-200 shadow-sm">
@@ -411,7 +411,7 @@ export default function SuppliersPage() {
                             {s.name}
                           </Link>
                           <p className="mt-1 text-[11px] font-bold text-slate-400">
-                            آخر حركة: {formatLastActivity(s.id)} · {(activityMap.get(s.id)?.count || 0).toLocaleString("ar-EG")} حركة
+                            آخر حركة: {formatLastActivity(s.id)} · {(activityMap.get(s.id)?.count || 0).toLocaleString("ar-EG-u-nu-latn")} حركة
                           </p>
                         </div>
                       </div>
@@ -423,7 +423,7 @@ export default function SuppliersPage() {
                           {status.label}
                         </span>
                         <span className={`text-lg font-black ${s.balance > 0 ? "text-rose-600" : "text-slate-500"}`}>
-                          {s.balance > 0 ? s.balance.toLocaleString("ar-EG") : "0"}
+                          {s.balance > 0 ? s.balance.toLocaleString("ar-EG-u-nu-latn") : "0"}
                         </span>
                       </div>
                     </td>
@@ -483,7 +483,7 @@ export default function SuppliersPage() {
           <div className="border-r-4 border-emerald-500 pr-3 mb-6">
             <h3 className="text-xl font-black text-slate-900">سداد مورد: {selectedSupp.name}</h3>
             <p className="text-xs text-slate-400 font-bold mt-1">
-              المديونية الحالية: <span className="text-rose-600 font-black">{selectedSupp.balance.toLocaleString("ar-EG")} ج.م</span>
+              المديونية الحالية: <span className="text-rose-600 font-black">{selectedSupp.balance.toLocaleString("ar-EG-u-nu-latn")} ج.م</span>
             </p>
           </div>
           <div className="space-y-4">
@@ -501,7 +501,7 @@ export default function SuppliersPage() {
                 <p className="text-xs text-slate-400 font-bold mt-2">
                   المتبقي بعد السداد:{" "}
                   <span className={`font-black ${selectedSupp.balance - payAmount > 0 ? "text-rose-500" : "text-emerald-600"}`}>
-                    {(selectedSupp.balance - payAmount).toLocaleString("ar-EG")} ج.م
+                    {(selectedSupp.balance - payAmount).toLocaleString("ar-EG-u-nu-latn")} ج.م
                   </span>
                 </p>
               )}

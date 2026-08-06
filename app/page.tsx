@@ -76,11 +76,11 @@ function num(value: unknown) {
 }
 
 function money(value: number) {
-  return value.toLocaleString("ar-EG", { maximumFractionDigits: 2 });
+  return value.toLocaleString("ar-EG-u-nu-latn", { maximumFractionDigits: 2 });
 }
 
 function wholeMoney(value: number) {
-  return Math.round(value).toLocaleString("ar-EG", { maximumFractionDigits: 0 });
+  return Math.round(value).toLocaleString("ar-EG-u-nu-latn", { maximumFractionDigits: 0 });
 }
 
 function shortMoney(value: number) {
@@ -127,7 +127,7 @@ function makeTrend(rangeDays: RangeDays, txs: CustomerTx[]) {
     const key = inputDate(day);
     points.set(key, {
       date: key,
-      label: day.toLocaleDateString("ar-EG", { day: "numeric", month: "short" }),
+      label: day.toLocaleDateString("ar-EG-u-nu-latn", { day: "numeric", month: "short" }),
       sales: 0,
       profit: 0,
       collected: 0,

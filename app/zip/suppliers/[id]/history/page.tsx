@@ -101,7 +101,7 @@ export default function SupplierHistoryCards() {
                               {t.type}
                            </span>
                            <span className="text-[11px] font-bold text-slate-400 italic">
-                              {new Date(t.created_at).toLocaleDateString('ar-EG')}
+                              {new Date(t.created_at).toLocaleDateString('ar-EG-u-nu-latn')}
                            </span>
                         </div>
                         <h4 className="font-black text-slate-800 text-lg leading-snug">

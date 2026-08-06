@@ -64,7 +64,7 @@ function num(value: unknown) {
 }
 
 function money(value: unknown) {
-  return num(value).toLocaleString("ar-EG", { maximumFractionDigits: 2 });
+  return num(value).toLocaleString("ar-EG-u-nu-latn", { maximumFractionDigits: 2 });
 }
 
 function todayInput() {
@@ -83,7 +83,7 @@ function endOfLocalDay(value: string) {
 }
 
 function formatDate(value: string) {
-  return new Date(value).toLocaleString("ar-EG", {
+  return new Date(value).toLocaleString("ar-EG-u-nu-latn", {
     day: "numeric",
     month: "short",
     hour: "2-digit",
@@ -339,16 +339,16 @@ export default function InvoicesReportPage() {
           <div className="rounded-2xl border border-emerald-100 bg-white p-4 shadow-sm">
             <p className="text-xs font-black text-slate-500">إجمالي البيع</p>
             <p className="mt-2 text-2xl font-black text-emerald-700">{money(totals.sales)} ج</p>
-            <p className="mt-1 text-xs font-bold text-slate-400">{totals.salesCount.toLocaleString("ar-EG")} فاتورة</p>
+            <p className="mt-1 text-xs font-bold text-slate-400">{totals.salesCount.toLocaleString("ar-EG-u-nu-latn")} فاتورة</p>
           </div>
           <div className="rounded-2xl border border-blue-100 bg-white p-4 shadow-sm">
             <p className="text-xs font-black text-slate-500">إجمالي التحصيل</p>
             <p className="mt-2 text-2xl font-black text-blue-700">{money(collections.total)} ج</p>
-            <p className="mt-1 text-xs font-bold text-slate-400">{collections.count.toLocaleString("ar-EG")} حركة تحصيل</p>
+            <p className="mt-1 text-xs font-bold text-slate-400">{collections.count.toLocaleString("ar-EG-u-nu-latn")} حركة تحصيل</p>
           </div>
           <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
             <p className="text-xs font-black text-slate-500">عدد الفواتير المعروضة</p>
-            <p className="mt-2 text-2xl font-black text-slate-950">{visibleInvoices.length.toLocaleString("ar-EG")}</p>
+            <p className="mt-2 text-2xl font-black text-slate-950">{visibleInvoices.length.toLocaleString("ar-EG-u-nu-latn")}</p>
             <p className="mt-1 text-xs font-bold text-slate-400">بعد الفلتر والبحث</p>
           </div>
           <div className="rounded-2xl border border-sky-100 bg-white p-4 shadow-sm">
@@ -410,7 +410,7 @@ export default function InvoicesReportPage() {
                         <td className="p-3 font-bold text-slate-600">{formatDate(invoice.created_at)}</td>
                         <td className="p-3 font-black text-slate-900">{invoice.partyName}</td>
                         <td className="p-3 font-mono text-xs font-bold text-slate-500">{invoice.id}</td>
-                        <td className="p-3 font-bold text-slate-600">{invoice.itemsCount.toLocaleString("ar-EG")}</td>
+                        <td className="p-3 font-bold text-slate-600">{invoice.itemsCount.toLocaleString("ar-EG-u-nu-latn")}</td>
                         <td className="p-3 font-black text-slate-950">{money(invoice.amount)} ج</td>
                         <td className="max-w-[260px] truncate p-3 font-bold text-slate-500">{invoice.description || "-"}</td>
                         <td className="p-3">

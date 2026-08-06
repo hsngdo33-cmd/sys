@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { supabase } from "@/lib/supabase";
 import { useParams, useRouter } from "next/navigation";
@@ -560,7 +560,7 @@ export default function SupplierInvoicePage() {
         action: "supplier_invoice_saved",
         entityType: "supplier_invoice",
         entityId: invoice?.id,
-        note: `فاتورة توريد - ${supplier.name} - ${totalInvoice.toLocaleString("ar-EG")} ج`,
+        note: `فاتورة توريد - ${supplier.name} - ${totalInvoice.toLocaleString("ar-EG-u-nu-latn")} ج`,
       });
 
       if (printAfterSave) {
@@ -583,7 +583,7 @@ export default function SupplierInvoicePage() {
           <div>
             <h1 className="text-lg font-black">📥 فاتورة توريد {productCategoryLabel(activeCategory)}: {supplier?.name || "جاري تحميل المورد"}</h1>
             <p className="text-[10px] text-slate-400 font-bold mt-0.5">
-              {new Date().toLocaleDateString("ar-EG", { weekday:"long", day:"numeric", month:"long" })}
+              {new Date().toLocaleDateString("ar-EG-u-nu-latn", { weekday:"long", day:"numeric", month:"long" })}
             </p>
           </div>
         </div>
@@ -592,7 +592,7 @@ export default function SupplierInvoicePage() {
             <span className="bg-amber-500 px-3 py-1 rounded-lg text-[10px] font-black">{cart.length} صنف</span>
           )}
           <div className={`px-4 py-1.5 rounded-lg text-[10px] font-black ${(supplier?.balance || 0) > 0 ? "bg-rose-600" : "bg-emerald-600"}`}>
-            مديونية: {supplier ? supplier.balance?.toLocaleString("ar-EG") : "..."} ج.م
+            مديونية: {supplier ? supplier.balance?.toLocaleString("ar-EG-u-nu-latn") : "..."} ج.م
           </div>
         </div>
       </header>
@@ -765,12 +765,12 @@ export default function SupplierInvoicePage() {
                           )}
                           {Number(item.unitFactor || 1) !== 1 && (
                             <p className="mt-1 text-[9px] font-bold text-slate-400">
-                              = {(Number(item.qty || 0) * Number(item.unitFactor || 1)).toLocaleString("ar-EG")} {item.unit}
+                              = {(Number(item.qty || 0) * Number(item.unitFactor || 1)).toLocaleString("ar-EG-u-nu-latn")} {item.unit}
                             </p>
                           )}
                           {Number(item.unitFactor || 1) > 0 && (
                             <p className="mt-1 text-[9px] font-bold text-emerald-600">
-                              تكلفة {item.unit}: {(Number(item.p_price || 0) / Number(item.unitFactor || 1)).toLocaleString("ar-EG", { maximumFractionDigits: 2 })} ج
+                              تكلفة {item.unit}: {(Number(item.p_price || 0) / Number(item.unitFactor || 1)).toLocaleString("ar-EG-u-nu-latn", { maximumFractionDigits: 2 })} ج
                             </p>
                           )}
                         </td>
@@ -786,11 +786,11 @@ export default function SupplierInvoicePage() {
                         </td>
                         {showSalePriceColumn && (
                           <td className="p-4 text-center font-black text-indigo-600">
-                            {invoiceUnitSalePrice(item).toLocaleString("ar-EG", { maximumFractionDigits: 2 })} ج
+                            {invoiceUnitSalePrice(item).toLocaleString("ar-EG-u-nu-latn", { maximumFractionDigits: 2 })} ج
                             <p className="mt-1 text-[9px] font-bold text-slate-400">لكل {item.invoiceUnit || item.unit}</p>
                           </td>
                         )}
-                        <td className="p-4 text-left font-black">{lineTotal.toLocaleString("ar-EG", { maximumFractionDigits: 2 })}</td>
+                        <td className="p-4 text-left font-black">{lineTotal.toLocaleString("ar-EG-u-nu-latn", { maximumFractionDigits: 2 })}</td>
                         <td className="p-4">
                           <button onClick={() => removeFromCart(item.id)} className="text-slate-300 hover:text-rose-500 transition-colors text-lg font-black">✕</button>
                         </td>
@@ -861,10 +861,10 @@ export default function SupplierInvoicePage() {
             <div className="grid grid-cols-2 gap-3 mb-4 text-white">
               <div>
                 <p className="text-[9px] text-slate-500 font-black uppercase tracking-widest mb-1">إجمالي الفاتورة</p>
-                <p className="text-xl font-black">{totalInvoice.toLocaleString("ar-EG", { maximumFractionDigits: 2 })} <small className="text-xs opacity-50">ج</small></p>
+                <p className="text-xl font-black">{totalInvoice.toLocaleString("ar-EG-u-nu-latn", { maximumFractionDigits: 2 })} <small className="text-xs opacity-50">ج</small></p>
                 {businessSettings.tax_mode !== "none" && (
                   <p className="mt-1 text-[10px] font-bold text-slate-400">
-                    {taxInfo.label}: {taxAmount.toLocaleString("ar-EG", { maximumFractionDigits: 2 })} ج
+                    {taxInfo.label}: {taxAmount.toLocaleString("ar-EG-u-nu-latn", { maximumFractionDigits: 2 })} ج
                   </p>
                 )}
               </div>
@@ -881,7 +881,7 @@ export default function SupplierInvoicePage() {
               <div>
                 <p className="text-[9px] text-slate-500 font-black uppercase tracking-widest mb-1">المتبقي (دين للمورد)</p>
                 <p className={`text-xl font-black ${remaining > 0 ? "text-rose-400" : "text-emerald-400"}`}>
-                  {remaining.toLocaleString("ar-EG", { maximumFractionDigits: 2 })} <small className="text-xs opacity-70">ج</small>
+                  {remaining.toLocaleString("ar-EG-u-nu-latn", { maximumFractionDigits: 2 })} <small className="text-xs opacity-70">ج</small>
                 </p>
               </div>
             </div>
@@ -914,9 +914,9 @@ export default function SupplierInvoicePage() {
               <p>إدارة الموردين والأصناف</p>
             </div>
             <div className="print-meta">
-              <p>التاريخ: {new Date().toLocaleDateString("ar-EG")}</p>
+              <p>التاريخ: {new Date().toLocaleDateString("ar-EG-u-nu-latn")}</p>
               <p>المورد: {supplier?.name || "-"}</p>
-              <p>الرصيد السابق: {(supplier?.balance || 0).toLocaleString("ar-EG")} ج.م</p>
+              <p>الرصيد السابق: {(supplier?.balance || 0).toLocaleString("ar-EG-u-nu-latn")} ج.م</p>
             </div>
           </div>
           <table className="print-table">
@@ -936,27 +936,27 @@ export default function SupplierInvoicePage() {
                   <td>{item.name}</td>
                   <td>{item.invoiceUnit || item.unit}</td>
                   <td>
-                    {Number(item.qty || 0).toLocaleString("ar-EG")}
-                    {Number(item.unitFactor || 1) !== 1 ? ` = ${(Number(item.qty || 0) * Number(item.unitFactor || 1)).toLocaleString("ar-EG")} ${item.unit}` : ""}
+                    {Number(item.qty || 0).toLocaleString("ar-EG-u-nu-latn")}
+                    {Number(item.unitFactor || 1) !== 1 ? ` = ${(Number(item.qty || 0) * Number(item.unitFactor || 1)).toLocaleString("ar-EG-u-nu-latn")} ${item.unit}` : ""}
                   </td>
-                  <td>{Number(item.p_price || 0).toLocaleString("ar-EG")} ج</td>
+                  <td>{Number(item.p_price || 0).toLocaleString("ar-EG-u-nu-latn")} ج</td>
                   {showSalePriceColumn && (
-                    <td>{invoiceUnitSalePrice(item).toLocaleString("ar-EG", { maximumFractionDigits: 2 })} ج</td>
+                    <td>{invoiceUnitSalePrice(item).toLocaleString("ar-EG-u-nu-latn", { maximumFractionDigits: 2 })} ج</td>
                   )}
-                  <td>{(Number(item.qty || 0) * Number(item.p_price || 0)).toLocaleString("ar-EG")} ج</td>
+                  <td>{(Number(item.qty || 0) * Number(item.p_price || 0)).toLocaleString("ar-EG-u-nu-latn")} ج</td>
                 </tr>
               ))}
             </tbody>
           </table>
           <div className="print-summary">
-            <p><span>الإجمالي قبل الخصم</span><b>{subtotalInvoice.toLocaleString("ar-EG", { maximumFractionDigits: 2 })} ج</b></p>
-            <p><span>الخصم ({discountRate}%)</span><b>{discountAmount.toLocaleString("ar-EG", { maximumFractionDigits: 2 })} ج</b></p>
+            <p><span>الإجمالي قبل الخصم</span><b>{subtotalInvoice.toLocaleString("ar-EG-u-nu-latn", { maximumFractionDigits: 2 })} ج</b></p>
+            <p><span>الخصم ({discountRate}%)</span><b>{discountAmount.toLocaleString("ar-EG-u-nu-latn", { maximumFractionDigits: 2 })} ج</b></p>
             {businessSettings.tax_mode !== "none" && (
-              <p><span>{taxInfo.label}</span><b>{taxAmount.toLocaleString("ar-EG", { maximumFractionDigits: 2 })} ج</b></p>
+              <p><span>{taxInfo.label}</span><b>{taxAmount.toLocaleString("ar-EG-u-nu-latn", { maximumFractionDigits: 2 })} ج</b></p>
             )}
-            <p><span>الصافي</span><b>{totalInvoice.toLocaleString("ar-EG", { maximumFractionDigits: 2 })} ج</b></p>
-            <p><span>المدفوع</span><b>{cash.toLocaleString("ar-EG", { maximumFractionDigits: 2 })} ج</b></p>
-            <p className="print-total"><span>المتبقي للمورد</span><b>{remaining.toLocaleString("ar-EG", { maximumFractionDigits: 2 })} ج</b></p>
+            <p><span>الصافي</span><b>{totalInvoice.toLocaleString("ar-EG-u-nu-latn", { maximumFractionDigits: 2 })} ج</b></p>
+            <p><span>المدفوع</span><b>{cash.toLocaleString("ar-EG-u-nu-latn", { maximumFractionDigits: 2 })} ج</b></p>
+            <p className="print-total"><span>المتبقي للمورد</span><b>{remaining.toLocaleString("ar-EG-u-nu-latn", { maximumFractionDigits: 2 })} ج</b></p>
           </div>
           {note && <p className="print-note">ملاحظة: {note}</p>}
         </div>

@@ -37,6 +37,18 @@ type Supplier = {
   phone?: string | null;
 };
 
+type ProductSaleDetail = {
+  transactionId: string;
+  customerId: string;
+  customerName: string;
+  createdAt: string;
+  invoiceAmount: number;
+  quantity: number;
+  unit: string;
+  unitPrice: number;
+  lineTotal: number;
+};
+
 const DEFAULT_PRODUCT_UNIT_CONVERSIONS: UnitConversion[] = [
   { id: "default-carton-piece", fromUnit: "كرتونة", toUnit: "قطعة", factor: 12 },
   { id: "default-dozen-piece", fromUnit: "دستة", toUnit: "قطعة", factor: 12 },
@@ -83,6 +95,10 @@ export default function InventoryPage() {
   // تعديل
   const [editingId, setEditingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [salesProduct, setSalesProduct] = useState<Product | null>(null);
+  const [productSales, setProductSales] = useState<ProductSaleDetail[]>([]);
+  const [productSalesLoading, setProductSalesLoading] = useState(false);
+  const [productSalesError, setProductSalesError] = useState("");
   const [editForm, setEditForm] = useState<Partial<Product>>({});
   const [editUnitConversions, setEditUnitConversions] = useState<UnitConversion[] | null>(null);
   const [showNewUnitConversions, setShowNewUnitConversions] = useState(false);
@@ -534,6 +550,66 @@ export default function InventoryPage() {
         ...(freshConversions.length > 0 ? { unit_conversions: freshConversions } : {}),
       },
     });
+  };
+
+  const openProductSales = async (product: Product) => {
+    setSalesProduct(product);
+    setProductSales([]);
+    setProductSalesError("");
+    setProductSalesLoading(true);
+
+    try {
+      const { data: transactions, error: transactionsError } = await supabase
+        .from("customer_transactions")
+        .select("id,customer_id,created_at,amount,items")
+        .in("type", ["sale", "بيع"])
+        .order("created_at", { ascending: false });
+      if (transactionsError) throw transactionsError;
+
+      const matchingTransactions = (transactions || []).flatMap((transaction) => {
+        const matchingItems = (Array.isArray(transaction.items) ? transaction.items : [])
+          .filter((item: Record<string, unknown>) => String(item.id || "") === String(product.id));
+        if (matchingItems.length === 0 || !transaction.customer_id) return [];
+
+        const quantity = matchingItems.reduce((sum: number, item: Record<string, unknown>) => sum + Number(item.qty || 0), 0);
+        const lineTotal = matchingItems.reduce((sum: number, item: Record<string, unknown>) => (
+          sum + Number(item.qty || 0) * Number(item.price || 0)
+        ), 0);
+        const firstItem = matchingItems[0];
+
+        return [{
+          transactionId: String(transaction.id),
+          customerId: String(transaction.customer_id),
+          createdAt: String(transaction.created_at),
+          invoiceAmount: Number(transaction.amount || 0),
+          quantity,
+          unit: String(firstItem.invoice_unit || firstItem.unit || product.unit || "وحدة"),
+          unitPrice: quantity > 0 ? lineTotal / quantity : Number(firstItem.price || 0),
+          lineTotal,
+        }];
+      });
+
+      const customerIds = [...new Set(matchingTransactions.map((transaction) => transaction.customerId))];
+      const customerNames = new Map<string, string>();
+      if (customerIds.length > 0) {
+        const { data: customers, error: customersError } = await supabase
+          .from("customers")
+          .select("id,name")
+          .in("id", customerIds);
+        if (customersError) throw customersError;
+        (customers || []).forEach((customer) => customerNames.set(String(customer.id), customer.name || "عميل بدون اسم"));
+      }
+
+      setProductSales(matchingTransactions.map((transaction) => ({
+        ...transaction,
+        customerName: customerNames.get(transaction.customerId) || "عميل غير معروف",
+      })));
+    } catch (error) {
+      console.error(error);
+      setProductSalesError("تعذر تحميل تفاصيل مبيعات الصنف. تأكد من الاتصال وحاول مرة أخرى.");
+    } finally {
+      setProductSalesLoading(false);
+    }
   };
 
   const deleteProduct = async (product: Product) => {
@@ -1272,7 +1348,7 @@ export default function InventoryPage() {
               <div>
                 <p className="text-[10px] font-black text-emerald-600">قيمة المخزون</p>
                 <p className="text-lg font-black">
-                  {totalInventoryValue.toLocaleString("ar-EG", { maximumFractionDigits: 2 })} ج
+                  {totalInventoryValue.toLocaleString("ar-EG-u-nu-latn", { maximumFractionDigits: 2 })} ج
                 </p>
               </div>
               <span className="text-[10px] font-black group-open:hidden">تفاصيل ◀</span>
@@ -1286,7 +1362,7 @@ export default function InventoryPage() {
                     <p className="text-[9px] font-bold text-slate-400">{categoryCounts[item.category] || 0} صنف</p>
                   </div>
                   <p className="text-sm font-black text-slate-900">
-                    {item.value.toLocaleString("ar-EG", { maximumFractionDigits: 2 })} ج
+                    {item.value.toLocaleString("ar-EG-u-nu-latn", { maximumFractionDigits: 2 })} ج
                   </p>
                 </div>
               ))}
@@ -1485,6 +1561,14 @@ export default function InventoryPage() {
 
                           <button
                             type="button"
+                            onClick={() => void openProductSales(p)}
+                            className="font-bold text-emerald-700 hover:text-emerald-900"
+                          >
+                            📊 تفاصيل المبيعات
+                          </button>
+
+                          <button
+                            type="button"
                             onClick={() => void deleteProduct(p)}
                             disabled={deletingId !== null}
                             className="font-bold text-rose-600 hover:text-rose-800 disabled:cursor-not-allowed disabled:opacity-50"
@@ -1509,6 +1593,77 @@ export default function InventoryPage() {
         </div>
 
       </div>
+
+      {salesProduct && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/70 p-3 sm:p-6">
+          <div className="flex max-h-[calc(100vh-2rem)] w-full max-w-4xl flex-col overflow-hidden rounded-3xl bg-white shadow-2xl">
+            <div className="flex items-start justify-between gap-4 border-b border-slate-100 px-5 py-4 sm:px-7">
+              <div>
+                <p className="text-xs font-black text-emerald-600">تفاصيل المبيعات</p>
+                <h2 className="mt-1 text-xl font-black text-slate-950 sm:text-2xl">{salesProduct.name}</h2>
+                {!productSalesLoading && !productSalesError && (
+                  <p className="mt-1 text-xs font-bold text-slate-500">
+                    {productSales.length} فاتورة · إجمالي كمية {productSales.reduce((sum, sale) => sum + sale.quantity, 0).toLocaleString("ar-EG-u-nu-latn")}
+                    {" · "}
+                    مبيعات {productSales.reduce((sum, sale) => sum + sale.lineTotal, 0).toLocaleString("ar-EG-u-nu-latn", { maximumFractionDigits: 2 })} ج
+                  </p>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={() => setSalesProduct(null)}
+                className="rounded-2xl bg-slate-100 px-4 py-2 text-sm font-black text-slate-700 hover:bg-slate-200"
+              >
+                إغلاق
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-4 sm:p-6">
+              {productSalesLoading && (
+                <div className="rounded-2xl bg-slate-50 p-10 text-center font-black text-slate-400">جاري تحميل فواتير الصنف...</div>
+              )}
+              {productSalesError && (
+                <div className="rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm font-black text-rose-700">{productSalesError}</div>
+              )}
+              {!productSalesLoading && !productSalesError && productSales.length === 0 && (
+                <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-10 text-center">
+                  <p className="font-black text-slate-500">الصنف لم يظهر في أي فاتورة بيع حتى الآن.</p>
+                </div>
+              )}
+              {!productSalesLoading && productSales.length > 0 && (
+                <div className="space-y-2">
+                  {productSales.map((sale) => (
+                    <div key={sale.transactionId} className="grid gap-3 rounded-2xl border border-slate-200 p-4 sm:grid-cols-[1fr_auto] sm:items-center">
+                      <div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="font-black text-slate-900">{sale.customerName}</p>
+                          <span className="rounded-lg bg-slate-100 px-2 py-1 text-[10px] font-black text-slate-500">
+                            C-{sale.transactionId.replace(/[^a-zA-Z0-9]/g, "").slice(0, 8).toUpperCase()}
+                          </span>
+                        </div>
+                        <p className="mt-1 text-[10px] font-bold text-slate-400">
+                          {new Date(sale.createdAt).toLocaleString("ar-EG-u-nu-latn", { dateStyle: "medium", timeStyle: "short" })}
+                        </p>
+                        <div className="mt-2 flex flex-wrap gap-2 text-xs font-black text-slate-600">
+                          <span className="rounded-xl bg-indigo-50 px-3 py-1.5">{sale.quantity.toLocaleString("ar-EG-u-nu-latn")} {sale.unit}</span>
+                          <span className="rounded-xl bg-amber-50 px-3 py-1.5">سعر الوحدة {sale.unitPrice.toLocaleString("ar-EG-u-nu-latn", { maximumFractionDigits: 2 })} ج</span>
+                          <span className="rounded-xl bg-emerald-50 px-3 py-1.5">إجمالي الصنف {sale.lineTotal.toLocaleString("ar-EG-u-nu-latn", { maximumFractionDigits: 2 })} ج</span>
+                        </div>
+                      </div>
+                      <Link
+                        href={`/customer/${sale.customerId}/history?invoice=${encodeURIComponent(sale.transactionId)}`}
+                        className="inline-flex h-11 items-center justify-center rounded-2xl bg-slate-950 px-4 text-xs font-black text-white hover:bg-emerald-600"
+                      >
+                        فتح الفاتورة
+                      </Link>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* مودال تعديل */}
 

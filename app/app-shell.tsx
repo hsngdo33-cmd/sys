@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import { clearStaffSession, useStaffSessionState } from "@/app/staff-session";
 import { OfflineSyncStatus } from "@/app/offline-sync-status";
+import { NumericInputBehavior } from "@/app/numeric-input-behavior";
 import { supabase } from "@/lib/supabase";
 import {
   hasPermissionWithConfig,
@@ -123,6 +124,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   if (!sessionReady || (!staff && !isLoginPage)) {
     return (
       <body className="flex min-h-screen items-center justify-center bg-slate-950 p-6 font-sans">
+        <NumericInputBehavior />
         <div className="text-center text-white">
           <div className="mx-auto h-10 w-10 animate-spin rounded-full border-4 border-white/20 border-t-emerald-400" />
           <p className="mt-4 text-sm font-black">جاري التحقق من تسجيل الدخول...</p>
@@ -134,6 +136,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   if (isLoginPage) {
     return (
       <body className="min-h-screen overflow-x-hidden bg-[#f4f7fb] p-4 font-sans text-slate-900 sm:p-8">
+        <NumericInputBehavior />
         {children}
       </body>
     );
@@ -142,6 +145,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   if (isCleanCustomerPage) {
     return (
       <body className="min-h-screen overflow-x-hidden bg-slate-50 text-slate-900 font-sans">
+        <NumericInputBehavior />
         <nav className="fixed left-1/2 top-4 z-50 flex -translate-x-1/2 items-center gap-2 rounded-full border border-white/50 bg-white/75 p-1.5 shadow-2xl shadow-slate-900/10 backdrop-blur-xl">
           <Link
             href="/"
@@ -194,6 +198,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <body className="min-h-screen overflow-x-hidden bg-[#f4f7fb] text-slate-900 font-sans">
+      <NumericInputBehavior />
       <div className="flex min-h-screen min-w-0">
         <aside className="hidden lg:flex fixed right-0 top-0 z-50 h-screen w-64 xl:w-72 flex-col border-l border-slate-200 bg-slate-950 text-white shadow-2xl">
           <div className="px-6 py-6 border-b border-white/10">

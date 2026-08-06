@@ -106,7 +106,7 @@ export default function EditSupplierInvoicePage({ params }: { params: Promise<an
           net_price: Number((Number(rest.price || 0) * purchasePriceFactor).toFixed(2)),
           product_category: normalizeProductCategory(rest.product_category),
         })),
-        description: note || `تعديل فاتورة توريد — ${new Date().toLocaleString("ar-EG")}`,
+        description: note || `تعديل فاتورة توريد — ${new Date().toLocaleString("ar-EG-u-nu-latn")}`,
       }).eq("id", transId);
 
       router.push(`/suppliers/${supplierId}/history`);
@@ -149,13 +149,13 @@ export default function EditSupplierInvoicePage({ params }: { params: Promise<an
             <div>
               <h1 className="text-lg font-black">تعديل فاتورة التوريد 🚚</h1>
               <p className="text-[10px] text-slate-400 font-bold mt-0.5">
-                {transaction && new Date(transaction.created_at).toLocaleDateString("ar-EG", { day:"numeric", month:"long", year:"numeric" })}
+                {transaction && new Date(transaction.created_at).toLocaleDateString("ar-EG-u-nu-latn", { day:"numeric", month:"long", year:"numeric" })}
               </p>
             </div>
           </div>
           {diff !== 0 && (
             <div className={`px-4 py-2 rounded-xl text-sm font-black ${diff > 0 ? "bg-rose-600" : "bg-emerald-600"}`}>
-              {diff > 0 ? "▲" : "▼"} {Math.abs(diff).toLocaleString("ar-EG")} ج.م
+              {diff > 0 ? "▲" : "▼"} {Math.abs(diff).toLocaleString("ar-EG-u-nu-latn")} ج.م
             </div>
           )}
         </div>
@@ -222,7 +222,7 @@ export default function EditSupplierInvoicePage({ params }: { params: Promise<an
                 />
                 <span className="rounded-xl bg-slate-100 px-3 py-3 text-sm font-black text-slate-500">%</span>
               </div>
-              <p className="mt-2 text-xs font-bold text-slate-400">قيمة الخصم: {discountAmount.toLocaleString("ar-EG", { maximumFractionDigits: 2 })} ج</p>
+              <p className="mt-2 text-xs font-bold text-slate-400">قيمة الخصم: {discountAmount.toLocaleString("ar-EG-u-nu-latn", { maximumFractionDigits: 2 })} ج</p>
             </div>
           </div>
         </div>
@@ -233,13 +233,13 @@ export default function EditSupplierInvoicePage({ params }: { params: Promise<an
             <div className="bg-white p-5 rounded-[2rem] border border-slate-200 shadow-sm text-center">
               <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">الإجمالي الأصلي</p>
               <p className="text-3xl font-black text-slate-400 line-through decoration-slate-300">
-                {transaction.amount.toLocaleString("ar-EG")} <small className="text-xs">ج</small>
+                {transaction.amount.toLocaleString("ar-EG-u-nu-latn")} <small className="text-xs">ج</small>
               </p>
             </div>
             <div className={`p-5 rounded-[2rem] shadow-sm text-center border-2 ${diff > 0 ? "bg-rose-50 border-rose-200" : diff < 0 ? "bg-emerald-50 border-emerald-200" : "bg-white border-slate-200"}`}>
               <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">الإجمالي الجديد</p>
               <p className={`text-3xl font-black ${diff > 0 ? "text-rose-600" : diff < 0 ? "text-emerald-600" : "text-slate-900"}`}>
-                {newTotal.toLocaleString("ar-EG")} <small className="text-xs">ج</small>
+                {newTotal.toLocaleString("ar-EG-u-nu-latn")} <small className="text-xs">ج</small>
               </p>
             </div>
           </div>
@@ -296,7 +296,7 @@ export default function EditSupplierInvoicePage({ params }: { params: Promise<an
                       />
                     </td>
                     <td className="p-5 text-left font-black text-slate-900">
-                      {lineTotal.toLocaleString("ar-EG", { maximumFractionDigits: 2 })}
+                      {lineTotal.toLocaleString("ar-EG-u-nu-latn", { maximumFractionDigits: 2 })}
                     </td>
                   </tr>
                 );
@@ -320,12 +320,12 @@ export default function EditSupplierInvoicePage({ params }: { params: Promise<an
           <div className="grid grid-cols-2 gap-4 mb-6">
             <div>
               <p className="text-[9px] text-slate-500 font-black uppercase tracking-widest mb-1">إجمالي جديد</p>
-              <p className="text-2xl font-black">{newTotal.toLocaleString("ar-EG")} <small className="text-xs opacity-50">ج</small></p>
+              <p className="text-2xl font-black">{newTotal.toLocaleString("ar-EG-u-nu-latn")} <small className="text-xs opacity-50">ج</small></p>
             </div>
             <div>
               <p className="text-[9px] text-slate-500 font-black uppercase tracking-widest mb-1">تأثير على المديونية</p>
               <p className={`text-2xl font-black ${diff > 0 ? "text-rose-400" : diff < 0 ? "text-emerald-400" : "text-slate-400"}`}>
-                {diff === 0 ? "لا تغيير" : `${diff > 0 ? "+" : ""}${diff.toLocaleString("ar-EG")} ج`}
+                {diff === 0 ? "لا تغيير" : `${diff > 0 ? "+" : ""}${diff.toLocaleString("ar-EG-u-nu-latn")} ج`}
               </p>
             </div>
           </div>
@@ -351,8 +351,8 @@ export default function EditSupplierInvoicePage({ params }: { params: Promise<an
             {diff !== 0 && (
               <div className={`px-4 py-3 rounded-2xl text-sm font-black ${diff > 0 ? "bg-rose-50 text-rose-700" : "bg-emerald-50 text-emerald-700"}`}>
                 {diff > 0
-                  ? `⬆️ مديونية المورد ستزيد ${Math.abs(diff).toLocaleString("ar-EG")} ج.م`
-                  : `⬇️ مديونية المورد ستنقص ${Math.abs(diff).toLocaleString("ar-EG")} ج.م`
+                  ? `⬆️ مديونية المورد ستزيد ${Math.abs(diff).toLocaleString("ar-EG-u-nu-latn")} ج.م`
+                  : `⬇️ مديونية المورد ستنقص ${Math.abs(diff).toLocaleString("ar-EG-u-nu-latn")} ج.م`
                 }
               </div>
             )}

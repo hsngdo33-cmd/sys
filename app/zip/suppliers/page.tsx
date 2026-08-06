@@ -50,7 +50,7 @@ export default function SuppliersPage() {
           </div>
         </div>
         <div className="bg-white/10 px-6 py-2 rounded-full border border-white/10 text-sm font-bold backdrop-blur-md">
-          {new Intl.DateTimeFormat('ar-EG', { dateStyle: 'full' }).format(new Date())}
+          {new Intl.DateTimeFormat('ar-EG-u-nu-latn', { dateStyle: 'full' }).format(new Date())}
         </div>
       </nav>
 

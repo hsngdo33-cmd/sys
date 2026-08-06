@@ -22,7 +22,7 @@ type CashEntry = {
 };
 
 function money(value: unknown) {
-  return Number(value || 0).toLocaleString("ar-EG", { maximumFractionDigits: 2 });
+  return Number(value || 0).toLocaleString("ar-EG-u-nu-latn", { maximumFractionDigits: 2 });
 }
 
 export function CashShiftWidget() {

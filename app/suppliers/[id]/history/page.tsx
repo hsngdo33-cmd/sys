@@ -226,7 +226,7 @@ export default function SupplierHistoryPage() {
       await supabase.from("transactions").update({
         amount: newTotal,
         items: editItems.map(({ unit, ...rest }) => rest),
-        description: `تعديل فاتورة — ${new Date().toLocaleDateString("ar-EG")}`,
+        description: `تعديل فاتورة — ${new Date().toLocaleDateString("ar-EG-u-nu-latn")}`,
       }).eq("id", editTrans.id);
 
       setShowEdit(false);
@@ -314,7 +314,7 @@ export default function SupplierHistoryPage() {
         .single();
       if (balanceReadError) throw balanceReadError;
 
-      const editedAt = new Date().toLocaleString("ar-EG", {
+      const editedAt = new Date().toLocaleString("ar-EG-u-nu-latn", {
         day: "numeric",
         month: "long",
         year: "numeric",
@@ -322,7 +322,7 @@ export default function SupplierHistoryPage() {
         minute: "2-digit",
       });
       const paymentWord = isSupplierCollection(paymentEdit) ? "التحصيل" : "السداد";
-      const auditNote = `تم تعديل مبلغ ${paymentWord} من ${oldAmount.toLocaleString("ar-EG")} ج إلى ${newAmount.toLocaleString("ar-EG")} ج يوم ${editedAt}`;
+      const auditNote = `تم تعديل مبلغ ${paymentWord} من ${oldAmount.toLocaleString("ar-EG-u-nu-latn")} ج إلى ${newAmount.toLocaleString("ar-EG-u-nu-latn")} ج يوم ${editedAt}`;
       const cleanNote = paymentNote.trim();
       const description = cleanNote ? `${cleanNote}\n${auditNote}` : auditNote;
 
@@ -358,7 +358,7 @@ export default function SupplierHistoryPage() {
     downloadCsv(`supplier-statement-${shortSupplierNumber(id)}.csv`, [
       ["التاريخ", "النوع", "الوصف", "المبلغ"],
       ...filtered.map(t => [
-        new Date(t.created_at).toLocaleString("ar-EG"),
+        new Date(t.created_at).toLocaleString("ar-EG-u-nu-latn"),
         txLabel(t),
         t.description || "",
         Number(t.amount || 0),
@@ -397,9 +397,9 @@ export default function SupplierHistoryPage() {
     ? transactions.reduce((sum, t) => sum + Number(t.amount || 0), 0) / transactions.length
     : 0;
   const followupAlerts = [
-    Number(supplier?.balance || 0) > 0 ? `متابعة سداد: للمورد ${Number(supplier?.balance || 0).toLocaleString("ar-EG")} ج.م` : "",
+    Number(supplier?.balance || 0) > 0 ? `متابعة سداد: للمورد ${Number(supplier?.balance || 0).toLocaleString("ar-EG-u-nu-latn")} ج.م` : "",
     transactions.length === 0 ? "المورد لم يسجل أي حركة حتى الآن" : "",
-    daysFromLastActivity != null && daysFromLastActivity > 30 ? `لا توجد حركة منذ ${daysFromLastActivity.toLocaleString("ar-EG")} يوم` : "",
+    daysFromLastActivity != null && daysFromLastActivity > 30 ? `لا توجد حركة منذ ${daysFromLastActivity.toLocaleString("ar-EG-u-nu-latn")} يوم` : "",
   ].filter(Boolean);
 
   const editTotal = editItems.reduce((s, i) => s + Number(i.qty) * Number(i.price), 0);
@@ -420,7 +420,7 @@ export default function SupplierHistoryPage() {
           </div>
           <div className="flex items-center gap-3">
             <div className={`px-4 py-2 rounded-xl text-sm font-black ${supplier?.balance > 0 ? "bg-rose-600" : "bg-emerald-600"}`}>
-              {supplier?.balance > 0 ? `مديونية: ${supplier?.balance?.toLocaleString("ar-EG")} ج.م` : "مسدد بالكامل ✅"}
+              {supplier?.balance > 0 ? `مديونية: ${supplier?.balance?.toLocaleString("ar-EG-u-nu-latn")} ج.م` : "مسدد بالكامل ✅"}
             </div>
             <Link
               href={`/suppliers/${id}`}
@@ -477,20 +477,20 @@ export default function SupplierHistoryPage() {
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
               <div className="rounded-2xl bg-slate-50 p-3">
                 <p className="text-[10px] font-black text-slate-400 mb-1">عدد الحركات</p>
-                <p className="text-lg font-black text-slate-900">{transactions.length.toLocaleString("ar-EG")}</p>
+                <p className="text-lg font-black text-slate-900">{transactions.length.toLocaleString("ar-EG-u-nu-latn")}</p>
               </div>
               <div className="rounded-2xl bg-slate-50 p-3">
                 <p className="text-[10px] font-black text-slate-400 mb-1">آخر حركة</p>
-                <p className="text-sm font-black text-slate-900">{lastTransaction ? new Date(lastTransaction.created_at).toLocaleDateString("ar-EG") : "-"}</p>
+                <p className="text-sm font-black text-slate-900">{lastTransaction ? new Date(lastTransaction.created_at).toLocaleDateString("ar-EG-u-nu-latn") : "-"}</p>
               </div>
               <div className="rounded-2xl bg-slate-50 p-3">
                 <p className="text-[10px] font-black text-slate-400 mb-1">متوسط الحركة</p>
-                <p className="text-lg font-black text-slate-900">{averageTransaction.toLocaleString("ar-EG", { maximumFractionDigits: 0 })}</p>
+                <p className="text-lg font-black text-slate-900">{averageTransaction.toLocaleString("ar-EG-u-nu-latn", { maximumFractionDigits: 0 })}</p>
               </div>
               <div className="rounded-2xl bg-slate-50 p-3">
                 <p className="text-[10px] font-black text-slate-400 mb-1">الرصيد</p>
                 <p className={`text-lg font-black ${Number(supplier?.balance || 0) > 0 ? "text-rose-600" : "text-emerald-600"}`}>
-                  {Number(supplier?.balance || 0).toLocaleString("ar-EG")}
+                  {Number(supplier?.balance || 0).toLocaleString("ar-EG-u-nu-latn")}
                 </p>
               </div>
             </div>
@@ -531,23 +531,23 @@ export default function SupplierHistoryPage() {
         <div className="grid grid-cols-4 gap-4">
           <div className="bg-white p-5 rounded-[2rem] border border-slate-200 shadow-sm text-center">
             <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">إجمالي الفواتير</p>
-            <p className="text-2xl font-black text-slate-900">{totalInvoices.toLocaleString("ar-EG")}</p>
+            <p className="text-2xl font-black text-slate-900">{totalInvoices.toLocaleString("ar-EG-u-nu-latn")}</p>
             <p className="text-[10px] text-slate-400 font-bold mt-1">ج.م</p>
           </div>
           <div className="bg-white p-5 rounded-[2rem] border border-slate-200 shadow-sm text-center">
             <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">إجمالي السداد</p>
-            <p className="text-2xl font-black text-emerald-600">{totalSupplierPayments.toLocaleString("ar-EG")}</p>
+            <p className="text-2xl font-black text-emerald-600">{totalSupplierPayments.toLocaleString("ar-EG-u-nu-latn")}</p>
             <p className="text-[10px] text-slate-400 font-bold mt-1">ج.م</p>
           </div>
           <div className="bg-white p-5 rounded-[2rem] border border-slate-200 shadow-sm text-center">
             <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">إجمالي المرتجعات</p>
-            <p className="text-2xl font-black text-rose-600">{totalReturns.toLocaleString("ar-EG")}</p>
+            <p className="text-2xl font-black text-rose-600">{totalReturns.toLocaleString("ar-EG-u-nu-latn")}</p>
             <p className="text-[10px] text-slate-400 font-bold mt-1">ج.م</p>
           </div>
           <div className="bg-white p-5 rounded-[2rem] border border-slate-200 shadow-sm text-center">
             <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">إجمالي الدين</p>
             <p className={`text-2xl font-black ${Number(supplier?.balance || 0) > 0 ? "text-rose-600" : "text-emerald-600"}`}>
-              {Number(supplier?.balance || 0).toLocaleString("ar-EG")}
+              {Number(supplier?.balance || 0).toLocaleString("ar-EG-u-nu-latn")}
             </p>
             <p className="text-[10px] text-slate-400 font-bold mt-1">ج.م</p>
           </div>
@@ -611,14 +611,14 @@ export default function SupplierHistoryPage() {
                       <div>
                         <p className={`font-black text-sm ${color}`}>{txLabel(t)}</p>
                         <p className="text-[10px] font-bold text-slate-400 mt-0.5">
-                          {new Date(t.created_at).toLocaleString("ar-EG", { day:"numeric", month:"long", year:"numeric", hour:"2-digit", minute:"2-digit" })}
+                          {new Date(t.created_at).toLocaleString("ar-EG-u-nu-latn", { day:"numeric", month:"long", year:"numeric", hour:"2-digit", minute:"2-digit" })}
                         </p>
                       </div>
                     </div>
                     <div className="flex items-center gap-4">
                       <div className="text-left">
                         <p className={`text-xl font-black ${isInvoice ? "text-slate-900" : isReturn ? "text-rose-600" : isCollection ? "text-blue-600" : "text-emerald-600"}`}>
-                          {isInvoice ? "+" : "−"} {t.amount?.toLocaleString("ar-EG")} ج.م
+                          {isInvoice ? "+" : "−"} {t.amount?.toLocaleString("ar-EG-u-nu-latn")} ج.م
                         </p>
                         {t.items?.length > 0 && (
                           <p className="text-[10px] text-slate-400 font-bold">{t.items.length} صنف</p>
@@ -650,16 +650,16 @@ export default function SupplierHistoryPage() {
                                   <td className="py-3 text-center font-bold text-slate-600">
                                     {item.qty} <span className="text-[9px] text-slate-400">{item.unit}</span>
                                   </td>
-                                  <td className="py-3 text-center font-bold text-slate-600">{Number(item.price).toLocaleString("ar-EG")} ج</td>
+                                  <td className="py-3 text-center font-bold text-slate-600">{Number(item.price).toLocaleString("ar-EG-u-nu-latn")} ج</td>
                                   {isInvoice && showSalePrice && (
                                     <td className="py-3 text-center font-black text-indigo-600">
-                                      {salePriceForItem(item).toLocaleString("ar-EG", { maximumFractionDigits: 2 })} ج
+                                      {salePriceForItem(item).toLocaleString("ar-EG-u-nu-latn", { maximumFractionDigits: 2 })} ج
                                       {item.sale_price == null && (
                                         <span className="mt-1 block text-[8px] font-bold text-slate-400">السعر الحالي</span>
                                       )}
                                     </td>
                                   )}
-                                  <td className="py-3 text-left font-black">{(item.qty * item.price).toLocaleString("ar-EG")} ج</td>
+                                  <td className="py-3 text-left font-black">{(item.qty * item.price).toLocaleString("ar-EG-u-nu-latn")} ج</td>
                                 </tr>
                               ))}
                             </tbody>
@@ -766,7 +766,7 @@ export default function SupplierHistoryPage() {
               <div className="grid grid-cols-2 gap-3">
                 <div className="bg-slate-50 p-4 rounded-2xl text-center">
                   <p className="text-[10px] font-black text-slate-400 mb-1">رصيد المورد الحالي</p>
-                  <p className="text-xl font-black text-rose-600">{Number(supplier?.balance || 0).toLocaleString("ar-EG")} ج</p>
+                  <p className="text-xl font-black text-rose-600">{Number(supplier?.balance || 0).toLocaleString("ar-EG-u-nu-latn")} ج</p>
                 </div>
                 <div className="bg-emerald-50 p-4 rounded-2xl text-center border border-emerald-100">
                   <p className="text-[10px] font-black text-emerald-700 mb-1">المبلغ المدفوع</p>
@@ -785,7 +785,7 @@ export default function SupplierHistoryPage() {
                 <div className="bg-slate-50 border border-slate-100 rounded-2xl p-4 text-center">
                   <p className="text-[10px] font-black text-slate-400 mb-1">الرصيد بعد التحصيل</p>
                   <p className={`text-2xl font-black ${Number(supplier?.balance || 0) - Number(quickPaymentAmount || 0) > 0 ? "text-rose-600" : "text-emerald-600"}`}>
-                    {(Number(supplier?.balance || 0) - Number(quickPaymentAmount || 0)).toLocaleString("ar-EG")} ج
+                    {(Number(supplier?.balance || 0) - Number(quickPaymentAmount || 0)).toLocaleString("ar-EG-u-nu-latn")} ج
                   </p>
                 </div>
               )}
@@ -837,7 +837,7 @@ export default function SupplierHistoryPage() {
               <div className="grid grid-cols-2 gap-3">
                 <div className="bg-slate-50 p-4 rounded-2xl text-center">
                   <p className="text-[10px] font-black text-slate-400 mb-1">المبلغ الحالي</p>
-                  <p className="text-xl font-black text-slate-500">{Number(paymentEdit.amount || 0).toLocaleString("ar-EG")} ج</p>
+                  <p className="text-xl font-black text-slate-500">{Number(paymentEdit.amount || 0).toLocaleString("ar-EG-u-nu-latn")} ج</p>
                 </div>
                 <div className="bg-emerald-50 p-4 rounded-2xl text-center border border-emerald-100">
                   <p className="text-[10px] font-black text-emerald-700 mb-1">المبلغ الجديد</p>
@@ -895,11 +895,11 @@ export default function SupplierHistoryPage() {
             <div className="grid grid-cols-2 gap-4 p-5 border-b border-slate-100">
               <div className="bg-slate-50 p-4 rounded-2xl text-center">
                 <p className="text-[10px] font-black text-slate-400 uppercase mb-1">الإجمالي الأصلي</p>
-                <p className="text-2xl font-black text-slate-400 line-through">{editTrans.amount?.toLocaleString("ar-EG")} ج</p>
+                <p className="text-2xl font-black text-slate-400 line-through">{editTrans.amount?.toLocaleString("ar-EG-u-nu-latn")} ج</p>
               </div>
               <div className={`p-4 rounded-2xl text-center border-2 ${editDiff > 0 ? "bg-rose-50 border-rose-200" : editDiff < 0 ? "bg-emerald-50 border-emerald-200" : "bg-slate-50 border-slate-200"}`}>
                 <p className="text-[10px] font-black text-slate-400 uppercase mb-1">الإجمالي الجديد</p>
-                <p className={`text-2xl font-black ${editDiff > 0 ? "text-rose-600" : editDiff < 0 ? "text-emerald-600" : "text-slate-900"}`}>{editTotal.toLocaleString("ar-EG")} ج</p>
+                <p className={`text-2xl font-black ${editDiff > 0 ? "text-rose-600" : editDiff < 0 ? "text-emerald-600" : "text-slate-900"}`}>{editTotal.toLocaleString("ar-EG-u-nu-latn")} ج</p>
               </div>
             </div>
 
@@ -930,7 +930,7 @@ export default function SupplierHistoryPage() {
                     />
                   </div>
                   <p className="font-black text-slate-700 text-sm min-w-[60px] text-left">
-                    {(Number(item.qty) * Number(item.price)).toLocaleString("ar-EG")} ج
+                    {(Number(item.qty) * Number(item.price)).toLocaleString("ar-EG-u-nu-latn")} ج
                   </p>
                 </div>
               ))}
@@ -940,10 +940,10 @@ export default function SupplierHistoryPage() {
             <div className="bg-[#0f172a] p-6 flex justify-between items-center">
               <div>
                 <p className="text-[9px] text-slate-500 font-black uppercase tracking-widest mb-1">الإجمالي الجديد</p>
-                <p className="text-3xl font-black text-amber-400">{editTotal.toLocaleString("ar-EG")} <small className="text-xs text-white/40">ج</small></p>
+                <p className="text-3xl font-black text-amber-400">{editTotal.toLocaleString("ar-EG-u-nu-latn")} <small className="text-xs text-white/40">ج</small></p>
                 {editDiff !== 0 && (
                   <p className={`text-xs font-black mt-1 ${editDiff > 0 ? "text-rose-400" : "text-emerald-400"}`}>
-                    {editDiff > 0 ? "▲ مديونية المورد ستزيد" : "▼ مديونية المورد ستنقص"} {Math.abs(editDiff).toLocaleString("ar-EG")} ج
+                    {editDiff > 0 ? "▲ مديونية المورد ستزيد" : "▼ مديونية المورد ستنقص"} {Math.abs(editDiff).toLocaleString("ar-EG-u-nu-latn")} ج
                   </p>
                 )}
               </div>
@@ -969,16 +969,16 @@ export default function SupplierHistoryPage() {
                 <p>كشف حساب حسب الفلتر الحالي</p>
               </div>
               <div className="print-meta">
-                <p>التاريخ: {new Date().toLocaleDateString("ar-EG")}</p>
-                <p>عدد الحركات: {filtered.length.toLocaleString("ar-EG")}</p>
-                <p>الرصيد الحالي: {Number(supplier?.balance || 0).toLocaleString("ar-EG")} ج</p>
+                <p>التاريخ: {new Date().toLocaleDateString("ar-EG-u-nu-latn")}</p>
+                <p>عدد الحركات: {filtered.length.toLocaleString("ar-EG-u-nu-latn")}</p>
+                <p>الرصيد الحالي: {Number(supplier?.balance || 0).toLocaleString("ar-EG-u-nu-latn")} ج</p>
               </div>
             </div>
             <div className="print-summary">
-              <p><span>إجمالي الفواتير</span><b>{totalInvoices.toLocaleString("ar-EG")} ج</b></p>
-              <p><span>إجمالي السداد</span><b>{totalSupplierPayments.toLocaleString("ar-EG")} ج</b></p>
-              <p><span>إجمالي المرتجعات</span><b>{totalReturns.toLocaleString("ar-EG")} ج</b></p>
-              <p className="print-total"><span>الرصيد الحالي</span><b>{Number(supplier?.balance || 0).toLocaleString("ar-EG")} ج</b></p>
+              <p><span>إجمالي الفواتير</span><b>{totalInvoices.toLocaleString("ar-EG-u-nu-latn")} ج</b></p>
+              <p><span>إجمالي السداد</span><b>{totalSupplierPayments.toLocaleString("ar-EG-u-nu-latn")} ج</b></p>
+              <p><span>إجمالي المرتجعات</span><b>{totalReturns.toLocaleString("ar-EG-u-nu-latn")} ج</b></p>
+              <p className="print-total"><span>الرصيد الحالي</span><b>{Number(supplier?.balance || 0).toLocaleString("ar-EG-u-nu-latn")} ج</b></p>
             </div>
             <table className="print-table" style={{ marginTop: 10 }}>
               <thead>
@@ -992,10 +992,10 @@ export default function SupplierHistoryPage() {
               <tbody>
                 {filtered.map(t => (
                   <tr key={t.id}>
-                    <td>{new Date(t.created_at).toLocaleDateString("ar-EG")}</td>
+                    <td>{new Date(t.created_at).toLocaleDateString("ar-EG-u-nu-latn")}</td>
                     <td>{txLabel(t)}</td>
                     <td>{t.description || "-"}</td>
-                    <td>{Number(t.amount || 0).toLocaleString("ar-EG")} ج</td>
+                    <td>{Number(t.amount || 0).toLocaleString("ar-EG-u-nu-latn")} ج</td>
                   </tr>
                 ))}
               </tbody>
@@ -1019,7 +1019,7 @@ export default function SupplierHistoryPage() {
                 <p>إدارة الموردين والأصناف</p>
               </div>
               <div className="print-meta">
-                <p>التاريخ: {new Date(printTransaction.created_at).toLocaleDateString("ar-EG")}</p>
+                <p>التاريخ: {new Date(printTransaction.created_at).toLocaleDateString("ar-EG-u-nu-latn")}</p>
                 <p>المورد: {supplier?.name || "-"}</p>
                 <p>رقم الفاتورة: {printTransaction.id}</p>
               </div>
@@ -1040,20 +1040,20 @@ export default function SupplierHistoryPage() {
                   <tr key={idx}>
                     <td>{item.name}</td>
                     <td>{item.unit || "-"}</td>
-                    <td>{Number(item.qty || 0).toLocaleString("ar-EG")}</td>
-                    <td>{Number(item.price || 0).toLocaleString("ar-EG")} ج</td>
+                    <td>{Number(item.qty || 0).toLocaleString("ar-EG-u-nu-latn")}</td>
+                    <td>{Number(item.price || 0).toLocaleString("ar-EG-u-nu-latn")} ج</td>
                     {printShowSalePrice && (
-                      <td>{salePriceForItem(item).toLocaleString("ar-EG", { maximumFractionDigits: 2 })} ج</td>
+                      <td>{salePriceForItem(item).toLocaleString("ar-EG-u-nu-latn", { maximumFractionDigits: 2 })} ج</td>
                     )}
-                    <td>{(Number(item.qty || 0) * Number(item.price || 0)).toLocaleString("ar-EG")} ج</td>
+                    <td>{(Number(item.qty || 0) * Number(item.price || 0)).toLocaleString("ar-EG-u-nu-latn")} ج</td>
                   </tr>
                 ))}
               </tbody>
             </table>
             <div className="print-summary">
-              <p><span>الإجمالي قبل الخصم</span><b>{printSubtotal.toLocaleString("ar-EG")} ج</b></p>
-              <p><span>الخصم ({printDiscountRate}%)</span><b>{printDiscountAmount.toLocaleString("ar-EG")} ج</b></p>
-              <p className="print-total"><span>{isSupplierReturn(printTransaction.type) ? "صافي المرتجع" : "صافي الفاتورة"}</span><b>{printNetTotal.toLocaleString("ar-EG")} ج</b></p>
+              <p><span>الإجمالي قبل الخصم</span><b>{printSubtotal.toLocaleString("ar-EG-u-nu-latn")} ج</b></p>
+              <p><span>الخصم ({printDiscountRate}%)</span><b>{printDiscountAmount.toLocaleString("ar-EG-u-nu-latn")} ج</b></p>
+              <p className="print-total"><span>{isSupplierReturn(printTransaction.type) ? "صافي المرتجع" : "صافي الفاتورة"}</span><b>{printNetTotal.toLocaleString("ar-EG-u-nu-latn")} ج</b></p>
             </div>
             {printTransaction.description && <p className="print-note">ملاحظة: {printTransaction.description}</p>}
           </div>
