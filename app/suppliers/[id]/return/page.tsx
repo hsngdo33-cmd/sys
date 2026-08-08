@@ -279,7 +279,7 @@ export default function SupplierReturnInvoicePage() {
 
   return (
     <div className="min-h-screen bg-[#f1f5f9] text-right font-sans text-slate-900 pb-10" dir="rtl">
-      <header className="bg-[#0f172a] text-white px-5 py-4 flex justify-between items-center shadow-xl sticky top-0 z-50">
+      <header className="bg-[#0f172a] text-white px-5 py-4 flex justify-between items-center shadow-xl">
         <div className="flex items-center gap-4">
           <Link href="/suppliers" className="bg-white/10 hover:bg-white/20 px-4 py-2 rounded-xl text-xs font-black transition-all">
             رجوع

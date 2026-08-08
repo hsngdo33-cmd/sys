@@ -7,6 +7,7 @@ import Link from "next/link";
 import { PRODUCT_CATEGORIES, ProductCategory, normalizeProductCategory, productCategoryLabel } from "@/lib/product-category";
 import { recordStaffActivity } from "@/app/staff-activity";
 import { useStaffSession } from "@/app/staff-session";
+import { isMissingRpcError } from "@/lib/supabase-errors";
 
 type Customer = {
   id: string;
@@ -21,6 +22,7 @@ type SaleItem = {
   qty: number;
   price: number;
   cost: number;
+  unit_factor?: number;
   source_invoice_id: string;
   source_invoice_date: string;
   returnedQty: number;
@@ -98,6 +100,7 @@ export default function CustomerReturnInvoicePage() {
             qty: soldQty,
             price: Number(item.price || 0),
             cost: Number(item.cost || 0),
+            unit_factor: Number(item.unit_factor || 1),
             product_category: normalizeProductCategory(item.product_category),
             source_invoice_id: sourceInvoiceId,
             source_invoice_date: invoice.created_at,
@@ -164,6 +167,8 @@ export default function CustomerReturnInvoicePage() {
         qty: item.qty,
         price: Number(item.price || 0),
         cost: Number(item.cost || 0),
+        unit_factor: Number(item.unit_factor || 1),
+        stock_qty: item.qty * Number(item.unit_factor || 1),
         product_category: normalizeProductCategory(item.product_category),
         source_invoice_id: item.source_invoice_id,
       }));
@@ -185,6 +190,20 @@ export default function CustomerReturnInvoicePage() {
       const description = note.trim()
         ? `${note.trim()} - فاتورة مرتجع${discountRate > 0 ? ` - خصم ${discountRate}%` : ""}`
         : `فاتورة مرتجع${discountRate > 0 ? ` - خصم ${discountRate}%` : ""}`;
+
+      const atomicReturn = await supabase.rpc("record_customer_return", {
+        p_customer_id: id, p_items: itemsToSave, p_total: total, p_profit: -profitImpact,
+        p_description: description, p_created_by: operatorName,
+      });
+      if (!atomicReturn.error) {
+        const saved = Array.isArray(atomicReturn.data) ? atomicReturn.data[0] : atomicReturn.data;
+        await recordStaffActivity({ staff, action: "customer_return_saved", entityType: "customer_return", entityId: saved?.return_id,
+          note: `مرتجع عميل - ${customer.name} - ${total.toLocaleString("ar-EG-u-nu-latn")} ج` });
+        if (printAfterSave) { window.print(); window.setTimeout(() => router.push(`/customer/${id}/history`), 300); }
+        else router.push(`/customer/${id}/history`);
+        return;
+      }
+      if (!isMissingRpcError(atomicReturn.error, "record_customer_return")) throw atomicReturn.error;
 
       const stockBeforeById = Object.fromEntries(
         await Promise.all(
@@ -210,13 +229,14 @@ export default function CustomerReturnInvoicePage() {
       if (insertError) throw insertError;
 
       for (const item of itemsToSave) {
-        await supabase.rpc("increment_stock", { row_id: item.id, amount: item.qty });
+        const { error } = await supabase.rpc("increment_stock", { row_id: item.id, amount: item.stock_qty });
+        if (error) throw error;
       }
 
       await supabase.from("inventory_movements").insert(
         itemsToSave.map((item) => {
           const before = Number(stockBeforeById[String(item.id)] || 0);
-          const quantity = Math.abs(Number(item.qty || 0));
+          const quantity = Math.abs(Number(item.stock_qty || 0));
           return {
             product_id: item.id,
             movement_type: "customer_return",
@@ -270,7 +290,7 @@ export default function CustomerReturnInvoicePage() {
 
   return (
     <div className="min-h-screen bg-[#f1f5f9] text-right font-sans text-slate-900 pb-10" dir="rtl">
-      <header className="bg-[#0f172a] text-white px-5 py-4 flex justify-between items-center shadow-xl sticky top-0 z-50">
+      <header className="bg-[#0f172a] text-white px-5 py-4 flex justify-between items-center shadow-xl">
         <div className="flex items-center gap-4">
           <Link href="/customer" className="bg-white/10 hover:bg-white/20 px-4 py-2 rounded-xl text-xs font-black transition-all">
             رجوع

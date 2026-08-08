@@ -3,12 +3,15 @@ import { useState, useEffect, use } from "react";
 import { supabase } from "@/lib/supabase";
 import { useRouter } from "next/navigation";
 import { PRODUCT_CATEGORIES, ProductCategory, normalizeProductCategory, productCategoryLabel } from "@/lib/product-category";
+import { useStaffSession } from "@/app/staff-session";
+import { isMissingRpcError } from "@/lib/supabase-errors";
 
 export default function EditInvoicePage({ params }: { params: Promise<any> }) {
   const router          = useRouter();
   const resolvedParams  = use(params);
   const customerId      = resolvedParams.id;
   const transId         = resolvedParams.transId;
+  const staff = useStaffSession();
 
   const [transaction, setTransaction] = useState<any>(null);
   const [items, setItems]             = useState<any[]>([]);
@@ -84,17 +87,42 @@ export default function EditInvoicePage({ params }: { params: Promise<any> }) {
       }
       const newProfit = newTotal - newTotalCost;
 
+      const editedItems = items.map((item) => ({
+        ...item,
+        qty: Number(item.qty || 0),
+        unit_factor: Number(item.unit_factor || 1),
+        stock_qty: Number(item.qty || 0) * Number(item.unit_factor || 1),
+      }));
+      const atomicUpdate = await supabase.rpc("update_customer_sale", {
+        p_invoice_id: transId,
+        p_customer_id: customerId,
+        p_items: editedItems,
+        p_total: newTotal,
+        p_profit: newProfit,
+        p_description: note || `تم تعديل الفاتورة في: ${new Date().toLocaleString("ar-EG-u-nu-latn")}`,
+        p_created_by: staff?.name || "غير مسجل",
+      });
+      if (!atomicUpdate.error) {
+        router.push(`/customer/${customerId}/history`);
+        return;
+      }
+      if (!isMissingRpcError(atomicUpdate.error, "update_customer_sale")) throw atomicUpdate.error;
+
       // ── إرجاع الكميات القديمة للمخزن ──
       for (const old of transaction.items) {
         if (old.id) {
-          await supabase.rpc("increment_stock", { row_id: String(old.id), amount: Number(old.qty) });
+          const oldStockQuantity = Number(old.stock_qty ?? (Number(old.qty || 0) * Number(old.unit_factor || 1)));
+          const { error } = await supabase.rpc("increment_stock", { row_id: String(old.id), amount: oldStockQuantity });
+          if (error) throw error;
         }
       }
 
       // ── خصم الكميات الجديدة من الأصناف ──
       for (const newItem of items) {
         if (newItem.id) {
-          await supabase.rpc("decrement_stock", { row_id: String(newItem.id), amount: Number(newItem.qty) });
+          const newStockQuantity = Number(newItem.qty || 0) * Number(newItem.unit_factor || 1);
+          const { error } = await supabase.rpc("decrement_stock", { row_id: String(newItem.id), amount: newStockQuantity });
+          if (error) throw error;
         }
       }
 
@@ -108,7 +136,7 @@ export default function EditInvoicePage({ params }: { params: Promise<any> }) {
       // ── تحديث الفاتورة ──
       await supabase.from("customer_transactions").update({
         amount:      newTotal,
-        items:       items,
+        items:       editedItems,
         profit:      newProfit,
         description: note || `تم تعديل الفاتورة في: ${new Date().toLocaleString("ar-EG-u-nu-latn")}`,
       }).eq("id", transId);
@@ -143,7 +171,7 @@ export default function EditInvoicePage({ params }: { params: Promise<any> }) {
     <div className="min-h-screen bg-[#f1f5f9] text-right font-sans pb-16" dir="rtl">
 
       {/* ══ Header ══ */}
-      <header className="bg-[#0f172a] text-white p-5 shadow-xl sticky top-0 z-40 mb-6">
+      <header className="bg-[#0f172a] text-white p-5 shadow-xl mb-6">
         <div className="max-w-3xl mx-auto flex justify-between items-center">
           <div className="flex items-center gap-4">
             <button

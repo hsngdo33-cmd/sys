@@ -11,6 +11,7 @@ import { requireOpenShiftForCash } from "@/app/cash-session";
 import { calculateInvoiceTax, paperSizeCss, useBusinessSettings } from "@/app/business-settings";
 import { conversionFactorForUnit, hasKnownConversion, invoiceUnitsForBaseUnit, manualConversionHint, productUnitConversions } from "@/lib/category-settings";
 import { handleInvoiceArrowNavigation } from "@/lib/invoice-keyboard-navigation";
+import { isMissingRpcError } from "@/lib/supabase-errors";
 
 interface Product {
   id: string; name: string; unit: string;
@@ -239,6 +240,21 @@ export default function CustomerInvoicePage() {
         product_category: normalizeProductCategory(i.product_category),
       }));
 
+      const invoiceDescription = note || `بيع ${productCategoryLabel(activeCategory)} لـ ${customer.name}${discountRate > 0 ? ` - خصم ${discountRate}%` : ""}${taxAmount > 0 ? ` - ${taxInfo.label}` : ""}`;
+      const atomicSale = await supabase.rpc("record_customer_sale", {
+        p_customer_id: id, p_items: itemsToSave, p_total: total, p_profit: profit, p_cash: cash,
+        p_description: invoiceDescription, p_session_id: shiftCheck.sessionId, p_created_by: operatorName,
+      });
+      if (!atomicSale.error) {
+        const saved = Array.isArray(atomicSale.data) ? atomicSale.data[0] : atomicSale.data;
+        await recordStaffActivity({ staff, action: "customer_invoice_saved", entityType: "customer_invoice", entityId: saved?.invoice_id,
+          note: `فاتورة بيع - ${customer.name} - ${total.toLocaleString("ar-EG-u-nu-latn")} ج` });
+        if (printAfterSave) { window.print(); window.setTimeout(() => router.push(`/customer/${id}/history`), 300); }
+        else router.push(`/customer/${id}/history`);
+        return;
+      }
+      if (!isMissingRpcError(atomicSale.error, "record_customer_sale")) throw atomicSale.error;
+
       const { data: invoice, error: invoiceError } = await supabase.from("customer_transactions").insert([{
         customer_id: id, amount: total, type: "sale",
         items: itemsToSave, profit,
@@ -312,7 +328,7 @@ export default function CustomerInvoicePage() {
     <div className="min-h-screen bg-[#f1f5f9] text-right font-sans text-slate-900 pb-10" dir="rtl">
 
       {/* ══ Header ══ */}
-      <header className="bg-[#0f172a] text-white px-5 py-4 flex justify-between items-center shadow-xl sticky top-0 z-50">
+      <header className="bg-[#0f172a] text-white px-5 py-4 flex justify-between items-center shadow-xl">
         <div className="flex items-center gap-4">
           <Link href="/customer" className="bg-white/10 hover:bg-white/20 px-4 py-2 rounded-xl text-xs font-black transition-all">⬅️ رجوع</Link>
           <div>

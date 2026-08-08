@@ -14,6 +14,7 @@ import { conversionFactorForUnit, hasKnownConversion, invoiceUnitsForBaseUnit, m
 import { formatPriceInput, priceFromPurchase, profitPercentFromPrices, purchaseFromPrice } from "@/lib/pricing";
 import { canViewProfitControls } from "@/lib/permissions";
 import { handleInvoiceArrowNavigation } from "@/lib/invoice-keyboard-navigation";
+import { isMissingRpcError } from "@/lib/supabase-errors";
 
 interface Product {
   id: string; name: string; unit: string;
@@ -482,6 +483,37 @@ export default function SupplierInvoicePage() {
     if (cart.length === 0) return alert("الفاتورة فارغة!");
     setIsSaving(true);
     try {
+      const invoiceDescription = note || `توريد ${productCategoryLabel(activeCategory)} من ${supplier.name}${discountAmount > 0 ? ` - خصم ${discountIsFixed ? `${discountAmount} ج` : `${discountRate}%`}` : ""}${taxAmount > 0 ? ` - ${taxInfo.label}` : ""}`;
+      const atomicItems = cart.map((item) => {
+        const factor = Number(item.unitFactor || 1);
+        const basePurchasePrice = Number(((Number(item.p_price || 0) * purchasePriceFactor) / factor).toFixed(2));
+        const currentMargin = Number(profitPercentFromPrices(item.purchase_price, item.sale_price));
+        const nextSalePrice = Number(formatPriceInput(priceFromPurchase(basePurchasePrice, currentMargin > 0 ? currentMargin : 14)));
+        const nextAttributes = item.manualUnitFactor && item.invoiceUnit !== item.unit
+          ? withProductUnitConversion(item.product_attributes, { fromUnit: item.invoiceUnit, toUnit: item.unit, factor })
+          : item.product_attributes;
+        return {
+          id: item.id, name: item.name, unit: item.unit, invoice_unit: item.invoiceUnit, unit_factor: factor,
+          qty: Number(item.qty), stock_qty: Number(item.qty) * factor, price: Number(item.p_price),
+          net_price: Number((Number(item.p_price || 0) * purchasePriceFactor).toFixed(2)), sale_price: invoiceUnitSalePrice(item),
+          base_purchase_price: basePurchasePrice, next_sale_price: nextSalePrice, product_attributes: nextAttributes || {},
+          product_category: normalizeProductCategory(item.product_category),
+        };
+      });
+      const atomicInvoice = await supabase.rpc("record_supplier_invoice", {
+        p_supplier_id: id, p_items: atomicItems, p_total: totalInvoice, p_cash: cash,
+        p_description: invoiceDescription, p_created_by: operatorName,
+      });
+      if (!atomicInvoice.error) {
+        const saved = Array.isArray(atomicInvoice.data) ? atomicInvoice.data[0] : atomicInvoice.data;
+        await recordStaffActivity({ staff, action: "supplier_invoice_saved", entityType: "supplier_invoice", entityId: saved?.invoice_id,
+          note: `فاتورة توريد - ${supplier.name} - ${totalInvoice.toLocaleString("ar-EG-u-nu-latn")} ج` });
+        if (printAfterSave) { window.print(); window.setTimeout(() => router.push("/suppliers"), 300); }
+        else router.push("/suppliers");
+        return;
+      }
+      if (!isMissingRpcError(atomicInvoice.error, "record_supplier_invoice")) throw atomicInvoice.error;
+
       const { data: invoice, error: invoiceError } = await supabase.from("transactions").insert([{
         supplier_id: id,
         amount: totalInvoice,
@@ -577,7 +609,7 @@ export default function SupplierInvoicePage() {
     <div className="min-h-screen bg-[#f1f5f9] text-right font-sans text-slate-900 pb-10" dir="rtl">
 
       {/* ══ Header ══ */}
-      <header className="bg-[#0f172a] text-white px-5 py-4 flex justify-between items-center shadow-xl sticky top-0 z-50">
+      <header className="bg-[#0f172a] text-white px-5 py-4 flex justify-between items-center shadow-xl">
         <div className="flex items-center gap-4">
           <Link href="/suppliers" className="bg-white/10 hover:bg-white/20 px-4 py-2 rounded-xl text-xs font-black transition-all">⬅️ رجوع</Link>
           <div>

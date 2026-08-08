@@ -114,7 +114,7 @@ export default function SupplierInvoiceCompact() {
             {/* الجدول */}
             <div className="flex-grow overflow-y-auto p-4 custom-scrollbar">
               <table className="w-full text-right border-separate border-spacing-y-2">
-                <thead className="sticky top-0 bg-white z-10">
+                <thead className="bg-white">
                   <tr className="text-slate-400 text-[11px] font-black uppercase">
                     <th className="pb-3 pr-4">الصنف</th>
                     <th className="pb-3 text-center">السعر</th>

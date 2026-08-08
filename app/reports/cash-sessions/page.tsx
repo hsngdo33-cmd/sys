@@ -511,7 +511,7 @@ export default function CashSessionsReportPage() {
           ) : (
             <div className="max-h-[520px] overflow-auto rounded-2xl border border-slate-100">
               <table className="w-full min-w-[980px] text-right text-sm">
-                <thead className="sticky top-0 z-10 bg-slate-50 text-[11px] font-black text-slate-500">
+                <thead className="bg-slate-50 text-[11px] font-black text-slate-500">
                   <tr>
                     <th className="p-3">الوردية</th>
                     <th className="p-3">الوقت</th>

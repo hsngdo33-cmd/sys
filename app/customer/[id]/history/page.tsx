@@ -4,6 +4,7 @@ import { supabase } from "@/lib/supabase";
 import { downloadElementAsPng } from "@/lib/download-element-as-png";
 import { useParams } from "next/navigation";
 import Link from "next/link";
+import { isMissingRpcError } from "@/lib/supabase-errors";
 
 type TxType = "all" | "sale" | "return" | "payment" | "تحصيل نقدي";
 
@@ -212,6 +213,8 @@ export default function CustomerHistory() {
           name: item.name,
           unit: item.unit,
           qty,
+          unit_factor: Number(item.unit_factor || 1),
+          stock_qty: qty * Number(item.unit_factor || 1),
           price: Number(item.price || 0),
           cost: Number(item.cost || 0),
           source_invoice_id: returnInvoice.id,
@@ -237,6 +240,16 @@ export default function CustomerHistory() {
         ? `${returnNote.trim()} - مرتجع من فاتورة #${returnInvoice.id}`
         : `مرتجع من فاتورة #${returnInvoice.id}`;
 
+      const atomicReturn = await supabase.rpc("record_customer_return", {
+        p_customer_id: id, p_items: selectedItems, p_total: returnTotal, p_profit: -returnProfitImpact,
+        p_description: description, p_created_by: null,
+      });
+      if (!atomicReturn.error) {
+        setReturnInvoice(null); setReturnItems([]); setReturnNote(""); await loadData();
+        return;
+      }
+      if (!isMissingRpcError(atomicReturn.error, "record_customer_return")) throw atomicReturn.error;
+
       const { error: returnError } = await supabase
         .from("customer_transactions")
         .insert([{
@@ -250,7 +263,8 @@ export default function CustomerHistory() {
       if (returnError) throw returnError;
 
       for (const item of selectedItems) {
-        await supabase.rpc("increment_stock", { row_id: String(item.id), amount: Number(item.qty) });
+        const { error } = await supabase.rpc("increment_stock", { row_id: String(item.id), amount: Number(item.stock_qty) });
+        if (error) throw error;
       }
 
       const { error: balanceError } = await supabase

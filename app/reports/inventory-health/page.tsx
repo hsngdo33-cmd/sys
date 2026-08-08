@@ -335,7 +335,7 @@ export default function InventoryHealthReportPage() {
           ) : (
             <div className="max-h-[540px] overflow-auto rounded-2xl border border-slate-100">
               <table className="w-full min-w-[920px] text-right text-sm">
-                <thead className="sticky top-0 z-10 bg-slate-50 text-[11px] font-black text-slate-500">
+                <thead className="bg-slate-50 text-[11px] font-black text-slate-500">
                   <tr>
                     <th className="p-3">الصنف</th>
                     <th className="p-3">المشاكل</th>

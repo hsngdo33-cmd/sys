@@ -35,7 +35,7 @@ export default function GlobalHistoryUI() {
     <div className="min-h-screen bg-[#f8fafc] text-right font-sans pb-20" dir="rtl">
       
       {/* Header Bar */}
-      <nav className="no-print sticky top-0 z-50 bg-white/80 backdrop-blur-md border-b border-slate-200 px-6 py-4 mb-8">
+      <nav className="no-print bg-white/80 backdrop-blur-md border-b border-slate-200 px-6 py-4 mb-8">
         <div className="max-w-5xl mx-auto flex justify-between items-center">
           <div className="flex items-center gap-4">
             <div className="w-10 h-10 bg-slate-900 rounded-xl flex items-center justify-center text-white shadow-lg font-black italic">H</div>

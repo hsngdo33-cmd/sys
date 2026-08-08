@@ -280,7 +280,7 @@ export default function SuppliersPage() {
     <div className="min-h-screen bg-[#f1f5f9] text-right font-sans text-slate-900 pb-4" dir="rtl">
 
       {/* ══ Header ══ */}
-      <header className="bg-[#0f172a] text-white px-6 py-4 shadow-xl mb-4 sticky top-0 z-40">
+      <header className="bg-[#0f172a] text-white px-6 py-4 shadow-xl mb-4">
         <div className="max-w-6xl mx-auto flex justify-between items-center flex-wrap gap-4">
           <div className="flex items-center gap-4">
             <Link href="/" className="bg-white/10 hover:bg-white/20 px-4 py-2 rounded-xl text-xs font-black transition-all">⬅️ الرئيسية</Link>

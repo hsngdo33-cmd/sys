@@ -1233,7 +1233,7 @@ export default function OperationsPage() {
                   <h2 className="mb-3 text-lg font-black text-slate-950">حركات المخزون</h2>
                   <div className="max-h-[420px] overflow-auto rounded-2xl border border-slate-100">
                     <table className="w-full min-w-[760px] text-right text-sm">
-                      <thead className="sticky top-0 bg-slate-50 text-xs font-black text-slate-500">
+                      <thead className="bg-slate-50 text-xs font-black text-slate-500">
                         <tr>
                           <th className="px-4 py-3">التاريخ</th>
                           <th className="px-4 py-3">الصنف</th>
@@ -1289,7 +1289,7 @@ export default function OperationsPage() {
                   <h2 className="mb-3 text-lg font-black text-slate-950">حركات الخزنة</h2>
                   <div className="max-h-[420px] overflow-auto rounded-2xl border border-slate-100">
                     <table className="w-full min-w-[720px] text-right text-sm">
-                      <thead className="sticky top-0 bg-slate-50 text-xs font-black text-slate-500">
+                      <thead className="bg-slate-50 text-xs font-black text-slate-500">
                         <tr>
                           <th className="px-4 py-3">التاريخ</th>
                           <th className="px-4 py-3">الحركة</th>

@@ -12,6 +12,7 @@ import { recordStaffActivity } from "@/app/staff-activity";
 import { useStaffSession } from "@/app/staff-session";
 import { canViewProfitControls } from "@/lib/permissions";
 import { handleInvoiceArrowNavigation } from "@/lib/invoice-keyboard-navigation";
+import { isMissingRpcError } from "@/lib/supabase-errors";
 import {
   conversionFactorForUnit,
   hasKnownConversion,
@@ -496,6 +497,35 @@ export default function CustomersListPage() {
           discountAmount > 0 ? ` - خصم ${discountIsFixed ? `${discountAmount} ج` : `${discountRate}%`}` : ""
         }${taxAmount > 0 ? ` - ${taxInfo.label}` : ""}`;
 
+      const atomicSale = await supabase.rpc("record_customer_sale", {
+        p_customer_id: customer.id,
+        p_items: itemsToSave,
+        p_total: total,
+        p_profit: profit,
+        p_cash: cash,
+        p_description: baseSaleDescription,
+        p_session_id: shiftCheck.sessionId,
+        p_created_by: operatorName,
+      });
+      if (!atomicSale.error) {
+        const saved = Array.isArray(atomicSale.data) ? atomicSale.data[0] : atomicSale.data;
+        const invoiceId = saved?.invoice_id;
+        const invoiceNumber = shortInvoiceNumber(invoiceId);
+        setQuickPrintInvoiceNumber(invoiceNumber);
+        await recordStaffActivity({ staff, action: "customer_invoice_saved", entityType: "customer_invoice", entityId: invoiceId,
+          note: `فاتورة بيع ${invoiceNumber} - ${customer.name} - ${total.toLocaleString("ar-EG-u-nu-latn")} ج` });
+        if (printAfterSave) {
+          await new Promise((resolve) => window.setTimeout(resolve, 80));
+          window.print();
+        }
+        setInvoiceCustomerId(""); setManualCustomerName(""); setManualCustomerPhone(""); setCart([]);
+        setCashPaid(0); setDiscountPercent(0); setDiscountValue(""); setNote(""); setInvoiceProductSearch("");
+        await fetchCustomers();
+        window.setTimeout(() => barcodeInputRef.current?.focus(), 100);
+        return;
+      }
+      if (!isMissingRpcError(atomicSale.error, "record_customer_sale")) throw atomicSale.error;
+
       const { data: invoice, error: invoiceError } = await supabase
         .from("customer_transactions")
         .insert([
@@ -781,7 +811,7 @@ export default function CustomersListPage() {
               </div>
               <div className="rounded-xl bg-rose-50 px-3 py-2">
                 <p className="text-[9px] font-black text-rose-400">الديون</p>
-                <p className="text-lg font-black text-rose-600">{totalDebt.toLocaleString("ar-EG-u-nu-latn")}</p>
+                <p className="text-lg font-black text-rose-600">{totalDebt.toLocaleString("ar-EG-u-nu-latn", { maximumFractionDigits: 0 })}</p>
               </div>
               <div className="rounded-xl bg-emerald-50 px-3 py-2">
                 <p className="text-[9px] font-black text-emerald-500">سليم</p>
@@ -1000,7 +1030,7 @@ export default function CustomersListPage() {
                   </div>
                 ) : (
                   <table className="w-full min-w-[650px] text-right">
-                    <thead className="sticky top-0 z-10 border-b bg-slate-50 text-[10px] font-black text-slate-400">
+                    <thead className="border-b bg-slate-50 text-[10px] font-black text-slate-400">
                       <tr>
                         <th className="p-2">الصنف</th>
                         <th className="p-2 text-center">الكمية</th>
@@ -1277,7 +1307,7 @@ export default function CustomersListPage() {
             </div>
 
             <div className="mt-3 grid gap-2 sm:grid-cols-4">
-              <MiniStat label="إجمالي الديون" value={`${totalDebt.toLocaleString("ar-EG-u-nu-latn")} ج`} tone="dark" />
+              <MiniStat label="إجمالي الديون" value={`${totalDebt.toLocaleString("ar-EG-u-nu-latn", { maximumFractionDigits: 0 })} ج`} tone="dark" />
               <MiniStat label="مديونون" value={debtorCount.toLocaleString("ar-EG-u-nu-latn")} />
               <MiniStat label="حساب سليم" value={clearCount.toLocaleString("ar-EG-u-nu-latn")} />
               <MiniStat label="بدون حركة" value={inactiveCount.toLocaleString("ar-EG-u-nu-latn")} />
@@ -1304,7 +1334,7 @@ export default function CustomersListPage() {
               <div className="p-10 text-center font-black text-slate-300">لا توجد نتائج</div>
             ) : (
               <table className="w-full min-w-[760px] text-right">
-                <thead className="sticky top-0 z-10 border-b bg-slate-50 text-[10px] font-black text-slate-400">
+                <thead className="border-b bg-slate-50 text-[10px] font-black text-slate-400">
                   <tr>
                     <th className="px-4 py-3">العميل</th>
                     <th className="px-4 py-3">الموبايل</th>

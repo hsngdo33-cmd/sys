@@ -106,6 +106,17 @@ export default function SupplierHistoryPage() {
   useEffect(() => { if (id) loadData(); }, [id]);
 
   useEffect(() => {
+    if (loading || transactions.length === 0) return;
+    const requestedInvoiceId = new URLSearchParams(window.location.search).get("invoice");
+    if (!requestedInvoiceId) return;
+    setExpandedId(requestedInvoiceId);
+    const timer = window.setTimeout(() => {
+      document.getElementById(`invoice-${requestedInvoiceId}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 80);
+    return () => window.clearTimeout(timer);
+  }, [loading, transactions]);
+
+  useEffect(() => {
     if (!id) return;
     setInternalNote(window.localStorage.getItem(`sys.supplier-note.${id}`) || "");
   }, [id]);
@@ -609,10 +620,10 @@ export default function SupplierHistoryPage() {
               const isReturn = isSupplierReturn(t.type);
               const isCollection = isSupplierCollection(t);
               const isPayment = isSupplierInvoicePayment(t) || isCollection || t.type?.includes("ط³ط¯ط§ط¯") || t.type?.includes("ط¯ظپط¹");
-              const isOpen    = expandedId === t.id;
+              const isOpen    = String(expandedId || "") === String(t.id);
               const showSalePrice = salePriceInvoiceIds.includes(String(t.id));
               return (
-                <div key={t.id} className="bg-white rounded-[2rem] border border-slate-200 shadow-sm overflow-hidden">
+                <div id={`invoice-${t.id}`} key={t.id} className="bg-white rounded-[2rem] border border-slate-200 shadow-sm overflow-hidden scroll-mt-6">
                   <div
                     onClick={() => setExpandedId(isOpen ? null : t.id)}
                     className="p-5 flex justify-between items-center cursor-pointer hover:bg-slate-50 transition-colors"

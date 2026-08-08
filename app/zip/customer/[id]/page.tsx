@@ -108,7 +108,7 @@ export default function GlobalInvoiceSystem() {
     <div className="min-h-screen bg-[#f8fafc] text-right font-sans pb-10" dir="rtl">
       
       {/* --- Global Navbar --- */}
-      <nav className="no-print sticky top-0 z-50 bg-white/80 backdrop-blur-md border-b border-slate-200 px-6 py-4 mb-8">
+      <nav className="no-print bg-white/80 backdrop-blur-md border-b border-slate-200 px-6 py-4 mb-8">
         <div className="max-w-7xl mx-auto flex justify-between items-center">
           
           <div className="flex items-center gap-6">

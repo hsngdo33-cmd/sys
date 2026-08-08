@@ -33,18 +33,6 @@ export async function isShiftRequired() {
 }
 
 export async function requireOpenShiftForCash(amount: number) {
-  if (!amount || amount <= 0) return { ok: true as const, sessionId: null };
-
-  const required = await isShiftRequired();
-  if (!required) return { ok: true as const, sessionId: null };
-
-  const session = await getActiveCashSession();
-  if (!session) {
-    return {
-      ok: false as const,
-      message: "لا توجد وردية خزنة مفتوحة. افتح وردية من الصفحة الرئيسية قبل حفظ أي حركة نقدية.",
-    };
-  }
-
-  return { ok: true as const, sessionId: session.id };
+  void amount;
+  return { ok: true as const, sessionId: null, message: "" };
 }

@@ -28,7 +28,6 @@ import {
 } from "recharts";
 import { supabase } from "@/lib/supabase";
 import { normalizeProductCategory, productCategoryLabel } from "@/lib/product-category";
-import { CashShiftWidget } from "@/app/cash-shift-widget";
 import { useStaffSession } from "@/app/staff-session";
 import { canViewProfitControls } from "@/lib/permissions";
 
@@ -50,6 +49,13 @@ type CustomerTx = {
   profit: number | string | null;
   type: string | null;
   items: unknown;
+};
+
+type SupplierCashTx = { amount: number | string | null; type: string | null };
+type CashEntryRow = {
+  amount: number | string | null;
+  direction: string | null;
+  entry_type: string | null;
 };
 
 type TrendPoint = {
@@ -183,6 +189,7 @@ export default function Dashboard() {
   const [suppliers, setSuppliers] = useState<SupplierRow[]>([]);
   const [products, setProducts] = useState<ProductRow[]>([]);
   const [transactions, setTransactions] = useState<CustomerTx[]>([]);
+  const [totalCash, setTotalCash] = useState(0);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -205,7 +212,15 @@ export default function Dashboard() {
     since.setHours(0, 0, 0, 0);
 
     try {
-      const [{ data: customersData }, { data: suppliersData }, { data: productsData }, { data: txData }] =
+      const [
+        { data: customersData },
+        { data: suppliersData },
+        { data: productsData },
+        { data: txData },
+        { data: allCustomerPayments },
+        { data: supplierCashTransactions },
+        { data: manualCashEntries },
+      ] =
         await Promise.all([
           supabase.from("customers").select("balance"),
           supabase.from("suppliers").select("balance"),
@@ -215,12 +230,27 @@ export default function Dashboard() {
             .select("created_at,amount,profit,type,items")
             .gte("created_at", since.toISOString())
             .order("created_at", { ascending: true }),
+          supabase.from("customer_transactions").select("amount,type"),
+          supabase.from("transactions").select("amount,type"),
+          supabase.from("cash_entries").select("amount,direction,entry_type"),
         ]);
 
       setCustomers((customersData || []) as CustomerRow[]);
       setSuppliers((suppliersData || []) as SupplierRow[]);
       setProducts((productsData || []) as ProductRow[]);
       setTransactions((txData || []) as CustomerTx[]);
+
+      const totalCustomerCash = ((allCustomerPayments || []) as Array<Pick<CustomerTx, "amount" | "type">>)
+        .filter((transaction) => isPayment(transaction.type))
+        .reduce((sum, transaction) => sum + num(transaction.amount), 0);
+      const totalSupplierCash = ((supplierCashTransactions || []) as SupplierCashTx[])
+        .filter((transaction) => transaction.type === "سداد نقدي")
+        .reduce((sum, transaction) => sum + num(transaction.amount), 0);
+      const manualCashNet = ((manualCashEntries || []) as CashEntryRow[])
+        .filter((entry) => !["sale_payment", "customer_collection"].includes(entry.entry_type || ""))
+        .reduce((sum, entry) => sum + (entry.direction === "out" ? -num(entry.amount) : num(entry.amount)), 0);
+
+      setTotalCash(totalCustomerCash - totalSupplierCash + manualCashNet);
     } catch (dashboardError) {
       console.error(dashboardError);
       setError("تعذر تحميل بيانات الداشبورد");
@@ -344,15 +374,14 @@ export default function Dashboard() {
           </div>
         )}
 
-        <CashShiftWidget />
-
         {loading ? (
           <div className="rounded-3xl border border-slate-200 bg-white p-12 text-center text-lg font-black text-slate-400 shadow-sm">
             جاري تحميل التحليلات...
           </div>
         ) : (
           <>
-            <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+            <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
+              <MetricCard title="إجمالي الكاش الحالي" value={`${wholeMoney(totalCash)} ج`} hint="من بداية استخدام السيستم" icon={WalletCards} tone="emerald" />
               <MetricCard title="مبيعات الفترة" value={`${wholeMoney(stats.revenue)} ج`} hint={`${stats.invoices} فاتورة`} icon={ShoppingCart} tone="emerald" delta={stats.growth} />
               {canViewProfit && (
                 <MetricCard title="صافي الربح" value={`${wholeMoney(stats.profit)} ج`} hint={`هامش ${stats.margin}%`} icon={TrendingUp} tone="blue" />

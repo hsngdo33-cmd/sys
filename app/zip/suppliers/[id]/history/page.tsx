@@ -40,7 +40,7 @@ export default function SupplierHistoryCards() {
     <div className="min-h-screen bg-[#f3f4f6] text-right font-sans pb-20" dir="rtl">
       
       {/* Header */}
-      <nav className="no-print sticky top-0 z-50 bg-white/90 backdrop-blur-md border-b border-slate-200 px-6 py-5 mb-10 shadow-sm">
+      <nav className="no-print bg-white/90 backdrop-blur-md border-b border-slate-200 px-6 py-5 mb-10 shadow-sm">
         <div className="max-w-4xl mx-auto flex justify-between items-center">
           <div className="flex items-center gap-4">
             <Link href={`/suppliers/${id}`} className="w-12 h-12 bg-slate-900 text-white rounded-2xl flex items-center justify-center hover:scale-105 transition-all shadow-lg">

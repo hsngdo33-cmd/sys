@@ -276,7 +276,7 @@ export default function AddProductPage() {
     <div className="min-h-screen bg-[#f1f5f9] text-right font-sans text-slate-900 pb-16" dir="rtl">
 
       {/* â•گâ•گ Header â•گâ•گ */}
-      <header className="bg-[#0f172a] text-white p-5 shadow-xl sticky top-0 z-40 mb-6">
+      <header className="bg-[#0f172a] text-white p-5 shadow-xl mb-6">
         <div className="max-w-xl mx-auto flex justify-between items-center">
           <div className="flex items-center gap-4">
             <Link href="/inventory" className="bg-white/10 hover:bg-white/20 px-4 py-2 rounded-xl text-xs font-black transition-all">â¬…ï¸ڈ ط±ط¬ظˆط¹</Link>

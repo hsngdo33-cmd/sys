@@ -368,7 +368,7 @@ export default function InvoicesReportPage() {
 
           <div className="max-h-[560px] overflow-auto">
             <table className="w-full min-w-[1000px] text-sm">
-              <thead className="sticky top-0 z-10 bg-slate-50 text-xs font-black text-slate-500">
+              <thead className="bg-slate-50 text-xs font-black text-slate-500">
                 <tr>
                   <th className="p-3 text-right">النوع</th>
                   <th className="p-3 text-right">التاريخ</th>

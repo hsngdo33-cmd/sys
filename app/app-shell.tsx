@@ -146,7 +146,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     return (
       <body className="min-h-screen overflow-x-hidden bg-slate-50 text-slate-900 font-sans">
         <NumericInputBehavior />
-        <nav className="fixed left-1/2 top-4 z-50 flex -translate-x-1/2 items-center gap-2 rounded-full border border-white/50 bg-white/75 p-1.5 shadow-2xl shadow-slate-900/10 backdrop-blur-xl">
+        <nav className="mx-auto mt-4 flex w-fit items-center gap-2 rounded-full border border-white/50 bg-white/75 p-1.5 shadow-2xl shadow-slate-900/10 backdrop-blur-xl">
           <Link
             href="/"
             aria-label="الرجوع للرئيسية"
@@ -285,7 +285,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </aside>
 
         <main className="w-full min-w-0 flex-1 pb-24 lg:mr-64 lg:pb-0 xl:mr-72">
-          <header className="sticky top-0 z-40 border-b border-slate-200 bg-white/85 backdrop-blur-xl">
+          <header className="border-b border-slate-200 bg-white/85 backdrop-blur-xl">
             <div className="px-3 py-3 sm:px-6 sm:py-4 lg:px-8">
               <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
                 <div className="min-w-0">

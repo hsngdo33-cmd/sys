@@ -146,7 +146,7 @@ export default function EditSupplierInvoicePage({ params }: { params: Promise<an
     <div className="min-h-screen bg-[#f1f5f9] text-right font-sans pb-16" dir="rtl">
 
       {/* ══ Header ══ */}
-      <header className="bg-[#0f172a] text-white p-5 shadow-xl sticky top-0 z-40 mb-6">
+      <header className="bg-[#0f172a] text-white p-5 shadow-xl mb-6">
         <div className="max-w-3xl mx-auto flex justify-between items-center">
           <div className="flex items-center gap-4">
             <button
