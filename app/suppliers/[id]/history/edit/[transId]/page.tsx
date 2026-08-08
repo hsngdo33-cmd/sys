@@ -79,11 +79,19 @@ export default function EditSupplierInvoicePage({ params }: { params: Promise<an
 
       // إرجاع الكميات القديمة (decrement = إزالة من الأصناف ما أضفناه قبل)
       for (const old of transaction.items || []) {
-        if (old.id) await supabase.rpc("decrement_stock", { row_id: String(old.id), amount: Number(old.qty) });
+        const oldStockQuantity = Number(old.stock_qty ?? (Number(old.qty || 0) * Number(old.unit_factor || 1)));
+        if (old.id) {
+          const { error } = await supabase.rpc("decrement_stock", { row_id: String(old.id), amount: oldStockQuantity });
+          if (error) throw error;
+        }
       }
       // إضافة الكميات الجديدة
       for (const item of items) {
-        if (item.id) await supabase.rpc("increment_stock", { row_id: String(item.id), amount: Number(item.qty) });
+        const newStockQuantity = Number(item.qty || 0) * Number(item.unit_factor || 1);
+        if (item.id) {
+          const { error } = await supabase.rpc("increment_stock", { row_id: String(item.id), amount: newStockQuantity });
+          if (error) throw error;
+        }
         if (item.id) {
           await supabase
             .from("products")
@@ -103,6 +111,7 @@ export default function EditSupplierInvoicePage({ params }: { params: Promise<an
         amount: newTotal,
         items: items.map(({ unit, ...rest }) => ({
           ...rest,
+          stock_qty: Number(rest.qty || 0) * Number(rest.unit_factor || 1),
           net_price: Number((Number(rest.price || 0) * purchasePriceFactor).toFixed(2)),
           product_category: normalizeProductCategory(rest.product_category),
         })),

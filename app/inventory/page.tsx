@@ -768,6 +768,10 @@ export default function InventoryPage() {
       product_category: normalizeProductCategory(editForm.product_category),
       product_attributes: savedProductAttributes,
     };
+    const previousProduct = products.find((product) => product.id === editingId);
+    const previousStock = Number(previousProduct?.stock_quantity || 0);
+    const nextStock = Number(updatePayload.stock_quantity || 0);
+    const stockDifference = nextStock - previousStock;
 
     try {
       if (!navigator.onLine) throw new Error("offline");
@@ -779,6 +783,21 @@ export default function InventoryPage() {
         .maybeSingle();
 
       if (error) throw error;
+
+      if (editingId && stockDifference !== 0) {
+        const { error: movementError } = await supabase.from("inventory_movements").insert([{
+          product_id: editingId,
+          movement_type: stockDifference > 0 ? "adjustment_in" : "adjustment_out",
+          quantity: stockDifference,
+          quantity_before: previousStock,
+          quantity_after: nextStock,
+          source_type: "product_edit",
+          source_id: editingId,
+          note: "تعديل الكمية من صفحة الأصناف",
+          created_by: staff?.name || "غير مسجل",
+        }]);
+        if (movementError) throw movementError;
+      }
 
       alert("تم التعديل بنجاح ✅");
 
@@ -810,6 +829,21 @@ export default function InventoryPage() {
           values: updatePayload,
           match: { id: editingId },
         },
+        ...(stockDifference !== 0 ? [{
+          table: "inventory_movements",
+          action: "insert" as const,
+          values: [{
+            product_id: editingId,
+            movement_type: stockDifference > 0 ? "adjustment_in" : "adjustment_out",
+            quantity: stockDifference,
+            quantity_before: previousStock,
+            quantity_after: nextStock,
+            source_type: "product_edit",
+            source_id: editingId,
+            note: "تعديل الكمية من صفحة الأصناف (مزامنة بدون إنترنت)",
+            created_by: staff?.name || "غير مسجل",
+          }],
+        }] : []),
       ]);
 
       setProducts((current) =>
