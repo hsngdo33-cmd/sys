@@ -126,8 +126,8 @@ function transactionMatchesCustomerSearch(transaction: CustomerTransactionSummar
     description.includes(query) ||
     String(transaction.amount || "").includes(query) ||
     invoiceNumber.toLowerCase().includes(query.toLowerCase()) ||
-    normalizeInvoiceSearch(invoiceNumber).includes(invoiceQuery) ||
-    normalizeInvoiceSearch(transaction.id).includes(invoiceQuery)
+    (invoiceQuery.length > 0 && normalizeInvoiceSearch(invoiceNumber).includes(invoiceQuery)) ||
+    (invoiceQuery.length > 0 && normalizeInvoiceSearch(transaction.id).includes(invoiceQuery))
   );
 }
 
@@ -174,6 +174,7 @@ export default function CustomersListPage() {
   const [quickPrintInvoiceNumber, setQuickPrintInvoiceNumber] = useState("-");
   const [directoryOnly, setDirectoryOnly] = useState(false);
   const barcodeInputRef = useRef<HTMLInputElement>(null);
+  const directoryResultsRef = useRef<HTMLDivElement>(null);
 
   const [showAddModal, setShowAddModal] = useState(false);
   const [showPayModal, setShowPayModal] = useState(false);
@@ -317,6 +318,11 @@ export default function CustomersListPage() {
     });
     return list;
   }, [activityMap, customers, filter, searchTerm, sortBy, transactions]);
+
+  useEffect(() => {
+    if (!directoryOnly) return;
+    directoryResultsRef.current?.scrollTo({ top: 0 });
+  }, [directoryOnly, filter, searchTerm, sortBy]);
 
   const totalDebt = customers.reduce((sum, customer) => sum + Math.max(customer.balance, 0), 0);
   const debtorCount = customers.filter((customer) => customer.balance > 0).length;
@@ -1329,6 +1335,12 @@ export default function CustomersListPage() {
               <MiniStat label="بدون حركة" value={inactiveCount.toLocaleString("ar-EG-u-nu-latn")} />
             </div>
 
+            {searchTerm && (
+              <p className="mt-3 text-xs font-black text-indigo-700">
+                نتائج البحث: {displayed.length.toLocaleString("ar-EG-u-nu-latn")}
+              </p>
+            )}
+
             <div className="mt-3 flex flex-wrap gap-2 rounded-2xl border border-slate-200 bg-slate-50/70 p-2">
               {(["name", "balance", "created_at", "activity"] as SortKey[]).map((key) => (
                 <button
@@ -1343,7 +1355,7 @@ export default function CustomersListPage() {
           </div>
 
           <div className="bg-slate-50/60 p-4">
-            <div className="max-h-[620px] overflow-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
+            <div ref={directoryResultsRef} className="max-h-[620px] overflow-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
             {loading ? (
               <div className="p-10 text-center font-black text-slate-400">جاري التحميل...</div>
             ) : displayed.length === 0 ? (
