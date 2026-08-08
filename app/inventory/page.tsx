@@ -111,6 +111,8 @@ export default function InventoryPage() {
   const [salesProduct, setSalesProduct] = useState<Product | null>(null);
   const [productSales, setProductSales] = useState<ProductSaleDetail[]>([]);
   const [productSupplies, setProductSupplies] = useState<ProductSupplyDetail[]>([]);
+  const [productReturnedQuantity, setProductReturnedQuantity] = useState(0);
+  const [productSupplierReturnedQuantity, setProductSupplierReturnedQuantity] = useState(0);
   const [productSalesLoading, setProductSalesLoading] = useState(false);
   const [productSalesError, setProductSalesError] = useState("");
   const [showShortageReport, setShowShortageReport] = useState(false);
@@ -573,18 +575,35 @@ export default function InventoryPage() {
     setSalesProduct(product);
     setProductSales([]);
     setProductSupplies([]);
+    setProductReturnedQuantity(0);
+    setProductSupplierReturnedQuantity(0);
     setProductSalesError("");
     setProductSalesLoading(true);
 
     try {
       const { data: transactions, error: transactionsError } = await supabase
         .from("customer_transactions")
-        .select("id,customer_id,created_at,amount,items")
-        .in("type", ["sale", "بيع"])
+        .select("id,customer_id,created_at,amount,items,type")
+        .in("type", ["sale", "بيع", "return", "مرتجع"])
         .order("created_at", { ascending: false });
       if (transactionsError) throw transactionsError;
 
-      const matchingTransactions = (transactions || []).flatMap((transaction) => {
+      const returnTransactions = (transactions || []).filter((transaction) =>
+        ["return", "مرتجع"].includes(String(transaction.type || "")),
+      );
+      const returnedQuantity = returnTransactions.reduce((total, transaction) => {
+        const returnedItems = (Array.isArray(transaction.items) ? transaction.items : [])
+          .filter((item: Record<string, unknown>) => String(item.id || "") === String(product.id));
+        return total + returnedItems.reduce(
+          (sum: number, item: Record<string, unknown>) => sum + Number(item.qty || 0),
+          0,
+        );
+      }, 0);
+      setProductReturnedQuantity(returnedQuantity);
+
+      const matchingTransactions = (transactions || [])
+        .filter((transaction) => ["sale", "بيع"].includes(String(transaction.type || "")))
+        .flatMap((transaction) => {
         const matchingItems = (Array.isArray(transaction.items) ? transaction.items : [])
           .filter((item: Record<string, unknown>) => String(item.id || "") === String(product.id));
         if (matchingItems.length === 0 || !transaction.customer_id) return [];
@@ -605,7 +624,7 @@ export default function InventoryPage() {
           unitPrice: quantity > 0 ? lineTotal / quantity : Number(firstItem.price || 0),
           lineTotal,
         }];
-      });
+        });
 
       const customerIds = [...new Set(matchingTransactions.map((transaction) => transaction.customerId))];
       const customerNames = new Map<string, string>();
@@ -625,13 +644,32 @@ export default function InventoryPage() {
 
       const { data: supplyTransactions, error: supplyTransactionsError } = await supabase
         .from("transactions")
-        .select("id,supplier_id,created_at,amount,items")
-        .eq("type", "فاتورة توريد")
+        .select("id,supplier_id,created_at,amount,items,type")
         .order("created_at", { ascending: false });
       if (supplyTransactionsError) throw supplyTransactionsError;
 
+      const supplierReturnedQuantity = (supplyTransactions || [])
+        .filter((transaction) => {
+          const type = String(transaction.type || "");
+          return type === "supplier_return" || type === "مرتجع مورد" || type.includes("مرتجع مورد");
+        })
+        .reduce((total, transaction) => {
+          const returnedItems = (Array.isArray(transaction.items) ? transaction.items : [])
+            .filter((item: Record<string, unknown>) => String(item.id || "") === String(product.id));
+          return total + returnedItems.reduce(
+            (sum: number, item: Record<string, unknown>) => sum + Number(item.qty || 0),
+            0,
+          );
+        }, 0);
+      setProductSupplierReturnedQuantity(supplierReturnedQuantity);
+
       const supplierNames = new Map(suppliers.map((supplier) => [String(supplier.id), supplier.name]));
-      const matchingSupplies = (supplyTransactions || []).flatMap((transaction) => {
+      const matchingSupplies = (supplyTransactions || [])
+        .filter((transaction) => {
+          const type = String(transaction.type || "");
+          return type === "فاتورة توريد" || (type.includes("فاتورة") && type.includes("توريد"));
+        })
+        .flatMap((transaction) => {
         const matchingItems = (Array.isArray(transaction.items) ? transaction.items : [])
           .filter((item: Record<string, unknown>) => String(item.id || "") === String(product.id));
         if (matchingItems.length === 0 || !transaction.supplier_id) return [];
@@ -654,7 +692,7 @@ export default function InventoryPage() {
           unitPrice: quantity > 0 ? lineTotal / quantity : Number(firstItem.price || 0),
           lineTotal,
         }];
-      });
+        });
 
       setProductSupplies(matchingSupplies);
     } catch (error) {
@@ -1826,6 +1864,12 @@ export default function InventoryPage() {
                     </span>
                     <span className="rounded-xl bg-blue-50 px-3 py-1.5 text-blue-700">
                       إجمالي المورد: {productSupplies.reduce((sum, supply) => sum + supply.quantity, 0).toLocaleString("ar-EG-u-nu-latn")} {salesProduct.unit}
+                    </span>
+                    <span className="rounded-xl bg-amber-50 px-3 py-1.5 text-amber-700">
+                      مرتجع البيع: {productReturnedQuantity.toLocaleString("ar-EG-u-nu-latn")} {salesProduct.unit}
+                    </span>
+                    <span className="rounded-xl bg-violet-50 px-3 py-1.5 text-violet-700">
+                      مرتجع الشراء: {productSupplierReturnedQuantity.toLocaleString("ar-EG-u-nu-latn")} {salesProduct.unit}
                     </span>
                   </div>
                 )}
