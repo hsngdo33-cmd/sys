@@ -13,6 +13,7 @@ import { formatPriceInput, priceFromPurchase, profitPercentFromPrices, purchaseF
 import { productUnitConversions, unitConversionsForBaseUnit, UnitConversion } from "@/lib/category-settings";
 import { canViewProfitControls } from "@/lib/permissions";
 import { enqueueOfflineJob, isOfflineError } from "@/lib/offline-sync";
+import { downloadElementAsPng } from "@/lib/download-element-as-png";
 
 type Product = {
   id: string;
@@ -112,6 +113,9 @@ export default function InventoryPage() {
   const [productSupplies, setProductSupplies] = useState<ProductSupplyDetail[]>([]);
   const [productSalesLoading, setProductSalesLoading] = useState(false);
   const [productSalesError, setProductSalesError] = useState("");
+  const [showShortageReport, setShowShortageReport] = useState(false);
+  const [savingShortageImage, setSavingShortageImage] = useState(false);
+  const shortageReportRef = useRef<HTMLDivElement>(null);
   const [editForm, setEditForm] = useState<Partial<Product>>({});
   const [editUnitConversions, setEditUnitConversions] = useState<UnitConversion[] | null>(null);
   const [showNewUnitConversions, setShowNewUnitConversions] = useState(false);
@@ -1098,6 +1102,35 @@ export default function InventoryPage() {
     inventoryValuesByCategory.reduce((sum, item) => sum + item.value, 0)
   ), [inventoryValuesByCategory]);
 
+  const shortageProducts = useMemo(() => products
+    .filter((product) => Number(product.stock_quantity || 0) <= Number(product.reorder_point ?? 5))
+    .sort((first, second) => {
+      const firstNeeded = Math.max(Number(first.reorder_target ?? 10) - Number(first.stock_quantity || 0), 0);
+      const secondNeeded = Math.max(Number(second.reorder_target ?? 10) - Number(second.stock_quantity || 0), 0);
+      if (firstNeeded !== secondNeeded) return secondNeeded - firstNeeded;
+      return first.name.localeCompare(second.name, "ar");
+    }), [products]);
+
+  const shortageRequiredTotal = shortageProducts.reduce((sum, product) => (
+    sum + Math.max(Number(product.reorder_target ?? 10) - Number(product.stock_quantity || 0), 0)
+  ), 0);
+
+  const saveShortageReportImage = async () => {
+    if (!shortageReportRef.current || savingShortageImage) return;
+    setSavingShortageImage(true);
+    try {
+      await downloadElementAsPng(
+        shortageReportRef.current,
+        `كشف-نواقص-${new Date().toISOString().slice(0, 10)}`,
+      );
+    } catch (error) {
+      console.error(error);
+      alert("تعذر حفظ صورة كشف النواقص. حاول مرة أخرى.");
+    } finally {
+      setSavingShortageImage(false);
+    }
+  };
+
   const supplierMap = useMemo(() => {
     return new Map(suppliers.map((supplier) => [supplier.id, supplier]));
   }, [suppliers]);
@@ -1454,6 +1487,14 @@ export default function InventoryPage() {
 
           <div className="flex gap-3">
 
+            <button
+              type="button"
+              onClick={() => setShowShortageReport(true)}
+              className="bg-amber-500 text-slate-950 px-5 py-3 rounded-2xl font-black"
+            >
+              كشف النواقص ({shortageProducts.length})
+            </button>
+
             <Link
               href="/"
               className="bg-slate-200 px-5 py-3 rounded-2xl font-bold"
@@ -1677,19 +1718,116 @@ export default function InventoryPage() {
 
       </div>
 
+      {showShortageReport && (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/75 p-3 sm:p-6">
+          <div className="flex max-h-[calc(100vh-2rem)] w-full max-w-5xl flex-col overflow-hidden rounded-3xl bg-white shadow-2xl">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-white px-5 py-4 sm:px-7">
+              <div>
+                <p className="text-xs font-black text-amber-600">تقرير المخزون</p>
+                <h2 className="text-xl font-black text-slate-950">كشف الأصناف الناقصة</h2>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => void saveShortageReportImage()}
+                  disabled={savingShortageImage || shortageProducts.length === 0}
+                  className="rounded-2xl bg-emerald-600 px-4 py-2 text-sm font-black text-white hover:bg-emerald-500 disabled:cursor-not-allowed disabled:bg-slate-300"
+                >
+                  {savingShortageImage ? "جاري تجهيز الصورة..." : "تحميل كصورة"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowShortageReport(false)}
+                  className="rounded-2xl bg-slate-100 px-4 py-2 text-sm font-black text-slate-700 hover:bg-slate-200"
+                >
+                  إغلاق
+                </button>
+              </div>
+            </div>
+
+            <div className="flex-1 overflow-y-auto bg-slate-100 p-3 sm:p-6">
+              <div ref={shortageReportRef} className="mx-auto w-full bg-white p-5 text-slate-950 sm:p-8" dir="rtl">
+                <div className="border-b-2 border-slate-900 pb-4 text-center">
+                  <h3 className="text-2xl font-black">كشف الأصناف الناقصة</h3>
+                  <p className="mt-1 text-xs font-bold text-slate-500">
+                    تاريخ الكشف: {new Date().toLocaleString("ar-EG-u-nu-latn", { dateStyle: "medium", timeStyle: "short" })}
+                  </p>
+                </div>
+
+                <div className="my-4 grid grid-cols-2 gap-3">
+                  <div className="rounded-2xl bg-amber-50 p-4 text-center">
+                    <p className="text-xs font-black text-amber-700">عدد الأصناف الناقصة</p>
+                    <p className="mt-1 text-2xl font-black">{shortageProducts.length.toLocaleString("ar-EG-u-nu-latn")}</p>
+                  </div>
+                  <div className="rounded-2xl bg-rose-50 p-4 text-center">
+                    <p className="text-xs font-black text-rose-700">إجمالي الكمية المطلوب توفيرها</p>
+                    <p className="mt-1 text-2xl font-black">{shortageRequiredTotal.toLocaleString("ar-EG-u-nu-latn")}</p>
+                  </div>
+                </div>
+
+                {shortageProducts.length === 0 ? (
+                  <div className="rounded-2xl border border-dashed border-emerald-300 bg-emerald-50 p-10 text-center font-black text-emerald-700">
+                    لا توجد أصناف ناقصة حاليًا.
+                  </div>
+                ) : (
+                  <table className="w-full border-collapse text-right text-xs sm:text-sm">
+                    <thead className="bg-slate-950 text-white">
+                      <tr>
+                        <th className="border border-slate-700 p-2">#</th>
+                        <th className="border border-slate-700 p-2">الصنف</th>
+                        <th className="border border-slate-700 p-2">القسم</th>
+                        <th className="border border-slate-700 p-2">المورد</th>
+                        <th className="border border-slate-700 p-2">الموجود</th>
+                        <th className="border border-slate-700 p-2">حد الطلب</th>
+                        <th className="border border-slate-700 p-2">المطلوب</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {shortageProducts.map((product, index) => {
+                        const current = Math.max(Number(product.stock_quantity || 0), 0);
+                        const reorderPoint = Number(product.reorder_point ?? 5);
+                        const reorderTarget = Math.max(Number(product.reorder_target ?? 10), reorderPoint);
+                        const required = Math.max(reorderTarget - current, 0);
+                        return (
+                          <tr key={product.id} className={index % 2 === 0 ? "bg-white" : "bg-slate-50"}>
+                            <td className="border border-slate-200 p-2 font-black">{index + 1}</td>
+                            <td className="border border-slate-200 p-2 font-black">{product.name}</td>
+                            <td className="border border-slate-200 p-2">{productCategoryLabel(normalizeProductCategory(product.product_category))}</td>
+                            <td className="border border-slate-200 p-2">{getSupplierName(product.supplier_id)}</td>
+                            <td className="border border-slate-200 p-2 font-black text-rose-700">{current.toLocaleString("ar-EG-u-nu-latn")} {product.unit}</td>
+                            <td className="border border-slate-200 p-2">{reorderPoint.toLocaleString("ar-EG-u-nu-latn")}</td>
+                            <td className="border border-slate-200 p-2 font-black text-emerald-700">{required.toLocaleString("ar-EG-u-nu-latn")} {product.unit}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {salesProduct && (
         <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/70 p-3 sm:p-6">
-          <div className="flex max-h-[calc(100vh-2rem)] w-full max-w-4xl flex-col overflow-hidden rounded-3xl bg-white shadow-2xl">
+          <div className="flex max-h-[calc(100vh-2rem)] w-full max-w-7xl flex-col overflow-hidden rounded-3xl bg-white shadow-2xl">
             <div className="flex items-start justify-between gap-4 border-b border-slate-100 px-5 py-4 sm:px-7">
               <div>
                 <p className="text-xs font-black text-emerald-600">تفاصيل البيع والتوريد</p>
                 <h2 className="mt-1 text-xl font-black text-slate-950 sm:text-2xl">{salesProduct.name}</h2>
+                <p className="mt-2 inline-flex rounded-xl bg-indigo-50 px-3 py-1.5 text-sm font-black text-indigo-700">
+                  الموجود حاليًا: {Number(salesProduct.stock_quantity || 0).toLocaleString("ar-EG-u-nu-latn")} {salesProduct.unit}
+                </p>
                 {!productSalesLoading && !productSalesError && (
-                  <p className="mt-1 text-xs font-bold text-slate-500">
-                    بيع: {productSales.length} فاتورة · توريد: {productSupplies.length} فاتورة
-                    {" · "}
-                    مبيعات {productSales.reduce((sum, sale) => sum + sale.lineTotal, 0).toLocaleString("ar-EG-u-nu-latn", { maximumFractionDigits: 2 })} ج
-                  </p>
+                  <div className="mt-2 flex flex-wrap gap-2 text-xs font-black">
+                    <span className="rounded-xl bg-rose-50 px-3 py-1.5 text-rose-700">
+                      إجمالي المباع: {productSales.reduce((sum, sale) => sum + sale.quantity, 0).toLocaleString("ar-EG-u-nu-latn")} {salesProduct.unit}
+                    </span>
+                    <span className="rounded-xl bg-blue-50 px-3 py-1.5 text-blue-700">
+                      إجمالي المورد: {productSupplies.reduce((sum, supply) => sum + supply.quantity, 0).toLocaleString("ar-EG-u-nu-latn")} {salesProduct.unit}
+                    </span>
+                  </div>
                 )}
               </div>
               <button
@@ -1708,6 +1846,8 @@ export default function InventoryPage() {
               {productSalesError && (
                 <div className="rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm font-black text-rose-700">{productSalesError}</div>
               )}
+              <div className="grid items-start gap-4 lg:grid-cols-2">
+                <section className="min-w-0 rounded-2xl border border-slate-200 bg-slate-50/50 p-4">
               {!productSalesLoading && !productSalesError && (
                 <h3 className="mb-3 text-sm font-black text-slate-900">فواتير البيع</h3>
               )}
@@ -1746,9 +1886,10 @@ export default function InventoryPage() {
                   ))}
                 </div>
               )}
+                </section>
 
               {!productSalesLoading && !productSalesError && (
-                <div className="mt-7 border-t border-slate-200 pt-5">
+                <section className="min-w-0 rounded-2xl border border-blue-100 bg-blue-50/30 p-4">
                   <h3 className="mb-3 text-sm font-black text-slate-900">فواتير التوريد</h3>
                   {productSupplies.length === 0 ? (
                     <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-8 text-center">
@@ -1784,8 +1925,9 @@ export default function InventoryPage() {
                       ))}
                     </div>
                   )}
-                </div>
+                </section>
               )}
+              </div>
             </div>
           </div>
         </div>

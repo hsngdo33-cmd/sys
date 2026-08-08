@@ -4,6 +4,8 @@ import { supabase } from "@/lib/supabase";
 import { downloadElementAsPng } from "@/lib/download-element-as-png";
 import { useParams } from "next/navigation";
 import Link from "next/link";
+import { toPng } from "html-to-image";
+import { jsPDF } from "jspdf";
 
 type TxType = "all" | "invoice" | "supplier_return" | "payment" | "collection";
 
@@ -102,6 +104,8 @@ export default function SupplierHistoryPage() {
   const [internalNote, setInternalNote] = useState("");
   const [noteSaved, setNoteSaved] = useState(false);
   const [printStatement, setPrintStatement] = useState(false);
+  const [exportingAllInvoices, setExportingAllInvoices] = useState(false);
+  const bulkInvoicesRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => { if (id) loadData(); }, [id]);
 
@@ -154,7 +158,52 @@ export default function SupplierHistoryPage() {
   }, [printStatement]);
 
   useEffect(() => {
-    const resetStatementPrint = () => setPrintStatement(false);
+    if (!exportingAllInvoices) return;
+    const timer = window.setTimeout(async () => {
+      try {
+        await document.fonts?.ready;
+        const invoiceElements = Array.from(
+          bulkInvoicesRef.current?.querySelectorAll<HTMLElement>(".bulk-invoice-page") || [],
+        );
+        if (invoiceElements.length === 0) throw new Error("لا توجد فواتير جاهزة للتصدير.");
+
+        const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+        const pageWidth = pdf.internal.pageSize.getWidth();
+        const pageHeight = pdf.internal.pageSize.getHeight();
+        const margin = 8;
+        const availableWidth = pageWidth - margin * 2;
+        const availableHeight = pageHeight - margin * 2;
+
+        for (let index = 0; index < invoiceElements.length; index += 1) {
+          const dataUrl = await toPng(invoiceElements[index], {
+            backgroundColor: "#ffffff",
+            cacheBust: true,
+            pixelRatio: 1.5,
+          });
+          const image = pdf.getImageProperties(dataUrl);
+          const scale = Math.min(availableWidth / image.width, availableHeight / image.height);
+          const width = image.width * scale;
+          const height = image.height * scale;
+          if (index > 0) pdf.addPage();
+          pdf.addImage(dataUrl, "PNG", (pageWidth - width) / 2, margin, width, height, undefined, "FAST");
+        }
+
+        const supplierName = String(supplier?.name || "مورد").replace(/[\\/:*?"<>|]/g, "-");
+        pdf.save(`فواتير-${supplierName}-${new Date().toISOString().slice(0, 10)}.pdf`);
+      } catch (error) {
+        console.error(error);
+        alert("تعذر حفظ ملف الفواتير. حاول مرة أخرى.");
+      } finally {
+        setExportingAllInvoices(false);
+      }
+    }, 150);
+    return () => window.clearTimeout(timer);
+  }, [exportingAllInvoices, supplier]);
+
+  useEffect(() => {
+    const resetStatementPrint = () => {
+      setPrintStatement(false);
+    };
     window.addEventListener("afterprint", resetStatementPrint);
     return () => window.removeEventListener("afterprint", resetStatementPrint);
   }, []);
@@ -481,6 +530,18 @@ export default function SupplierHistoryPage() {
               className="bg-white text-slate-900 hover:bg-slate-100 disabled:opacity-40 px-5 py-2.5 rounded-xl font-black text-sm transition-all active:scale-95"
             >
               طباعة كشف حساب
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setPrintTransaction(null);
+                setPrintStatement(false);
+                setExportingAllInvoices(true);
+              }}
+              disabled={exportingAllInvoices || !transactions.some((transaction) => isSupplierInvoice(transaction.type))}
+              className="bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-white px-5 py-2.5 rounded-xl font-black text-sm transition-all active:scale-95"
+            >
+              {exportingAllInvoices ? "جاري حفظ ملف الفواتير..." : "حفظ كل الفواتير PDF"}
             </button>
           </div>
         </header>
@@ -981,6 +1042,71 @@ export default function SupplierHistoryPage() {
         </div>
       )}
 
+      {exportingAllInvoices && (
+        <section ref={bulkInvoicesRef} className="pointer-events-none fixed left-[-10000px] top-0 z-[-1] w-[794px] bg-white bulk-invoices" dir="rtl">
+          {transactions.filter((transaction) => isSupplierInvoice(transaction.type)).map((invoice) => {
+            const items = Array.isArray(invoice.items) ? invoice.items : [];
+            const saleSubtotal = items.reduce((sum: number, item: any) => (
+              sum + Number(item.qty || 0) * salePriceForItem(item)
+            ), 0);
+            const discountRate = 14;
+            const discount = saleSubtotal * (discountRate / 100);
+            const netTotal = saleSubtotal - discount;
+
+            return (
+              <div key={invoice.id} className="print-card bulk-invoice-page">
+                <div className="print-header">
+                  <div>
+                    <p className="print-eyebrow">فاتورة توريد</p>
+                    <h1>منظومة إدارة المحل التجاري</h1>
+                    <p>تفاصيل فاتورة المورد كاملة</p>
+                  </div>
+                  <div className="print-meta">
+                    <p>رقم الفاتورة: {invoice.id}</p>
+                    <p>المورد: {supplier?.name || "-"}</p>
+                    <p>التاريخ: {new Date(invoice.created_at).toLocaleString("ar-EG-u-nu-latn", { dateStyle: "medium", timeStyle: "short" })}</p>
+                  </div>
+                </div>
+
+                <table className="print-table">
+                  <thead>
+                    <tr>
+                      <th>#</th>
+                      <th>الصنف</th>
+                      <th>الوحدة</th>
+                      <th>الكمية</th>
+                      <th>سعر الشراء</th>
+                      <th>سعر البيع</th>
+                      <th>الإجمالي</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {items.map((item: any, index: number) => (
+                      <tr key={`${invoice.id}-${index}`}>
+                        <td>{index + 1}</td>
+                        <td>{item.name || "-"}</td>
+                        <td>{item.invoice_unit || item.unit || "-"}</td>
+                        <td>{Number(item.qty || 0).toLocaleString("ar-EG-u-nu-latn")}</td>
+                        <td>{Number(item.price || 0).toLocaleString("ar-EG-u-nu-latn", { maximumFractionDigits: 2 })} ج</td>
+                        <td>{salePriceForItem(item).toLocaleString("ar-EG-u-nu-latn", { maximumFractionDigits: 2 })} ج</td>
+                        <td>{(Number(item.qty || 0) * salePriceForItem(item)).toLocaleString("ar-EG-u-nu-latn", { maximumFractionDigits: 2 })} ج</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+
+                <div className="print-summary">
+                  <p><span>مجموع سعر البيع</span><b>{saleSubtotal.toLocaleString("ar-EG-u-nu-latn", { maximumFractionDigits: 2 })} ج</b></p>
+                  <p><span>خصمنا ({discountRate}%)</span><b>{discount.toLocaleString("ar-EG-u-nu-latn", { maximumFractionDigits: 2 })} ج</b></p>
+                  <p className="print-total"><span>إجمالي الفاتورة بعد الخصم</span><b>{netTotal.toLocaleString("ar-EG-u-nu-latn", { maximumFractionDigits: 2 })} ج</b></p>
+                </div>
+                {invoice.description && <p className="print-note">ملاحظة: {invoice.description}</p>}
+              </div>
+            );
+          })}
+        </section>
+      )}
+
       {printStatement && (
         <section className="print-invoice hidden" dir="rtl">
           <div className="print-card">
@@ -1085,6 +1211,103 @@ export default function SupplierHistoryPage() {
       <style jsx global>{`
         @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;700;900&display=swap');
         body { font-family: 'Cairo', sans-serif; }
+        .bulk-invoices { font-family: 'Cairo', sans-serif; color: #0f172a; }
+        .bulk-invoices .bulk-invoice-page {
+          box-sizing: border-box;
+          width: 794px;
+          min-height: 1123px;
+          padding: 42px;
+          border: 0;
+          border-radius: 0;
+          background: #fff;
+        }
+        .bulk-invoices .print-header {
+          display: flex;
+          align-items: flex-start;
+          justify-content: space-between;
+          gap: 24px;
+          margin-bottom: 24px;
+          padding-bottom: 18px;
+          border-bottom: 3px solid #0f172a;
+        }
+        .bulk-invoices .print-eyebrow {
+          margin: 0 0 5px;
+          color: #d97706;
+          font-size: 13px;
+          font-weight: 900;
+        }
+        .bulk-invoices .print-header h1 {
+          margin: 0;
+          font-size: 25px;
+          line-height: 1.4;
+          font-weight: 900;
+        }
+        .bulk-invoices .print-header p {
+          margin: 4px 0;
+          font-size: 12px;
+          font-weight: 700;
+        }
+        .bulk-invoices .print-meta {
+          min-width: 235px;
+          text-align: left;
+        }
+        .bulk-invoices .print-table {
+          width: 100%;
+          margin: 0 0 22px;
+          border-collapse: collapse;
+          table-layout: fixed;
+        }
+        .bulk-invoices .print-table th {
+          padding: 10px 7px;
+          border: 1px solid #334155;
+          background: #0f172a;
+          color: #fff;
+          font-size: 11px;
+          font-weight: 900;
+          text-align: center;
+        }
+        .bulk-invoices .print-table td {
+          padding: 9px 7px;
+          border: 1px solid #cbd5e1;
+          color: #1e293b;
+          font-size: 11px;
+          font-weight: 700;
+          text-align: center;
+          overflow-wrap: anywhere;
+        }
+        .bulk-invoices .print-table th:nth-child(2),
+        .bulk-invoices .print-table td:nth-child(2) {
+          width: 25%;
+          text-align: right;
+        }
+        .bulk-invoices .print-summary {
+          display: grid;
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+          gap: 10px;
+        }
+        .bulk-invoices .print-summary p {
+          display: grid;
+          gap: 5px;
+          margin: 0;
+          padding: 12px;
+          border: 1px solid #cbd5e1;
+          border-radius: 10px;
+          background: #f8fafc;
+          font-weight: 800;
+        }
+        .bulk-invoices .print-summary span { color: #64748b; font-size: 10px; }
+        .bulk-invoices .print-summary b { color: #0f172a; font-size: 14px; }
+        .bulk-invoices .print-summary .print-total { background: #fffbeb; border-color: #fcd34d; }
+        .bulk-invoices .print-summary .print-total b { color: #b45309; }
+        .bulk-invoices .print-note {
+          margin: 16px 0 0;
+          padding: 10px 12px;
+          border: 1px solid #fde68a;
+          border-radius: 10px;
+          background: #fffbeb;
+          font-size: 11px;
+          font-weight: 700;
+        }
         @media print {
           @page { size: auto; margin: 6mm; }
           html, body { width: auto !important; height: auto !important; margin: 0 !important; padding: 0 !important; overflow: visible !important; background: #fff !important; }
@@ -1095,6 +1318,8 @@ export default function SupplierHistoryPage() {
           .print-invoice, .print-invoice * { visibility: visible !important; }
           .print-invoice { display: block !important; position: static !important; inset: auto !important; width: 100%; min-height: 0; padding: 0; background: white; color: #0f172a; font-size: 10px; line-height: 1.35; break-after: auto; page-break-after: auto; }
           .print-card { width: 100%; max-width: 100%; margin: 0 auto; border: 1px solid #dbe3ef; padding: 12px; border-radius: 10px; }
+          .bulk-invoice-page { break-after: page; page-break-after: always; }
+          .bulk-invoice-page:last-child { break-after: auto; page-break-after: auto; }
           .print-header { display: flex; justify-content: space-between; gap: 14px; border-bottom: 2px solid #0f172a; padding-bottom: 8px; margin-bottom: 10px; }
           .print-eyebrow { font-size: 9px; font-weight: 900; color: #d97706; margin: 0 0 3px; }
           .print-header h1 { margin: 0; font-size: 18px; font-weight: 900; }
