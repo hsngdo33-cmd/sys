@@ -70,11 +70,22 @@ type FilterKey = "all" | "debtors" | "clear" | "inactive";
 const cleanBarcode = (value: unknown) => value?.toString().trim() || "";
 
 function normalizeText(value: string) {
-  return value.trim().replace(/\s+/g, " ").toLowerCase();
+  return value
+    .normalize("NFKD")
+    .replace(/[\u064B-\u065F\u0670\u0640]/g, "")
+    .replace(/[أإآٱ]/g, "ا")
+    .replace(/ى/g, "ي")
+    .replace(/ة/g, "ه")
+    .trim()
+    .replace(/\s+/g, " ")
+    .toLowerCase();
 }
 
 function normalizePhone(value?: string | null) {
-  return (value || "").replace(/[^\d+]/g, "");
+  const englishDigits = (value || "")
+    .replace(/[٠-٩]/g, (digit) => String("٠١٢٣٤٥٦٧٨٩".indexOf(digit)))
+    .replace(/[۰-۹]/g, (digit) => String("۰۱۲۳۴۵۶۷۸۹".indexOf(digit)));
+  return englishDigits.replace(/[^\d+]/g, "");
 }
 
 function matchesDirectorySearch(name: string, phone: string | null | undefined, search: string) {
@@ -1278,7 +1289,10 @@ export default function CustomersListPage() {
                   placeholder="ابحث بالاسم أو الموبايل أو رقم الفاتورة..."
                   className="h-11 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 pl-10 text-sm font-bold outline-none focus:border-indigo-400"
                   value={searchTerm}
-                  onChange={(event) => setSearchTerm(event.target.value)}
+                  onChange={(event) => {
+                    setSearchTerm(event.target.value);
+                    setFilter("all");
+                  }}
                 />
                 {searchTerm && (
                   <button
