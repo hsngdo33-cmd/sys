@@ -81,7 +81,9 @@ function matchesDirectorySearch(name: string, phone: string | null | undefined, 
   const query = normalizeText(search);
   const phoneQuery = normalizePhone(search);
   if (!query && !phoneQuery) return true;
-  return normalizeText(name).includes(query) || normalizePhone(phone).includes(phoneQuery);
+  const matchesName = query.length > 0 && normalizeText(name).includes(query);
+  const matchesPhone = phoneQuery.length > 0 && normalizePhone(phone).includes(phoneQuery);
+  return matchesName || matchesPhone;
 }
 
 function normalizeInvoiceSearch(value: unknown) {
